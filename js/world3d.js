@@ -252,7 +252,7 @@ const World = (() => {
       box(len, .15, 5.6, M(s.night ? '#2a2f35' : '#5b6168', { r: .7 }), 0, 3.6, 4.0, g);
       const lightM = M('#ffffff', { e: '#fff6e0', ei: s.night ? 1.4 : .6 });
       for (let x = -len / 2 + 2; x < len / 2; x += 3) box(2.2, .04, .14, lightM, x, 3.52, 4.0, g);
-      for (let x = -30; x <= 30; x += 10) box(.3, 3.6, .3, M('#6c737a', { m: .4 }), x, 1.8, 6.3, g);
+      for (let x = -30; x <= 30; x += 10) box(.3, 3.6, .3, M('#6c737a', { m: .4 }), x + 5, 1.8, 6.75, g);   // 柱子在欄杆外側，不擋鏡頭
       box(len, 1.1, .05, M('#cfe3ec', { t: true, o: .25 }), 0, .55, 6.5, g);
       box(len, .05, .1, M('#7c838a', { m: .5 }), 0, 1.1, 6.5, g);
       // 高架橋
@@ -541,7 +541,8 @@ const World = (() => {
 
   function currentInteraction() {
     if (!player.inputOn || player.auto) return null;
-    return interactions.find(it => it.when(player)) || null;
+    const p = { x: player.x, z: player.z, inside: inside() };
+    return interactions.find(it => it.when(p)) || null;
   }
   function updateActionBtn() {
     const btn = document.getElementById('actionBtn');
@@ -592,13 +593,15 @@ const World = (() => {
     }
     // 鏡頭
     const inTrain = inside();
-    const dist = inTrain ? Math.min(cam.dist, 2.6) : cam.dist;
-    const tx = player.x, ty = 1.45, tz = player.z;
-    let px = tx + Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist;
-    let py = ty + Math.sin(cam.pitch) * dist;
-    let pz = tz + Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist;
+    // 車廂內：鏡頭拉低到接近視線高度
+    const dist = inTrain ? Math.min(cam.dist, 2.4) : cam.dist;
+    const pitch = inTrain ? Math.min(cam.pitch, .12) : cam.pitch;
+    const tx = player.x, ty = inTrain ? 1.5 : 1.45, tz = player.z;
+    let px = tx + Math.sin(cam.yaw) * Math.cos(pitch) * dist;
+    let py = ty + Math.sin(pitch) * dist;
+    let pz = tz + Math.cos(cam.yaw) * Math.cos(pitch) * dist;
     if (inTrain) { pz = Math.min(1.3, Math.max(-1.3, pz)); py = Math.min(2.15, py); px = Math.min(INNER_X, Math.max(-INNER_X, px)); }
-    else { pz = Math.min(st.ug ? 5.95 : 7.5, pz); py = Math.min(st.ug ? 3.2 : 3.4, py); }
+    else { pz = Math.min(st.ug ? 5.95 : 6.4, pz); py = Math.min(st.ug ? 3.2 : 3.4, py); }
     const k = Math.min(1, dt * 7);
     cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * k; cam.pos.z += (pz - cam.pos.z) * k;
     camera.position.copy(cam.pos);

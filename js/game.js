@@ -232,6 +232,7 @@ function showPlatform(stationId) {
   const dirs = MRT.directionsAt(stationId);
   World.setStation(stationId, dirs[0].line, null);
   World.setTrain(dirs[0].line, false);
+  Sound.ambience(MRT.undergroundOn(stationId, dirs[0].line) ? 'underground' : 'elevated');
   World.placePlayer(0, 4.2);
   World.setInput(true);
   renderPlatformPanel(stationId);
@@ -282,6 +283,7 @@ async function goToPlatform(stationId, dir) {
   const id = newSession();
   World.setStation(stationId, dir.line, dir);
   World.setTrain(dir.line, false);
+  Sound.ambience(MRT.undergroundOn(stationId, dir.line) ? 'underground' : 'elevated');
   World.placePlayer(0, 4.2);
   World.setInput(true);
   const t = MRT.label(dir.terminal, dir.line);
@@ -407,9 +409,11 @@ async function rideSegment(id) {
   Sound.announce(
     `下一站，${n.zh}。${isTerminal ? '本列車終點站。' : ''}${transfers.length ? `轉乘${transfers.join('、')}的旅客，請在本站換車。` : ''}`,
     `Next station, ${n.en}.${transfers.length ? ' Transfer station.' : ''}`,
+    { chime: true },
   );
 
   // 行駛
+  Sound.ambience(null);
   Sound.startRumble();
   await World.ride(
     { fromId: from, toId: to, lineId: line, nextDir: isTerminal ? null : { terminal: ride.terminal } },
@@ -427,8 +431,9 @@ async function rideSegment(id) {
   updateHud();
   World.setStrip(line, fullList, ride.idx);
   setLcd(isTerminal ? '終點站 Terminal' : '本站 This Stop', to, line);
-  Sound.announce(isTerminal ? `${n.zh}到了，本列車終點站，請全部旅客下車。` : `${n.zh}到了。`, `${n.en}.`);
-  await sleep(500); if (!alive(id)) return;
+  Sound.ambience(MRT.undergroundOn(to, line) ? 'underground' : 'elevated');
+  Sound.announce(isTerminal ? `${n.zh}到了，本列車終點站，請全部旅客下車。` : `${n.zh}到了。`, `${n.en}.`, { chime: true });
+  await sleep(1200); if (!alive(id)) return;
   Sound.doorOpen();
   await World.setDoors(true); if (!alive(id)) return;
 
@@ -528,14 +533,26 @@ function openBag() {
   $('#bag').hidden = false;
 }
 
-let viewMap = null;
 function openMap() {
   $('#mapModal').hidden = false;
   const s = Game.state;
   $('#mapStats').textContent = `已走過 ${Object.keys(s.visited).length} / ${Object.keys(STATIONS).length} 站　搭乘 ${s.rides} 次`;
-  viewMap = MapView($('#viewMap'), { visited: () => s.visited, current: () => s.current });
-  if (s.current) viewMap.focus(s.current, 520);
+  $('#mapCard').hidden = true;
+  Map3D.open($('#map3d'), {
+    visited: s.visited, current: s.current, char: s.char,
+    onPick: id => {
+      const lines = MRT.linesAt(id);
+      const here = id === s.current, been = !!s.visited[id];
+      const card = $('#mapCard');
+      card.innerHTML = `<div class="here">${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(id)}</b></div>
+        <small>${esc(STATIONS[id].en)}</small>
+        <p>${here ? '你現在在這裡' : been ? '去過了' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>`;
+      card.hidden = false;
+      Sound.click();
+    },
+  });
 }
+function closeMap() { $('#mapModal').hidden = true; Map3D.close(); }
 
 /* ── 初始化 ── */
 function init() {
@@ -558,12 +575,16 @@ function init() {
   document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { $('#' + b.dataset.close).hidden = true; });
   $('#closedMap').onclick = openMap;
   $('#closedTitleBtn').onclick = () => { $('#closedOverlay').hidden = true; newSession(); Game.ride = null; renderTitle(); showScreen('title'); };
-  $('#mapZoomIn').onclick = () => viewMap && viewMap.zoom(1 / 1.4);
-  $('#mapZoomOut').onclick = () => viewMap && viewMap.zoom(1.4);
-  $('#mapHere').onclick = () => viewMap && Game.state.current && viewMap.focus(Game.state.current, 420);
+  $('#mapZoomIn').onclick = () => Map3D.zoom(1 / 1.3);
+  $('#mapZoomOut').onclick = () => Map3D.zoom(1.3);
+  $('#mapRotL').onclick = () => Map3D.rotate(-.4);
+  $('#mapRotR').onclick = () => Map3D.rotate(.4);
+  $('#mapHere').onclick = () => Game.state.current && Map3D.focus(Game.state.current, 40);
+  $('#mapAll').onclick = () => Map3D.overview();
+  $('#mapModal [data-close]').onclick = closeMap;
   $('#charBack').onclick = () => { renderTitle(); showScreen('title'); };
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') ['bag', 'mapModal'].forEach(id => { $('#' + id).hidden = true; });
+    if (e.key === 'Escape') { $('#bag').hidden = true; if (!$('#mapModal').hidden) closeMap(); }
   });
   window.addEventListener('resize', () => {
     if (document.body.dataset.screen === 'game') layoutScene();

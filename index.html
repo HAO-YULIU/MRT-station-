@@ -62,12 +62,17 @@
   <!-- 路網圖 -->
   <div class="modal" id="mapModal" hidden>
     <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
-      <header><h3 id="mapTitle">路網圖</h3><span id="mapStats"></span><button class="x" data-close="mapModal" aria-label="關閉">×</button></header>
-      <div class="map-box">
-        <div class="map" id="viewMap"></div>
-        <div class="zoom"><button id="mapZoomIn" aria-label="放大">＋</button><button id="mapZoomOut" aria-label="縮小">－</button><button id="mapHere" aria-label="回到目前位置">◎</button></div>
+      <header><h3 id="mapTitle">台北捷運 3D 路網</h3><span id="mapStats"></span><button class="x" data-close="mapModal" aria-label="關閉">×</button></header>
+      <div class="map-box map3d-box">
+        <div class="map3d" id="map3d"></div>
+        <div class="zoom">
+          <button id="mapZoomIn" aria-label="放大">＋</button><button id="mapZoomOut" aria-label="縮小">－</button>
+          <button id="mapRotL" aria-label="向左旋轉">⟲</button><button id="mapRotR" aria-label="向右旋轉">⟳</button>
+          <button id="mapHere" aria-label="回到目前位置">◎</button><button id="mapAll" aria-label="看整個路網">全</button>
+        </div>
+        <div class="map-card" id="mapCard" hidden></div>
       </div>
-      <p class="map-legend"><span class="lg-me"></span>你在這裡　<span class="lg-fog"></span>還沒去過的車站藏在霧裡</p>
+      <p class="map-legend"><span class="lg-me"></span>你在這裡　<span class="lg-fog"></span>還沒去過的車站藏在霧裡　高架在地面上、地下段在地面下　拖曳移動、滾輪或雙指縮放、右鍵拖曳或雙指旋轉</p>
     </div>
   </div>
 
@@ -103,7 +108,7 @@
   <script src="js/audio.js"></script>
   <script src="js/human3d.js"></script>
   <script src="js/world3d.js"></script>
-  <script src="js/map.js"></script>
+  <script src="js/map3d.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>
