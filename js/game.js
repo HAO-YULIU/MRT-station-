@@ -248,7 +248,7 @@ function ensureWorld() {
   World.bindJoystick($('#joystick'));
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y);
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Pickups.tick(now); });
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Pickups.tick(now); Secrets.tick(); });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -313,6 +313,7 @@ function startStation(stationId, carry) {
   Xiuyu.arrive(stationId);
   NPCManager.enter(stationId, World.layout);
   Pickups.spawn(stationId);
+  Secrets.spawn(stationId);
   Sound.ambience(World.layout.allUnder ? 'underground' : 'elevated');
   Game.ctlTimer = setInterval(tickStation, 400);
   doorInteractions();
@@ -407,7 +408,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), npcInteraction, spotInteraction, pickupInteraction);
+  list.push(exitInteraction(), npcInteraction, spotInteraction, pickupInteraction, secretInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -524,14 +525,19 @@ const npcInteraction = {
   run: () => { const n = NPCManager.nearest(World.player, 2.4); if (n) Dialog.open(n); },
 };
 // 查看告示牌、塗鴉、路線圖
-const SPOT_NAME = { notice: '告示牌', graffiti: '塗鴉', map: '路線圖' };
+const SPOT_NAME = { notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店' };
+const SPOT_VERB = { elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
-  get label() { const sp = nearSpot(World.player); return '查看' + (sp ? SPOT_NAME[sp.kind] : ''); },
+  get label() { const sp = nearSpot(World.player); return sp ? (SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
   when: p => !Dialog.with && !!nearSpot(p) && !NPCManager.nearest(p, 1.2),
   run: () => {
     const sp = nearSpot(World.player), st = ctl.stationId;
+    if (sp.kind === 'elevator') return elevatorMenu(sp);
+    if (sp.kind === 'ticket') return Dialog.info('售票機・票價表', fareTable(st));
+    if (sp.kind === 'toilet') return restroom();
+    if (sp.kind === 'shop') return shopMenu(st);
     const done = Quests.emit({ kind: 'inspect', spot: sp.kind, station: st });
     Dialog.info(SPOT_NAME[sp.kind], spotText(sp, st, done.length > 0));
     for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
@@ -556,6 +562,60 @@ function spotText(sp, st, questHit) {
   const timely = h < 9 ? '早上 07:00–09:00 為尖峰時段，請多利用列車中段車廂。' : h >= 22 ? '末班車將於 00:30 前開出，請留意時間。' : '本站設有詢問處、失物招領與電梯。';
   return `<b>車站公告</b><br>${special ? esc(special) + '<br>' : ''}${timely}`;
 }
+// 電梯：選樓層
+function floorName(y, allUnder) {
+  if (Math.abs(y) < .1) return (allUnder ? 'B1' : '1F') + ' 大廳';
+  return y < 0 ? `B${1 + Math.round(-y / 5)}` : `${1 + Math.round(y / 5)}F`;
+}
+function elevatorMenu(sp) {
+  const L = World.layout;
+  const floors = [{ label: floorName(0, L.allUnder) + '（閘門・出口）', x: L.concourse.x0 + 4, y: 0, z: L.concourse.z0 + 2.3, here: sp.level === 'hall' }]
+    .concat(L.platforms.map(P => ({ label: `${floorName(P.y)} ${LINES[P.line].zh}月台`, x: P.x - 24, y: P.y, z: P.z + 1.7, here: sp.level === P.k })));
+  Dialog.show({ name: '電梯', role: '請選擇樓層' }, '叮——電梯門打開了。', floors.map(f => ({
+    label: f.here ? `${f.label}（目前樓層）` : f.label, disabled: f.here, primary: !f.here,
+    run: async () => {
+      Dialog.close();
+      const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
+      Sound.onboardChime();
+      await sleep(700);
+      World.placePlayer(f.x, f.y, f.z, 0);
+      fx.classList.add('out'); await sleep(500); fx.hidden = true;
+    },
+  })).concat([{ label: '不搭了', run: () => Dialog.close() }]));
+}
+// 售票機：從這站到各大站的票價
+function fareTable(st) {
+  const dests = ['台北車站', '西門', '市政府', '南港展覽館', '淡水', '動物園', '新店', '頂埔', '蘆洲', '大坪林'].filter(d => d !== st);
+  return `<table class="fares">${dests.map(d => `<tr><td>${esc(d)}</td><td>NT$ ${Economy.fare(st, d)}</td></tr>`).join('')}</table><small>依台北捷運計費規則估算。悠遊卡出站時扣款。</small>`;
+}
+async function restroom() {
+  const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
+  await sleep(600); fx.classList.add('out'); await sleep(500); fx.hidden = true;
+  Dialog.info('廁所', ['洗手台的鏡子裡，你身後好像站著一個戴紅帽子的人。回頭，什麼都沒有。', '牆上貼著「請節約用水」。整理一下頭髮，繼續出發。', '有人在門板上寫：「我在等的人，今天也沒來。」'][Math.floor(Math.random() * 3)]);
+}
+// 商店
+function shopMenu(st) {
+  const shop = Station3D.SHOPS[st]; if (!shop) return;
+  const s = Game.state;
+  Dialog.show({ name: shop.name, role: '歡迎光臨' }, `悠遊卡餘額 NT$ ${s.money}。要買什麼？`, shop.items.map(id => ({
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}`, disabled: s.money < ITEMS[id].price,
+    run: () => {
+      s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud();
+      Sound.gate();
+      toast(`<b>買了 ${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`);
+      questEvent({ kind: 'buy', item: id });
+      shopMenu(st);
+    },
+  })).concat([{ label: '離開', run: () => Dialog.close() }]));
+}
+// 角落的秘密
+const secretInteraction = {
+  get id() { const s = Secrets.near(World.player); return s ? 'sec:' + s.sc.id : 'sec'; },
+  get label() { const s = Secrets.near(World.player); return s ? `查看：${s.sc.name}` : '查看'; },
+  when: p => !Dialog.with && !!Secrets.near(p) && !Pickups.near(p),
+  run: () => { const s = Secrets.near(World.player); if (s) Secrets.look(s); },
+};
+
 // 撿起任務物品
 function nearPickup(p) { return Pickups.near(p); }
 const pickupInteraction = {

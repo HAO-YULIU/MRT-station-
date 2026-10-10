@@ -184,6 +184,17 @@ const Station3D = (() => {
     });
   }
 
+  // 大站的商店（只在大站出現，賣該站對應的東西）
+  const SHOPS = {
+    台北車站: { name: '捷運便利商店', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'bubbletea', 'pineapplecake', 'keychain'] },
+    西門: { name: '西門手搖飲', sign: '手搖飲', color: '#e07a3a', items: ['bubbletea', 'coffee'] },
+    南港: { name: '南港伴手禮', sign: '伴手禮', color: '#8a5a3a', items: ['pineapplecake', 'keychain'] },
+    中山: { name: '中山花店', sign: '花店', color: '#d06a8a', items: ['flower'] },
+    市政府: { name: '信義咖啡', sign: '咖啡', color: '#5a4030', items: ['coffee', 'onigiri'] },
+    板橋: { name: '板橋便利商店', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'bubbletea'] },
+    忠孝復興: { name: '東區麵包坊', sign: '麵包', color: '#c08a3a', items: ['onigiri', 'coffee', 'pineapplecake'] },
+  };
+
   // 有「霧」塗鴉的車站
   const GRAFFITI = ['龍山寺', '西門', '南港', '古亭', '中山', '頂埔', '淡水', '大直'];
 
@@ -226,6 +237,11 @@ const Station3D = (() => {
     const unpaid = { x0: -16, x1: 16, z0: gateZ + 1.2, z1: gateZ + 14 };
     const gates = [-6, -3.6, -1.2, 1.2, 3.6, 6];
     const spots = [{ kind: 'notice', x: concourse.x0 + 8, y: 0, z: concourse.z0 + .9 }];
+    spots.push({ kind: 'elevator', x: concourse.x0 + 4, y: 0, z: concourse.z0 + 1.2, level: 'hall' });
+    for (const P of platforms) spots.push({ kind: 'elevator', x: P.x - 24, y: P.y, z: P.z + 1.4, level: P.k });
+    spots.push({ kind: 'ticket', x: unpaid.x0 + 4.4, y: 0, z: unpaid.z1 - 1.6 });
+    spots.push({ kind: 'toilet', x: unpaid.x1 - 1.4, y: 0, z: unpaid.z0 + 9 });
+    if (SHOPS[stationId]) spots.push({ kind: 'shop', x: unpaid.x0 + 2, y: 0, z: unpaid.z0 + 7 });
     if (GRAFFITI.includes(stationId)) spots.push({ kind: 'graffiti', x: concourse.x1 - 4, y: 0, z: concourse.z0 + .9 });
     for (const P of platforms) for (const s of [-1, 1]) spots.push({ kind: 'map', x: P.x, y: P.y, z: P.z + s * .9, line: P.line });
     return { stationId, platforms, concourse, gateZ, unpaid, gates, spots, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
@@ -323,6 +339,10 @@ const Station3D = (() => {
       }
       const map = M('#ffffff', { map: routeMapTex() });
       for (const s of [-1, 1]) { const p = plane(.66, .66, map, pg); p.position.set(0, 1.6, s * .36); p.rotation.y = s > 0 ? 0 : Math.PI; }
+      // 月台電梯
+      box(1.6, 2.6, 1.4, M('#9aa3aa', { m: .6, r: .3 }), -24, 1.3, 0, pg);
+      for (const sz of [-1, 1]) box(1.2, 2.2, .04, M('#c9cfd4', { m: .8, r: .2 }), -24, 1.1, sz * .72, pg);
+      sign(plainSign('電梯', 'Elevator', '#23272b', '#fff', { bg: '#2a7de1', fg: '#fff', text: '⇅' }), 1.4, .35, -24, 2.85, .75, pg);
       // 座椅
       for (const x of [-31, 31]) { box(1.8, .08, .45, M('#8a9097', { m: .5 }), x, .45, 0, pg); box(1.8, .4, .06, M('#8a9097', { m: .5 }), x, .68, -.2, pg); }
       // 站名吊牌
@@ -424,6 +444,17 @@ const Station3D = (() => {
       });
       const gp = plane(2.2, 2.2, new T.MeshBasicMaterial({ map: gt, transparent: true }), g); gp.position.set(gf.x, 1.8, C.z0 + .02);
     }
+    // 商店（大站才有）
+    const shop = SHOPS[L.stationId];
+    if (shop) {
+      box(1.2, 3, 5, M('#e8e4dc'), U.x0 + .6, 1.5, U.z0 + 7, g);
+      box(.05, 2.2, 4.2, M('#cfe3ec', { t: true, o: .35 }), U.x0 + 1.22, 1.3, U.z0 + 7, g);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) box(.3, .3, .3, M(['#c4162a', '#2a9d8f', '#f2c200'][(i + j) % 3]), U.x0 + .7, .7 + i * .6, U.z0 + 5.6 + j * 1.2, g);
+      sign(plainSign(shop.sign, shop.name, shop.color, '#fff'), 3, .75, U.x0 + 1.3, 3.3, U.z0 + 7, g, Math.PI / 2);
+    }
+    // 廁所
+    box(.2, 2.4, 1.4, M('#5d6b7a'), U.x1 - .15, 1.2, U.z0 + 9, g);
+    sign(plainSign('廁所', 'Restrooms', '#23272b', '#fff', { bg: '#7fb2cf', fg: '#23272b', text: 'WC' }), 1.8, .45, U.x1 - .3, 2.9, U.z0 + 9, g, -Math.PI / 2);
     // 失物招領（詢問處旁）
     box(3, 1.1, 1.6, M('#d8d4cc'), U.x1 - 8.2, .55, U.z0 + 3, g);
     box(3, .1, 1.7, M('#f0ede6'), U.x1 - 8.2, 1.12, U.z0 + 3, g);
@@ -684,7 +715,7 @@ const Station3D = (() => {
   }
 
   return {
-    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES,
+    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS,
     layout, build, makeTrain, segment, surroundings, sides,
     drawLcd, drawStrip, drawLed, SKY_CITY,
   };

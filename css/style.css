@@ -364,6 +364,11 @@ button:disabled { cursor: not-allowed; }
 .dlg-text { margin: 8px 0 12px; font-size: 16px; line-height: 1.7; }
 .dlg-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 
+.fares { width: 100%; border-collapse: collapse; margin: 4px 0 8px; font-size: 15px; }
+.fares td { padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.fares td:last-child { text-align: right; font-family: var(--latin); font-weight: 700; color: #ffd36b; }
+.dlg-text small { color: var(--muted); }
+
 /* ── 傳送 ── */
 .tp-fx {
   position: fixed; inset: 0; z-index: 25; pointer-events: none;

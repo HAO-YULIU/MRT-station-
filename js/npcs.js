@@ -461,7 +461,7 @@ const Dialog = (() => {
   }
   // 單純顯示資訊（告示牌等）
   function info(title, text) { show({ name: title, role: '' }, text, [{ label: '關閉', run: close }]); }
-  return { open, close, info, get with() { return current; } };
+  return { open, close, info, show, get with() { return current; } };
 })();
 
 /* ── 任務物品：會出現在車站某個角落 ── */
@@ -531,4 +531,69 @@ const Pickups = (() => {
     spawn(it.station);   // 下一步可能要在同一站找別的東西
   }
   return { spawn, clear, tick, near, take };
+})();
+
+/* ── 車站裡的秘密：紙條、塗鴉、被遺忘的東西（有些只在特定時段出現） ── */
+const SECRETS = [
+  { id: 'n_fog', icon: '📄', name: '紙條', text: '「如果你看到這張紙條，代表霧還沒散。——S」', xp: 10 },
+  { id: 'n_729', icon: '📄', name: '紙條', text: '「第七節車廂的門，在 00:29 打開。」', xp: 10 },
+  { id: 'n_wait', icon: '📄', name: '紙條', text: '「我在月台上等了一千班車。下一班一定是你。」', xp: 10 },
+  { id: 'n_tired', icon: '📄', name: '紙條', text: '「今天的你，也辛苦了。」字跡很工整，好像是寫給陌生人的。', xp: 10 },
+  { id: 's_station', icon: '✏️', name: '牆角塗鴉', text: '用鉛筆寫著：「這裡曾經有一站」，旁邊畫了一個不存在的站碼。', xp: 10 },
+  { id: 's_arrow', icon: '✏️', name: '牆角塗鴉', text: '一個小小的箭頭，旁邊寫著「霧 →」，指向月台盡頭。', xp: 10 },
+  { id: 's_love', icon: '✏️', name: '刻痕', text: '柱子上刻著「S♡J 1975」，被重新油漆過好幾次，還是看得到。', xp: 15 },
+  { id: 'i_coin10', icon: '🪙', name: '十元硬幣', text: '地上有一枚十元硬幣。', money: 10 },
+  { id: 'i_coin50', icon: '🪙', name: '五十元硬幣', text: '椅子底下有一枚五十元硬幣。', money: 50 },
+  { id: 'i_lunch', icon: '🍙', name: '沒拆封的御飯糰', text: '有人忘了帶走一個御飯糰，還是今天的日期。', item: 'onigiri' },
+  { id: 'i_card', icon: '💳', name: '舊悠遊卡', text: '一張圖案是舊版的悠遊卡，裡面還有一點餘額。', money: 100 },
+  { id: 't_cat', icon: '🐈', name: '睡覺的貓', text: '一隻虎斑貓縮在椅子邊睡覺。早上的車站，好像只有牠不趕時間。', xp: 15, hours: [6, 9] },
+  { id: 't_light', icon: '💡', name: '一閃一閃的燈', text: '天花板的燈閃了三下，停住，又閃了三下。牆上有人用筆寫：「燈閃三下，就是有人在叫你。」', xp: 20, hours: [21, 25] },
+  { id: 't_sunset', icon: '🌇', name: '夕陽', text: '傍晚的光從出口斜斜照進來，整個大廳變成橘色的。', xp: 15, hours: [16, 19] },
+];
+const Secrets = (() => {
+  const T = THREE;
+  let list = [];
+  const hash = s => [...s].reduce((a, c) => (a * 37 + c.charCodeAt(0)) % 10007, 3);
+  function spawn(stationId) {
+    clear();
+    const L = World.layout, C = L.concourse, U = L.unpaid, h = TaipeiTime.now().hour, hh = h < 6 ? h + 24 : h;
+    const spots = [{ x: C.x0 + 6, y: 0, z: L.gateZ - .8 }, { x: C.x1 - 6, y: 0, z: C.z0 + 1 }, { x: U.x0 + 1, y: 0, z: U.z1 - 2.6 }];
+    for (const P of L.platforms) spots.push({ x: P.x + 15, y: P.y, z: P.z - 2.4 }, { x: P.x - 12, y: P.y, z: P.z + 2.4 }, { x: P.x + 31, y: P.y, z: P.z + .6 });
+    const avail = SECRETS.filter(sc => !sc.hours || (hh >= sc.hours[0] && hh < sc.hours[1]));
+    const n = 2 + hash(stationId) % 2;
+    for (let i = 0; i < n; i++) {
+      const sc = avail[(hash(stationId + i) + i * 5) % avail.length];
+      if (list.some(x => x.sc === sc)) continue;
+      const pos = spots[(hash(stationId) + i * 3) % spots.length];
+      if (World.groundAt(pos.x, pos.z, pos.y) == null) continue;
+      const c = document.createElement('canvas'); c.width = c.height = 96;
+      const g = c.getContext('2d'); g.font = '60px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.globalAlpha = .9; g.fillText(sc.icon, 48, 52);
+      const mesh = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), transparent: true, depthWrite: false }));
+      mesh.scale.set(.38, .38, 1); mesh.position.set(pos.x, pos.y + .22, pos.z);
+      World.scene.add(mesh);
+      list.push({ sc, ...pos, mesh, station: stationId });
+    }
+  }
+  function clear() { for (const s of list) World.scene.remove(s.mesh); list = []; }
+  function tick() { for (const s of list) s.mesh.visible = !World.riding; }
+  function near(p) { return list.find(s => Math.abs(s.y - p.y) < .6 && Math.hypot(s.x - p.x, s.z - p.z) < 1.2); }
+  function look(s) {
+    const st = Game.state, key = s.station + ':' + s.sc.id;
+    st.flags.found = st.flags.found || {};
+    const first = !st.flags.found[key];
+    let extra = '';
+    if (first) {
+      st.flags.found[key] = Date.now();
+      const r = {};
+      if (s.sc.xp) r.xp = s.sc.xp;
+      if (s.sc.money) r.money = s.sc.money;
+      if (s.sc.item) r.items = { [s.sc.item]: 1 };
+      Game.reward(r, '發現：' + s.sc.name);
+      extra = `<br><small>（這是你在 ${Object.keys(st.flags.found).length} 個地方的發現）</small>`;
+      if (s.sc.money || s.sc.item) { World.scene.remove(s.mesh); list = list.filter(x => x !== s); }
+    }
+    saveState();
+    Dialog.info(s.sc.name, s.sc.text + extra);
+  }
+  return { spawn, clear, tick, near, look };
 })();

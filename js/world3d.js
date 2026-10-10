@@ -64,14 +64,14 @@ const World = (() => {
       // 閘門通道
       if (z >= layout.gateZ - .05 && z <= layout.gateZ + 1.25 && layout.gates.some(g => Math.abs(x - g) < .32)) consider(0);
       // 非付費區（扣掉售票機、詢問處）
-      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4)) consider(0);
+      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(S.SHOPS[layout.stationId] && x < U.x0 + 1.4 && z > U.z0 + 4.4 && z < U.z0 + 9.6)) consider(0);
       for (const P of layout.platforms) {
         // 月台（扣掉電扶梯、柱子、座椅）
         if (Math.abs(z - P.z) < S.PLAT_HALF && Math.abs(x - P.x) < S.LEN / 2 - .4) {
           const lx = x - P.x, lz = z - P.z;
           const onRamp = P.ramps.some(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; const hx0 = r.b > 0 ? a + .3 : a, hx1 = r.b > 0 ? b : b - .3; return lx > hx0 && lx < hx1 && Math.abs(lz) < 1.9; });
           const pillar = [-28, 0, 28].some(px => Math.abs(lx - px) < .6 && Math.abs(lz) < .55);
-          const bench = [-31, 31].some(bx => Math.abs(lx - bx) < 1 && Math.abs(lz) < .4);
+          const bench = [-31, 31].some(bx => Math.abs(lx - bx) < 1 && Math.abs(lz) < .4) || (Math.abs(lx + 24) < .9 && Math.abs(lz) < .8);   // 座椅、電梯
           if (!onRamp && !pillar && !bench) consider(P.y);
         }
         // 電扶梯、樓梯（斜面）
