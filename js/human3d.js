@@ -1,0 +1,438 @@
+/* 3D 主角模型（程式建模＋骨架走路動畫）
+ * 單位：公尺。模型正面朝 +z，腳底在 y = 0。
+ * 臉部為手繪貼圖，依兩人特徵設計（軒宇：細長眼、自然眉；愛紜：大眼、眼線、紅唇）。
+ */
+const Human3D = (() => {
+  const T = THREE;
+
+  // 布料雜訊貼圖，讓衣服看起來有材質
+  function fabricTexture(base, opts = {}) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+    const img = g.getImageData(0, 0, 256, 256), d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (Math.random() - .5) * (opts.noise || 14);
+      d[i] += n; d[i + 1] += n; d[i + 2] += n;
+    }
+    g.putImageData(img, 0, 0);
+    if (opts.knit) {   // 針織紋
+      g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 1.4;
+      for (let y = 0; y < 256; y += 6) for (let x = 0; x < 256; x += 8) {
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y + 5); g.lineTo(x + 8, y); g.stroke();
+      }
+    }
+    if (opts.rib) {    // 羅紋
+      g.fillStyle = 'rgba(0,0,0,.12)';
+      for (let x = 0; x < 256; x += 6) g.fillRect(x, 0, 2, 256);
+    }
+    if (opts.draw) opts.draw(g);
+    const t = new T.CanvasTexture(c);
+    t.colorSpace = T.SRGBColorSpace;
+    t.wrapS = t.wrapT = T.RepeatWrapping;
+    if (opts.repeat) t.repeat.set(opts.repeat[0], opts.repeat[1]);
+    t.anisotropy = 4;
+    return t;
+  }
+
+  const mat = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: o.rough ?? .85, metalness: o.metal ?? 0, map: o.map || null, side: o.side || T.FrontSide, transparent: !!o.transparent });
+
+  // 四肢：頂端在原點，往 -y 延伸
+  function limb(r1, r2, len, material) {
+    const g = new T.CylinderGeometry(r1, r2, len, 20, 1);
+    g.translate(0, -len / 2, 0);
+    const m = new T.Mesh(g, material);
+    const capTop = new T.Mesh(new T.SphereGeometry(r1, 20, 12), material);
+    const capBot = new T.Mesh(new T.SphereGeometry(r2, 20, 12), material); capBot.position.y = -len;
+    const grp = new T.Group(); grp.add(m, capTop, capBot);
+    return grp;
+  }
+  function box(w, h, d, material, x, y, z, parent) { const m = new T.Mesh(new T.BoxGeometry(w, h, d), material); m.position.set(x, y, z); parent.add(m); return m; }
+  function joint(x, y, z) { const g = new T.Group(); g.position.set(x, y, z); return g; }
+
+  // 以剖面旋轉出的軀幹（frontU=0.5 為正面）
+  function lathe(points, material, scaleZ = .62) {
+    const g = new T.LatheGeometry(points.map(([r, y]) => new T.Vector2(r, y)), 40, Math.PI, Math.PI * 2);
+    const m = new T.Mesh(g, material);
+    m.scale.z = scaleZ;
+    return m;
+  }
+
+  // 頭髮外殼：完整球面，挖掉臉的部分（keep 決定哪些位置保留）
+  function hairShell(r, keep, material, seg = 56) {
+    const g = new T.SphereGeometry(r, seg, seg * .75 | 0);
+    const pos = g.attributes.position, idx = g.index.array, out = [];
+    const v = i => [pos.getX(i) / r, pos.getY(i) / r, pos.getZ(i) / r];
+    for (let i = 0; i < idx.length; i += 3) {
+      const a = v(idx[i]), b = v(idx[i + 1]), c = v(idx[i + 2]);
+      const m = [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3];
+      if (keep(m[0], m[1], m[2])) out.push(idx[i], idx[i + 1], idx[i + 2]);
+    }
+    g.setIndex(out);
+    // 髮尾略為外翻、蓬鬆
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i) / r;
+      if (y < .2) { const k = 1 + (.2 - y) * .12; pos.setX(i, pos.getX(i) * k); pos.setZ(i, pos.getZ(i) * k); }
+    }
+    g.computeVertexNormals();
+    return new T.Mesh(g, material);
+  }
+
+  // 手繪臉部：在膚色底上畫眉、眼、鼻、唇（貼圖中心為臉的正中）
+  function faceTexture(charId, skin) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+    const g = c.getContext('2d');
+    g.fillStyle = skin; g.fillRect(0, 0, 512, 512);
+    const girl = charId === 'aiyun';
+    g.translate(256, 290); g.scale(1.3, 1.3); g.translate(-256, -290);   // 五官整體放大
+    const eyeY = 236, eyeDX = girl ? 78 : 76, look = girl ? 9 : 0;
+    // 腮紅
+    for (const sx of [-1, 1]) {
+      const gr = g.createRadialGradient(256 + sx * 112, 318, 4, 256 + sx * 112, 318, 62);
+      gr.addColorStop(0, girl ? 'rgba(240,120,120,.38)' : 'rgba(210,120,100,.14)'); gr.addColorStop(1, 'rgba(240,120,120,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
+    }
+    // 眉毛
+    g.strokeStyle = girl ? 'rgba(74,38,32,.75)' : 'rgba(24,20,20,.85)'; g.lineCap = 'round';
+    for (const sx of [-1, 1]) {
+      g.lineWidth = girl ? 7 : 11;
+      g.beginPath(); g.moveTo(256 + sx * 36, eyeY - 52); g.quadraticCurveTo(256 + sx * 78, eyeY - (girl ? 66 : 62), 256 + sx * 122, eyeY - 50); g.stroke();
+    }
+    // 眼睛
+    for (const sx of [-1, 1]) {
+      const ex = 256 + sx * eyeDX;
+      const w = girl ? 50 : 46, h = girl ? 30 : 21;
+      g.save();
+      g.beginPath(); g.ellipse(ex, eyeY, w, h, 0, 0, Math.PI * 2); g.clip();
+      g.fillStyle = '#fbf8f4'; g.fillRect(ex - w, eyeY - h, w * 2, h * 2);
+      const ir = girl ? 25 : 20;
+      const ig = g.createRadialGradient(ex + look, eyeY - 4, 2, ex + look, eyeY, ir);
+      ig.addColorStop(0, girl ? '#7a4a34' : '#4a3226'); ig.addColorStop(.7, girl ? '#3a2018' : '#241812'); ig.addColorStop(1, '#120a08');
+      g.fillStyle = ig; g.beginPath(); g.arc(ex + look, eyeY + 2, ir, 0, 7); g.fill();
+      g.fillStyle = '#0a0606'; g.beginPath(); g.arc(ex + look, eyeY + 2, ir * .45, 0, 7); g.fill();
+      g.fillStyle = 'rgba(255,255,255,.95)'; g.beginPath(); g.arc(ex + look + 7, eyeY - 6, girl ? 7 : 5, 0, 7); g.fill();
+      g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(ex - w, eyeY - h, w * 2, 9);   // 上眼瞼陰影
+      g.restore();
+      // 上眼線（女生帶一點眼尾）
+      g.strokeStyle = '#1a1210'; g.lineWidth = girl ? 7 : 6;
+      g.beginPath(); g.ellipse(ex, eyeY, w, h, 0, Math.PI * 1.05, Math.PI * 1.95); g.stroke();
+      if (girl) { g.beginPath(); g.moveTo(ex + sx * (w - 2), eyeY - 6); g.lineTo(ex + sx * (w + 14), eyeY - 16); g.stroke(); }
+      // 雙眼皮／單眼皮
+      g.strokeStyle = 'rgba(120,70,55,.45)'; g.lineWidth = 3;
+      if (girl) { g.beginPath(); g.ellipse(ex, eyeY - 8, w, h + 4, 0, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
+      g.strokeStyle = 'rgba(120,70,55,.35)'; g.lineWidth = 2;
+      g.beginPath(); g.ellipse(ex, eyeY + 2, w * .85, h, 0, Math.PI * .2, Math.PI * .8); g.stroke();
+    }
+    // 鼻子
+    g.strokeStyle = 'rgba(140,85,65,.45)'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(250, 250); g.quadraticCurveTo(244, 300, 252, 318); g.stroke();
+    g.fillStyle = 'rgba(140,85,65,.35)';
+    for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(256 + sx * 14, 322, 7, 4, 0, 0, 7); g.fill(); }
+    // 嘴唇
+    const lip = girl ? '#d0565a' : '#c9837b';
+    g.fillStyle = lip;
+    g.beginPath(); g.moveTo(222, 372); g.quadraticCurveTo(240, 360, 256, 366); g.quadraticCurveTo(272, 360, 290, 372);
+    g.quadraticCurveTo(256, 400, 222, 372); g.fill();
+    g.strokeStyle = 'rgba(90,30,30,.55)'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(224, 372); g.quadraticCurveTo(256, 380, 288, 372); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,.25)'; g.beginPath(); g.ellipse(262, 384, 10, 3, 0, 0, 7); g.fill();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    // 邊緣淡出成透明，讓貼圖與頭部膚色無縫接合
+    const fade = g.createRadialGradient(256, 270, 150, 256, 270, 256);
+    fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalCompositeOperation = 'destination-in'; g.fillStyle = fade; g.fillRect(0, 0, 512, 512);
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8;
+    return t;
+  }
+
+  function face(charId, skin, hair) {
+    // 頭：膚色橢球＋照片臉部貼圖
+    const head = new T.Group();
+    const skull = new T.Mesh(new T.SphereGeometry(.112, 40, 28), mat(skin, { rough: .7 }));
+    head.scale.setScalar(1.12);
+    skull.scale.set(.9, 1.08, .98);
+    head.add(skull);
+    // 臉部貼圖：覆蓋頭部正面，眼睛對齊頭部中線
+    const tex = faceTexture(charId, skin);
+    const fm = new T.MeshStandardMaterial({ map: tex, transparent: true, roughness: .7, depthWrite: false });
+    const fg = new T.SphereGeometry(.1138, 48, 32, Math.PI / 2 - 1.05, 2.1, .62, 1.9);
+    const fmesh = new T.Mesh(fg, fm);
+    fmesh.scale.copy(skull.scale);
+    fmesh.renderOrder = 2;
+    head.add(fmesh);
+    // 耳朵
+    for (const s of [-1, 1]) {
+      const ear = new T.Mesh(new T.SphereGeometry(.024, 12, 10), mat(skin, { rough: .7 }));
+      ear.scale.set(.5, 1, .8); ear.position.set(s * .1, -.005, -.005);
+      head.add(ear);
+    }
+    return head;
+  }
+
+  /* ── 軒宇 ── */
+  function xuanyu() {
+    // 造型：白色毛海毛衣配黑色波浪條紋、藍色直筒牛仔褲、層次感長版黑髮、皮繩項鍊
+    const skin = '#e2b49c', hair = '#111114';
+    const stripes = (g, w = 256, h = 256, rows = 7) => {
+      g.strokeStyle = '#1b1b1d'; g.lineWidth = h / rows * .32; g.lineCap = 'round';
+      for (let r = 0; r < rows; r++) {
+        const y0 = (r + .5) * h / rows;
+        g.beginPath();
+        for (let x = 0; x <= w; x += 4) g.lineTo(x, y0 + Math.sin(x / w * Math.PI * 6 + r) * h / rows * .18);
+        g.stroke();
+      }
+      // 毛海質感
+      for (let i = 0; i < 2600; i++) { g.fillStyle = Math.random() < .5 ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.08)'; g.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 2, 3 + Math.random() * 4); }
+    };
+    const sweatM = mat('#ffffff', { rough: .95, map: fabricTexture('#f1efe9', { noise: 18, draw: g => stripes(g, 256, 256, 7) }) });
+    const sleeveTex = fabricTexture('#f1efe9', { noise: 18, draw: g => stripes(g, 256, 256, 4) });
+    const sleeveM = mat('#ffffff', { rough: .95, map: sleeveTex });
+    const ribM = mat('#ffffff', { map: fabricTexture('#ecebe6', { rib: true, noise: 10 }) });
+    const pantsM = mat('#ffffff', { rough: .85, map: fabricTexture('#4f6584', { noise: 22, draw: g => { g.fillStyle = 'rgba(200,215,235,.18)'; for (let i = 0; i < 400; i++) g.fillRect(Math.random() * 256, Math.random() * 256, 1, 6); } }) });
+    const skinM = mat(skin, { rough: .7 });
+    const shoeM = mat('#f4f4f1', { rough: .6 });
+    const hairM = mat(hair, { rough: .55, side: T.DoubleSide, map: fabricTexture('#16161b', { noise: 30, draw: g => { g.strokeStyle = 'rgba(255,255,255,.06)'; for (let x = 0; x < 256; x += 3) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 6, 256); g.stroke(); } } }) });
+    const cordM = mat('#2a2220', { rough: .6 });
+    const silver = mat('#d6d8dc', { rough: .25, metal: .9 });
+
+    const P = { hipY: .93, thigh: .45, shin: .45, torso: .5, shoulderX: .185, upper: .29, fore: .27 };
+    const root = new T.Group();
+    const hips = joint(0, P.hipY, 0); root.add(hips);
+    const spine = joint(0, 0, 0); hips.add(spine);
+
+    // 寬版毛衣
+    const torso = lathe([[.0, -.08], [.212, -.08], [.222, .05], [.226, .2], [.228, .36], [.215, .46], [.15, .52], [.075, .55], [.07, .56]], sweatM, .62);
+    spine.add(torso);
+    const hem = lathe([[.214, -.12], [.218, -.12], [.222, -.05], [.215, -.05]], ribM, .62); spine.add(hem);
+    const collar = new T.Mesh(new T.TorusGeometry(.068, .016, 10, 30), ribM); collar.rotation.x = Math.PI / 2; collar.position.y = .55; collar.scale.y = .62; spine.add(collar);
+    // 牛仔褲頭
+    const waist = lathe([[.0, -.16], [.2, -.16], [.205, -.08], [.0, -.08]], pantsM, .62); spine.add(waist);
+    // 皮繩項鍊＋銀色扣環
+    const cord = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([
+      new T.Vector3(-.06, .55, .02), new T.Vector3(-.035, .44, .135), new T.Vector3(0, .38, .142), new T.Vector3(.035, .44, .135), new T.Vector3(.06, .55, .02),
+    ]), 30, .004, 5, false), cordM); spine.add(cord);
+    const clip = new T.Mesh(new T.TorusGeometry(.012, .004, 6, 12), silver); clip.position.set(0, .365, .145); spine.add(clip);
+
+    // 脖子與頭
+    const neck = limb(.045, .048, .1, skinM); neck.position.y = .62; spine.add(neck);
+    const headJ = joint(0, .625, .01); spine.add(headJ);
+    const head = face('xuanyu', skin, hair); head.position.y = .1; headJ.add(head);
+    // 層次感長髮（狼尾）：瀏海到眉、側邊蓋住耳朵、後面到後頸
+    const mush = hairShell(.14, (x, y, z) => {
+      if (y > .3) return true;
+      if (z < -.1) return y > -.98;
+      if (Math.abs(x) > .7) return y > -.62;
+      if (Math.abs(x) > .5) return y > .05;
+      return false;
+    }, hairM, 96);
+    mush.scale.set(.95, 1.12, 1.04); mush.position.set(0, .1, -.006); headJ.add(mush);
+    // 後頸與側邊的髮尾層次
+    for (let i = 0; i < 9; i++) {
+      const a2 = Math.PI + (i - 4) * .3;
+      const st = new T.Mesh(new T.ConeGeometry(.026, .11, 6), hairM);
+      st.position.set(Math.sin(a2) * .125, -.02 - Math.abs(i - 4) * .006, Math.cos(a2) * .12);
+      st.rotation.set(Math.PI + Math.cos(a2) * .35, 0, -Math.sin(a2) * .35);
+      headJ.add(st);
+    }
+    // 瀏海髮束（稍微蓋到眉毛）
+    for (let i = -2; i <= 2; i++) {
+      const a2 = i * .26;
+      const st = new T.Mesh(new T.ConeGeometry(.02, .05, 6), hairM);
+      st.position.set(Math.sin(a2) * .133, .158, Math.cos(a2) * .136);
+      st.rotation.set(Math.PI + .5, 0, -a2 * .5);
+      headJ.add(st);
+    }
+    // 耳環
+    const ring = new T.Mesh(new T.TorusGeometry(.009, .0025, 6, 12), silver); ring.position.set(.112, .07, .0); ring.rotation.y = Math.PI / 2; headJ.add(ring);
+
+    // 手臂
+    const arms = [];
+    for (const s of [-1, 1]) {
+      const sh = joint(s * P.shoulderX, .45, 0); spine.add(sh);
+      const up = limb(.07, .062, P.upper, sleeveM); sh.add(up);
+      const el = joint(0, -P.upper, 0); sh.add(el);
+      const fo = limb(.06, .055, P.fore, sleeveM); el.add(fo);
+      const cuff = limb(.056, .052, .06, ribM); cuff.position.y = -P.fore + .04; el.add(cuff);
+      const hand = new T.Mesh(new T.SphereGeometry(.045, 16, 12), skinM); hand.scale.set(.8, 1.2, .55); hand.position.y = -P.fore - .07; el.add(hand);
+      sh.rotation.z = s * .1;
+      arms.push({ sh, el, s });
+    }
+    // 腿（直筒牛仔褲）
+    const legs = [];
+    for (const s of [-1, 1]) {
+      const hp = joint(s * .1, 0, 0); hips.add(hp);
+      const th = limb(.095, .085, P.thigh, pantsM); hp.add(th);
+      const kn = joint(0, -P.thigh, 0); hp.add(kn);
+      const sh = limb(.085, .082, P.shin - .04, pantsM); kn.add(sh);
+      const shoe = new T.Mesh(new T.SphereGeometry(.07, 20, 14), shoeM); shoe.scale.set(.85, .55, 1.65); shoe.position.set(0, -P.shin + .02, .045); kn.add(shoe);
+      const sole = new T.Mesh(new T.BoxGeometry(.11, .025, .22), mat('#d9d9d4')); sole.position.set(0, -P.shin - .005, .045); kn.add(sole);
+      legs.push({ hp, kn, s });
+    }
+    return { root, hips, spine, headJ, arms, legs, P, armSwing: .35 };
+  }
+
+  /* ── 愛紜 ── */
+  function aiyun() {
+    // 造型：黑色無袖高領合身上衣、長項鍊、深色刷色喇叭牛仔褲、黑色側背包
+    const skin = '#f2cdb9', hair = '#24140f';
+    const topM = mat('#ffffff', { rough: .75, map: fabricTexture('#141416', { rib: true, noise: 6 }) });
+    // 刷色牛仔：大腿正面刷淡（圓柱貼圖的 u = 0／1 為正面）
+    const jeansTex = fabricTexture('#1d1f24', {
+      noise: 18,
+      draw: g => {
+        for (const [x0, x1, flip] of [[0, 56, false], [200, 256, true]]) {
+          const gr = g.createLinearGradient(x0, 0, x1, 0);
+          gr.addColorStop(flip ? 1 : 0, 'rgba(150,155,165,.55)'); gr.addColorStop(flip ? 0 : 1, 'rgba(150,155,165,0)');
+          g.fillStyle = gr; g.fillRect(x0, 0, x1 - x0, 256);
+        }
+      },
+    });
+    const jeansM = mat('#ffffff', { map: jeansTex, rough: .8 });
+    const jeansDarkM = mat('#ffffff', { map: fabricTexture('#1a1b20', { noise: 16 }), rough: .8 });
+    const skinM = mat(skin, { rough: .65 });
+    const shoeM = mat('#141212', { rough: .35 });
+    const bagM = mat('#121214', { rough: .3, metal: .1 });
+    const silver = mat('#d6d8dc', { rough: .25, metal: .9 });
+    const hairM = mat('#ffffff', { rough: .5, side: T.DoubleSide, map: fabricTexture('#25150f', { noise: 22, draw: g => { for (let x = 0; x < 256; x += 2) { g.strokeStyle = `rgba(${Math.random() < .5 ? '90,55,40' : '8,4,3'},.25)`; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + 10, 80, x - 10, 170, x + 4, 256); g.stroke(); } } }) });
+
+    const P = { hipY: .9, thigh: .44, shin: .45, torso: .46, shoulderX: .16, upper: .27, fore: .25 };
+    const root = new T.Group();
+    const hips = joint(0, P.hipY, 0); root.add(hips);
+    const spine = joint(0, 0, 0); hips.add(spine);
+
+    // 低腰牛仔褲頭
+    const waist = lathe([[.0, -.1], [.168, -.1], [.165, .02], [.0, .02]], jeansDarkM, .7); spine.add(waist);
+    box(.022, .022, .01, silver, 0, -.02, .118, spine);
+    // 合身無袖高領上衣（短版，露出一點腰）
+    const torso = lathe([[.0, .06], [.148, .06], [.142, .16], [.152, .3], [.17, .4], [.155, .46], [.09, .5], [.058, .54], [.055, .6]], topM, .7);
+    spine.add(torso);
+    const waistSkin = lathe([[.146, .0], [.15, .0], [.15, .07], [.146, .07]], skinM, .7); spine.add(waistSkin);
+    // 長項鍊與墜飾
+    const chain = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([
+      new T.Vector3(-.05, .56, .03), new T.Vector3(-.03, .45, .118), new T.Vector3(0, .34, .126), new T.Vector3(.03, .45, .118), new T.Vector3(.05, .56, .03),
+    ]), 30, .0022, 4, false), silver); spine.add(chain);
+    const pend = new T.Mesh(new T.BoxGeometry(.014, .045, .008), silver); pend.position.set(0, .31, .128); spine.add(pend);
+    // 黑色側背包（掛在右肩，包在左腰側）
+    const strap = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([
+      new T.Vector3(-.13, .5, 0), new T.Vector3(-.15, .3, .1), new T.Vector3(-.19, .08, .1),
+    ]), 20, .008, 5, false), bagM); spine.add(strap);
+    const bag = new T.Mesh(new T.CapsuleGeometry(.08, .1, 8, 16), bagM); bag.scale.set(1, 1, .5); bag.position.set(-.2, -.05, .07); bag.rotation.z = .15; spine.add(bag);
+
+    const neck = limb(.04, .043, .09, skinM); neck.position.y = .57; spine.add(neck);
+    const headJ = joint(0, .565, .01); spine.add(headJ);
+    const head = face('aiyun', skin, hair); head.position.y = .1; head.rotation.y = -.06; headJ.add(head);
+    // 頭頂頭髮（中分）、空氣瀏海
+    const cap = new T.Mesh(new T.SphereGeometry(.125, 36, 24, 0, Math.PI * 2, 0, 1.3), hairM); cap.scale.set(.96, 1.06, 1.04).multiplyScalar(1.12); cap.position.y = .128; headJ.add(cap);
+    const backCap = new T.Mesh(new T.SphereGeometry(.127, 36, 24, Math.PI, Math.PI, 0, 2.3), hairM); backCap.scale.set(.98, 1.06, 1.06).multiplyScalar(1.12); backCap.position.y = .125; headJ.add(backCap);
+    // 長捲髮（後）：開口圓柱加波浪
+    const longG = new T.CylinderGeometry(.15, .19, .5, 40, 24, true, Math.PI * .32, Math.PI * 1.36);
+    const pos = longG.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i), x = pos.getX(i), z = pos.getZ(i);
+      const a = Math.atan2(x, z);
+      const w = 1 + .035 * Math.sin(y * 24 + a * 5) * (0.5 - y);
+      pos.setX(i, x * w); pos.setZ(i, z * w);
+    }
+    longG.computeVertexNormals();
+    const longHair = new T.Mesh(longG, hairM); longHair.position.set(0, -.12, -.03); longHair.scale.z = .82; headJ.add(longHair);
+    // 臉旁兩側的長髮（垂到胸前）
+    for (const s of [-1, 1]) {
+      const g = new T.CylinderGeometry(.05, .065, .5, 16, 16, true);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) + .02 * Math.sin(y * 22)); }
+      g.computeVertexNormals();
+      const lock = new T.Mesh(g, hairM); lock.position.set(s * .13, -.08, .04); lock.rotation.z = s * .08; headJ.add(lock);
+    }
+    // 空氣瀏海：前額一片薄髮＋幾束髮絲
+    const fringe = new T.Mesh(new T.SphereGeometry(.128, 36, 20, .35, Math.PI - .7, .2, 1.18), hairM);
+    fringe.scale.set(.96, 1.06, 1.08).multiplyScalar(1.12); fringe.position.y = .125; headJ.add(fringe);
+    for (const s2 of [-1, 1]) {
+      const lockG = new T.Mesh(new T.SphereGeometry(.13, 16, 16, s2 > 0 ? .05 : Math.PI - .55, .5, .9, .75), hairM);
+      lockG.scale.set(.98, 1.08, 1.1).multiplyScalar(1.12); lockG.position.y = .125; headJ.add(lockG);
+    }
+    const arms = [];
+    for (const s of [-1, 1]) {
+      const sh = joint(s * P.shoulderX, .42, 0); spine.add(sh);
+      const up = limb(.045, .038, P.upper, skinM); sh.add(up);
+      const el = joint(0, -P.upper, 0); sh.add(el);
+      const fo = limb(.036, .03, P.fore, skinM); el.add(fo);
+      const band = new T.Mesh(new T.TorusGeometry(.034, .005, 6, 16), s > 0 ? silver : bagM); band.rotation.x = Math.PI / 2; band.position.y = -P.fore + .04; el.add(band);
+      const hand = new T.Mesh(new T.SphereGeometry(.036, 16, 12), skinM); hand.scale.set(.8, 1.25, .55); hand.position.y = -P.fore - .045; el.add(hand);
+      sh.rotation.z = s * .1;
+      arms.push({ sh, el, s });
+    }
+    const legs = [];
+    for (const s of [-1, 1]) {
+      const hp = joint(s * .08, 0, 0); hips.add(hp);
+      const th = limb(.078, .055, P.thigh, jeansM); hp.add(th);
+      const kn = joint(0, -P.thigh, 0); hp.add(kn);
+      const sh = limb(.052, .088, P.shin - .02, jeansDarkM); kn.add(sh);   // 往下展開的喇叭褲管
+      const shoe = new T.Mesh(new T.SphereGeometry(.055, 20, 14), shoeM); shoe.scale.set(.8, .45, 1.7); shoe.position.set(0, -P.shin + .015, .05); kn.add(shoe);
+      legs.push({ hp, kn, s });
+    }
+    return { root, hips, spine, headJ, arms, legs, P, armSwing: .3 };
+  }
+
+  function build(charId) {
+    const rig = charId === 'aiyun' ? aiyun() : xuanyu();
+    rig.root.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+    // 腳下陰影
+    const sc = document.createElement('canvas'); sc.width = sc.height = 64;
+    const sg = sc.getContext('2d'); const gr = sg.createRadialGradient(32, 32, 2, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); sg.fillStyle = gr; sg.fillRect(0, 0, 64, 64);
+    const shadow = new T.Mesh(new T.PlaneGeometry(.75, .75), new T.MeshBasicMaterial({ map: new T.CanvasTexture(sc), transparent: true, depthWrite: false }));
+    shadow.rotation.x = -Math.PI / 2; shadow.position.y = .005;
+    rig.root.add(shadow);
+
+    let phase = 0, amt = 0;
+    rig.update = (dt, speed, t) => {
+      // speed：公尺/秒
+      const target = Math.min(1, speed / 1.6);
+      amt += (target - amt) * Math.min(1, dt * 8);
+      phase += dt * (4 + speed * 3.2);
+      const sw = Math.sin(phase);
+      for (const L of rig.legs) {
+        const p = L.s > 0 ? sw : -sw;
+        L.hp.rotation.x = p * .55 * amt;
+        L.kn.rotation.x = Math.max(0, -Math.sin(phase + (L.s > 0 ? 0 : Math.PI) - .6)) * .9 * amt;
+      }
+      for (const A of rig.arms) {
+        const p = A.s > 0 ? -sw : sw;
+        A.sh.rotation.x = p * rig.armSwing * amt;
+        A.el.rotation.x = -.15 - .25 * amt;
+      }
+      const breath = Math.sin(t * 1.8) * .006;
+      rig.hips.position.y = rig.P.hipY + Math.abs(Math.cos(phase)) * .035 * amt - .015 * amt;
+      rig.spine.rotation.y = sw * .08 * amt;
+      rig.spine.rotation.x = .05 * amt;
+      rig.spine.scale.set(1 + breath, 1, 1 + breath);
+      rig.headJ.rotation.y = -sw * .05 * amt;
+    };
+    rig.update(0, 0, 0);
+    return rig;
+  }
+
+  // 角色快照：用 3D 模型拍一張圖（選角畫面、頭像）
+  let snapR = null;
+  const snapCache = {};
+  function snapshot(charId, kind = 'full') {
+    const key = charId + kind;
+    if (snapCache[key]) return snapCache[key];
+    const w = kind === 'full' ? 600 : 256, h = kind === 'full' ? 1000 : 256;
+    if (!snapR) { snapR = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); snapR.outputColorSpace = T.SRGBColorSpace; snapR.toneMapping = T.ACESFilmicToneMapping; }
+    snapR.setSize(w, h, false);
+    const scene = new T.Scene();
+    scene.add(new T.HemisphereLight('#ffffff', '#5a6068', 1.5));
+    const d = new T.DirectionalLight('#fff4e6', 2.2); d.position.set(1.5, 3, 4); scene.add(d);
+    const rig = build(charId); rig.root.rotation.y = -.35; scene.add(rig.root);
+    const cam = new T.PerspectiveCamera(kind === 'full' ? 26 : 22, w / h, .05, 50);
+    if (kind === 'full') { cam.position.set(0, 1.0, 4.6); cam.lookAt(0, .88, 0); }
+    else { cam.position.set(0, 1.55, 1.2); cam.lookAt(0, 1.5, 0); }
+    snapR.setClearColor(0x000000, 0);
+    snapR.render(scene, cam);
+    return (snapCache[key] = snapR.domElement.toDataURL('image/png'));
+  }
+
+  return { build, fabricTexture, snapshot };
+})();

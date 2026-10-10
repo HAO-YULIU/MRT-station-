@@ -1,5 +1,6 @@
 /* 迷霧：遊戲主流程 */
 const SAVE_KEY = 'mist-mrt-save-v1';
+const START_STATION = '南港展覽館';   // 遊戲起點
 
 const Game = {
   state: null,
@@ -77,7 +78,7 @@ function updateHud() {
   const s = Game.state;
   if (s.char) {
     $('#hudName').textContent = CHARACTERS[s.char].name;
-    $('#hudAvatar').innerHTML = CharArt.img(s.char, 'avatar');
+    if ($('#hudAvatar').dataset.c !== s.char) { $('#hudAvatar').dataset.c = s.char; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head')}" alt="">`; }
   }
   $('#hudWhere').textContent = s.current ? s.current : '尚未出發';
   $('#hudItems').textContent = `${Object.keys(s.items).length}/6`;
@@ -117,13 +118,13 @@ function renderTitle() {
     ? `<button class="btn primary" id="btnContinue">繼續旅程<small>${CHARACTERS[s.char].name}・目前在 ${s.current}</small></button>
        <button class="btn ghost" id="btnNew">重新開始</button>`
     : `<button class="btn primary" id="btnStart">開始</button>`;
-  const go = () => { Sound.unlock(); renderCharSelect(); showScreen('charSelect'); };
+  const go = () => { Sound.unlock(); goFullscreen(); renderCharSelect(); showScreen('charSelect'); };
   $('#btnStart') && ($('#btnStart').onclick = go);
   $('#btnNew') && ($('#btnNew').onclick = () => {
     if (!confirm('重新開始會清除目前的進度與收集到的物品，確定嗎？')) return;
     Game.state = newState(); saveState(); go();
   });
-  $('#btnContinue') && ($('#btnContinue').onclick = () => { Sound.unlock(); enterGame(s.current, 'start'); });
+  $('#btnContinue') && ($('#btnContinue').onclick = () => { Sound.unlock(); goFullscreen(); enterGame(s.current); });
 }
 
 /* ── 選角色 ── */
@@ -132,7 +133,7 @@ function renderCharSelect() {
   const wrap = $('#charCards');
   wrap.innerHTML = Object.values(CHARACTERS).map(c => `
     <button class="char-card${pick === c.id ? ' on' : ''}" data-id="${c.id}" aria-pressed="${pick === c.id}">
-      <div class="char-stage">${CharArt.img(c.id)}</div>
+      <div class="char-stage"><img class="char-img" src="${Human3D.snapshot(c.id, 'full')}" alt="${c.name}" draggable="false"></div>
       <div class="char-info">
         <div class="char-name">${c.name}<span>${c.en}</span></div>
         <div class="char-meta">${c.gender}　${c.age} 歲　${c.role}</div>
@@ -143,95 +144,54 @@ function renderCharSelect() {
   const sync = () => {
     wrap.querySelectorAll('.char-card').forEach(b => { b.classList.toggle('on', b.dataset.id === pick); b.setAttribute('aria-pressed', b.dataset.id === pick); });
     confirmBtn.disabled = !pick;
-    confirmBtn.textContent = pick ? `以${CHARACTERS[pick].name}出發` : '選一位主角';
+    confirmBtn.textContent = pick ? `以${CHARACTERS[pick].name}從南港展覽館出發` : '選一位主角';
   };
   wrap.onclick = e => { const b = e.target.closest('.char-card'); if (!b) return; Sound.click(); pick = b.dataset.id; sync(); };
   confirmBtn.onclick = () => {
-    Game.state.char = pick; saveState();
-    renderStationSelect(); showScreen('stationSelect');
+    // 每一位玩家都從南港展覽館出發
+    const s = Game.state;
+    s.char = pick; s.start = START_STATION; s.current = START_STATION;
+    s.visited = { [START_STATION]: true }; s.items = {}; s.rides = 0;
+    saveState();
+    enterGame(START_STATION);
   };
   sync();
 }
 
-/* ── 選出發站 ── */
-let selectMap = null;
-function renderStationSelect() {
-  let picked = null, tab = 'R';
-  const mapBox = $('#selectMap');
-  selectMap = MapView(mapBox, { onPick: id => choose(id) });
-
-  const tabs = $('#lineTabs');
-  tabs.innerHTML = LINE_ORDER.map(l => `<button class="ltab" data-l="${l}" style="--c:${LINES[l].color};--t:${LINES[l].text}">${LINES[l].zh}</button>`).join('');
-  const list = $('#stationList');
-  const renderList = () => {
-    tabs.querySelectorAll('.ltab').forEach(b => b.classList.toggle('on', b.dataset.l === tab));
-    const q = $('#stationSearch').value.trim();
-    let items = [];
-    if (q) {
-      items = Object.keys(STATIONS).filter(id => id.includes(q) || STATIONS[id].en.toLowerCase().includes(q.toLowerCase()));
-    } else {
-      const seen = new Set();
-      for (const r of LINES[tab].routes) for (const [id] of r) if (!seen.has(id)) { seen.add(id); items.push(id); }
-    }
-    list.innerHTML = items.map(id => `
-      <li><button class="srow${id === picked ? ' on' : ''}" data-id="${esc(id)}">
-        <span class="chips">${MRT.linesAt(id).map(l => lineChip(l.line, l.code)).join('')}</span>
-        <span class="sname">${esc(id)}<small>${esc(STATIONS[id].en)}</small></span>
-      </button></li>`).join('') || '<li class="empty">找不到這個站名，試試其他關鍵字。</li>';
-  };
-  tabs.onclick = e => { const b = e.target.closest('.ltab'); if (!b) return; tab = b.dataset.l; $('#stationSearch').value = ''; renderList(); };
-  $('#stationSearch').oninput = renderList;
-  list.onclick = e => { const b = e.target.closest('.srow'); if (b) { choose(b.dataset.id); selectMap.focus(b.dataset.id); } };
-
-  function choose(id) {
-    Sound.click();
-    picked = id;
-    selectMap.select(id);
-    renderList();
-    const conf = $('#startConfirm');
-    conf.hidden = false;
-    $('#startName').innerHTML = `${MRT.linesAt(id).map(l => lineChip(l.line, l.code)).join('')}<b>${esc(id)}</b><small>${esc(STATIONS[id].en)}</small>`;
-  }
-  $('#startGo').onclick = () => {
-    if (!picked) return;
-    const s = Game.state;
-    s.start = picked; s.current = picked; s.visited = { [picked]: true }; s.items = {}; s.rides = 0;
-    saveState();
-    enterGame(picked, 'start');
-  };
-  $('#startConfirm').hidden = true;
-  $('#zoomIn').onclick = () => selectMap.zoom(1 / 1.4);
-  $('#zoomOut').onclick = () => selectMap.zoom(1.4);
-  renderList();
-}
-
-/* ── 遊戲場景容器 ── */
+/* ── 遊戲場景容器（3D） ── */
 const sceneEl = () => $('#scene');
 const DWELL = 20;   // 停站開門秒數
-function sliceTransform() {
-  const r = sceneEl().getBoundingClientRect();
-  const s = Math.max(r.width / W, r.height / H);
-  return { s, ox: (r.width - W * s) / 2, oy: 0, vw: r.width, vh: r.height };   // 對應 xMidYMin slice
-}
+let worldReady = false;
 
 function setPanel(html) {
   $('#panel').innerHTML = html;
-  document.body.style.setProperty('--panel-h', $('#panel').offsetHeight + 'px');
 }
-
-// 場景放在 HUD 下方，避免擋住站名牌
 function layoutScene() {
   const h = $('.hud').offsetHeight;
-  sceneEl().style.top = h + 'px';
   document.body.style.setProperty('--hud-h', h + 'px');
-  document.body.style.setProperty('--panel-h', $('#panel').offsetHeight + 'px');
 }
-function enterGame(stationId, mode, from) {
+function ensureWorld() {
+  if (worldReady) return;
+  World.init(sceneEl());
+  World.bindJoystick($('#joystick'));
+  worldReady = true;
+}
+function enterGame(stationId) {
   showScreen('game');
   layoutScene();
+  ensureWorld();
+  World.setCharacter(Game.state.char);
   updateHud();
   if (TaipeiTime.state() !== 'open') showClosed();
-  showPlatform(stationId, mode, from);
+  showPlatform(stationId);
+}
+
+// 手機：開始遊戲時進入全螢幕（直式、橫式都可以玩）
+function goFullscreen() {
+  if (!window.matchMedia('(pointer: coarse)').matches) return;
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (req && !document.fullscreenElement) { try { const p = req.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) { /* 不支援全螢幕 */ } }
 }
 
 // 每次切換場景都開一個新的 session，舊的非同步流程看到 session 不同就會停止
@@ -247,85 +207,10 @@ function countdown(sec, onTick, id) {
       const left = Math.ceil((end - performance.now()) / 1000);
       if (onTick(Math.max(0, left)) === 'stop') return res('stop');
       if (left <= 0) return res('done');
-      setTimeout(tick, 250);
+      setTimeout(tick, 200);
     };
     tick();
   });
-}
-
-/* ── 月台 ── */
-function directionInfo(stationId, d) {
-  const a = STATIONS[stationId], b = STATIONS[d.stops[0]];
-  return { ...d, goesRight: b.x !== a.x ? b.x > a.x : b.y > a.y };
-}
-
-function attachPlatformPlayer(x, z) {
-  Player.attach({
-    scene: sceneEl(), svg: $('#scene svg'), hero: $('#hero'), body: $('#hero .hero-body'), shadow: $('#hero .hero-shadow'),
-    bounds: { x0: 90, x1: 1510, z0: 0, z1: 1 },
-    depth: { yFar: 700, yNear: 935, kFar: .6, kNear: 1 },
-    x, z,
-  });
-}
-
-function trainTransform(dx, goesRight) {
-  // 列車圖形車頭朝右；反方向時以 x=850 為軸鏡像（車門位置仍對齊月台門）
-  return goesRight ? `translate(${dx},0)` : `translate(${dx},0) translate(1700,0) scale(-1,1)`;
-}
-
-function openDoors(open, train = true) {
-  document.querySelectorAll('#scene .psd-l').forEach(g => g.style.transform = open ? 'translateX(-64px)' : '');
-  document.querySelectorAll('#scene .psd-r').forEach(g => g.style.transform = open ? 'translateX(64px)' : '');
-  if (train) {
-    document.querySelectorAll('#scene .tdoor-l').forEach(g => g.style.transform = open ? 'translateX(-62px)' : '');
-    document.querySelectorAll('#scene .tdoor-r').forEach(g => g.style.transform = open ? 'translateX(62px)' : '');
-  }
-}
-
-async function trainDepart(goesRight, id) {
-  const train = $('#train');
-  const dist = goesRight ? 2600 : -2600;
-  await animate(reduceMotion() ? 10 : 3600, k => alive(id) && train.setAttribute('transform', trainTransform(dist * k, goesRight)), ease.inCubic);
-  if (alive(id)) train.style.visibility = 'hidden';
-}
-
-async function showPlatform(stationId, mode, from) {
-  const id = newSession();
-  const s = Game.state;
-  s.current = stationId; s.visited[stationId] = true; saveState();
-  updateHud();
-  const dirs = MRT.directionsAt(stationId).map(d => directionInfo(stationId, d));
-  const lineId = from ? from.line : dirs[0].line;
-  const signDir = from ? (from.stops.length ? directionInfo(stationId, from) : null) : dirs[0];
-  sceneEl().innerHTML = Platform.build(stationId, lineId, signDir);
-  const hero = $('#hero');
-
-  if (mode === 'arrive') {
-    const train = $('#train');
-    train.style.visibility = 'visible';
-    train.setAttribute('transform', trainTransform(0, from.goesRight));
-    openDoors(true, true);
-    attachPlatformPlayer(650, 0);
-    hero.style.opacity = 0;
-    setPanel(`<div class="panel-note">${esc(stationId)}　到了</div>`);
-    await sleep(250);
-    await Player.walkTo(650, .8, reduceMotion() ? 10 : 1100, 'in');
-    if (!alive(id)) return;
-    Player.freeze(false);
-    renderPlatformPanel(stationId, dirs);
-    // 列車關門離站（玩家已可自由走動）
-    (async () => {
-      await sleep(1500); if (!alive(id)) return;
-      Sound.doorClose();
-      await sleep(1900); if (!alive(id)) return;
-      openDoors(false, true);
-      await sleep(900); if (!alive(id)) return;
-      trainDepart(from.goesRight, id);
-    })();
-    return;
-  }
-  attachPlatformPlayer(820, .8);
-  renderPlatformPanel(stationId, dirs);
 }
 
 function fmtEta(sec) {
@@ -338,7 +223,23 @@ function setPlatformTimer(fn) {
   Game.platformTimer = fn ? setInterval(fn, 500) : null;
 }
 
-function renderPlatformPanel(stationId, dirs) {
+/* ── 月台 ── */
+function showPlatform(stationId) {
+  newSession();
+  const s = Game.state;
+  s.current = stationId; s.visited[stationId] = true; saveState();
+  updateHud();
+  const dirs = MRT.directionsAt(stationId);
+  World.setStation(stationId, dirs[0].line, null);
+  World.setTrain(dirs[0].line, false);
+  Sound.ambience(MRT.undergroundOn(stationId, dirs[0].line) ? 'underground' : 'elevated');
+  World.placePlayer(0, 4.2);
+  World.setInput(true);
+  renderPlatformPanel(stationId);
+}
+
+function renderPlatformPanel(stationId) {
+  const dirs = MRT.directionsAt(stationId);
   const groups = {};
   dirs.forEach((d, i) => (groups[d.line] = groups[d.line] || []).push({ d, i }));
   const open = TaipeiTime.state() === 'open';
@@ -366,7 +267,7 @@ function renderPlatformPanel(stationId, dirs) {
   };
   tickEta();
   setPlatformTimer(tickEta);
-  Player.setInteractions([]);
+  World.setInteractions([]);
   $('#panel .dirs').onclick = e => {
     const b = e.target.closest('.dir');
     if (!b) return;
@@ -377,15 +278,17 @@ function renderPlatformPanel(stationId, dirs) {
   };
 }
 
-// 走到某方向的月台，等車、上車
+// 走到某方向的月台：等車 → 列車進站 → 開門 → 自己走進車廂
 async function goToPlatform(stationId, dir) {
   const id = newSession();
-  const px = Player.active ? Player.x : 820, pz = Player.active ? Player.z : .8;
-  sceneEl().innerHTML = Platform.build(stationId, dir.line, dir);
-  attachPlatformPlayer(px, pz);
+  World.setStation(stationId, dir.line, dir);
+  World.setTrain(dir.line, false);
+  Sound.ambience(MRT.undergroundOn(stationId, dir.line) ? 'underground' : 'elevated');
+  World.placePlayer(0, 4.2);
+  World.setInput(true);
   const t = MRT.label(dir.terminal, dir.line);
   const L = LINES[dir.line];
-  const backToDirs = () => { newSession(); renderPlatformPanel(stationId, MRT.directionsAt(stationId).map(d => directionInfo(stationId, d))); };
+  const backToDirs = () => { newSession(); World.setInteractions([]); renderPlatformPanel(stationId); };
 
   for (;;) {
     // 1) 等車：依台灣時間每 3 分鐘一班
@@ -395,11 +298,11 @@ async function goToPlatform(stationId, dir) {
           <span class="lbl">往 ${esc(t.zh)}<b id="waitMsg">下一班列車</b></span>
           <span class="eta" id="waitEta"></span>
         </div>
-        <span class="panel-hint">可以在月台上走動，車來了走到車門前上車</span>
+        <span class="panel-hint">可以在月台上走動，車來了走進車門</span>
         <button class="btn ghost small" id="changePlatform">換月台</button>
       </div>`);
     $('#changePlatform').onclick = () => { Sound.click(); backToDirs(); };
-    Player.setInteractions([]);
+    World.setInteractions([]);
     let chimed = false;
     const r = await new Promise(res => {
       const tick = () => {
@@ -408,13 +311,14 @@ async function goToPlatform(stationId, dir) {
         if (eta == null) return res('closed');
         const el = $('#waitEta'); if (!el) return res('stale');
         el.textContent = eta <= 10 ? '進站中' : `${Math.floor(eta / 60)}:${String(eta % 60).padStart(2, '0')}`;
-        if (eta <= 9 && !chimed) {
+        if (eta <= 12 && !chimed) {
           chimed = true;
           $('#waitMsg').textContent = '列車即將進站';
           Sound.arrivalChime(dir.line);
           setTimeout(() => alive(id) && Sound.announce(`往${t.zh}的列車即將進站，請勿超越月台警戒線。`, `The train to ${t.en} is now arriving.`), 4200);
         }
-        if (eta <= 4 || (chimed && eta > 170)) return res('train');
+        // 進站動畫約 6.5 秒，提前開始讓車門剛好在整點打開
+        if (eta <= 7 || (chimed && eta > 170)) return res('train');
         setTimeout(tick, 400);
       };
       tick();
@@ -423,202 +327,99 @@ async function goToPlatform(stationId, dir) {
     if (r === 'closed') { backToDirs(); return showClosed(); }
 
     // 2) 列車進站
-    const train = $('#train');
-    train.style.visibility = 'visible';
     setPanel(`<div class="panel-note"><span class="blink"></span>往 ${esc(t.zh)} 的列車進站中，請勿超越月台警戒線</div>`);
-    const start = dir.goesRight ? -2600 : 2600;
-    await animate(reduceMotion() ? 10 : 4400, k => alive(id) && train.setAttribute('transform', trainTransform(start * (1 - k), dir.goesRight)), ease.outCubic);
+    await World.trainArrive();
     if (!alive(id)) return;
     await sleep(300);
     Sound.doorOpen();
-    openDoors(true);
+    await World.setDoors(true);
+    if (!alive(id)) return;
 
-    // 3) 開門停站：走到任一車門按 E 上車
-    let boarded = false, closing = false;
-    Player.setInteractions(DOOR_X.map((d, i) => ({
-      id: 'board' + i, label: '上車',
-      when: p => !closing && Math.abs(p.x - d) < 85,
-      run: () => { boarded = true; boardAt(d); },
-    })));
-    const boardAt = async d => {
-      Sound.click();
-      Player.setInteractions([]);
-      Player.freeze(true);
-      await Player.walkTo(d, 0, 300, null);
-      await Player.walkTo(d, 0, reduceMotion() ? 10 : 700, 'out');
-      if (!alive(id)) return;
-      newSession();
-      startRide({ line: dir.line, terminal: dir.terminal, stops: dir.stops, idx: 0, from: stationId, goesRight: dir.goesRight, boardX: d });
-    };
+    // 3) 開門停站：走進任一車門（或按 E 自動走進去）
+    World.setInteractions([{
+      id: 'board', label: '上車',
+      when: p => !p.inside && p.z < 3.3 && World.nearDoor(p.x, .9),
+      run: () => { const d = World.nearestDoor(World.player.x); Sound.click(); World.walkPath([{ x: d, z: 2.4 }, { x: d, z: .2 }]); },
+    }]);
     setPanel(`<div class="wait">
         <div class="wait-board"><span class="chip" style="--c:${L.color};--t:${L.text}">${dir.line}</span>
           <span class="lbl">往 ${esc(t.zh)}<b>車門開啟中</b></span><span class="eta" id="dwellLeft"></span></div>
-        <span class="panel-hint">走到任一車門前，按 <kbd>E</kbd> 或點「上車」</span>
+        <span class="panel-hint">走進任一車門就上車了（靠近車門按 <kbd>E</kbd> 也可以）</span>
       </div>`);
-    const res = await countdown(DWELL, left => {
-      if (boarded) return 'stop';
-      const el = $('#dwellLeft'); if (el) el.textContent = left;
-    }, id);
-    if (res !== 'done' || boarded) return;
+    await countdown(DWELL, left => { const el = $('#dwellLeft'); if (el) el.textContent = left; }, id);
+    if (!alive(id)) return;
 
-    // 4) 沒上車：關門、列車離站，等下一班
-    closing = true;
-    Player.setInteractions([]);
+    // 4) 關門
+    World.setInteractions([]);
     Sound.doorClose();
     setPanel(`<div class="panel-note"><span class="blink"></span>車門即將關閉</div>`);
-    await sleep(1900); if (!alive(id) || boarded) return;
-    openDoors(false);
-    await sleep(900); if (!alive(id)) return;
+    await sleep(1900); if (!alive(id)) return;
+    World.clearDoorway();
+    await World.setDoors(false);
+    if (!alive(id)) return;
+    if (World.player.inside) {
+      return startRide({ line: dir.line, terminal: dir.terminal, stops: dir.stops, idx: 0, from: stationId });
+    }
+    // 沒上車：列車離站，等下一班
     setPanel(`<div class="panel-note">列車已經開走了。下一班 3 分鐘後進站。</div>`);
-    await trainDepart(dir.goesRight, id);
+    await World.trainDepart();
     if (!alive(id)) return;
     await sleep(1500);
   }
 }
 
-/* ── 車廂 ── */
+/* ── 搭乘 ── */
 async function startRide(ride) {
   setPlatformTimer(null);
   Game.ride = ride;
   const id = newSession();
-  sceneEl().innerHTML = `<canvas id="outside"></canvas>${Cabin.build(ride.line)}`;
-  const canvas = $('#outside');
-  const fit = () => {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const r = sceneEl().getBoundingClientRect();
-    canvas.width = r.width * dpr; canvas.height = r.height * dpr;
-    canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px';
-    ride.dpr = dpr;
-  };
-  fit();
-  ride.fit = fit;
-  window.addEventListener('resize', fit);
-  Player.attach({
-    scene: sceneEl(), svg: $('#scene svg'), hero: $('#hero'), body: $('#hero .hero-body'), shadow: $('#hero .hero-shadow'),
-    bounds: { x0: 140, x1: 1460, z0: .35, z1: 1 },
-    depth: { yFar: 770, yNear: 935, kFar: .74, kNear: 1 },
-    x: 800, z: .35, speed: 380,
-  });
-  $('#hero').style.opacity = 0;
-  cabinDoors(true, true);
-  // 從車門走進車廂
-  ride.outsideDraw = null;
-  drawOutsideStatic(ride, 0);
-  await Player.walkTo(800, .7, reduceMotion() ? 10 : 800, 'in');
-  if (!alive(id)) return;
-  Player.freeze(false);
   rideSegment(id);
 }
 
-function cabinDoors(open, instant) {
-  const l = $('.cdoor-l'), r = $('.cdoor-r');
-  if (!l) return;
-  [l, r].forEach(g => g.style.transition = instant ? 'none' : '');
-  l.style.transform = open ? 'translateX(-96px)' : '';
-  r.style.transform = open ? 'translateX(96px)' : '';
-}
-
-function stationCfg(id, line) {
-  const name = MRT.label(id, line);
-  return { zh: name.zh, en: name.en, code: MRT.code(id, line), color: LINES[line].color };
-}
-
-function setLcd(head, id, line) {
-  const n = MRT.label(id, line);
-  $('#lcdHead').textContent = head;
-  $('#lcdZh').textContent = n.zh;
-  $('#lcdEn').textContent = n.en;
-}
-
-function segmentCfg(ride) {
-  const from = ride.idx === 0 ? ride.from : ride.stops[ride.idx - 1];
-  const to = ride.stops[ride.idx];
-  const line = ride.line;
-  return {
-    D: 7200, line, sky: TaipeiTime.sky(),
-    dep: stationCfg(from, line), arr: stationCfg(to, line),
-    depUg: MRT.undergroundOn(from, line), arrUg: MRT.undergroundOn(to, line),
-  };
-}
-
-// 窗外畫面（含鏡頭位移）
-function paintOutside(ride, cfg, pos, v) {
-  const canvas = $('#outside'); if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const { s, ox } = sliceTransform();
-  ctx.setTransform(s * ride.dpr, 0, 0, s * ride.dpr, (ox - Player.camX * s) * ride.dpr, 0);
-  Outside.draw(ctx, pos, cfg, v);
-}
-// 停站時持續重畫（鏡頭會跟著玩家移動）
-function drawOutsideStatic(ride, pos, cfg = segmentCfg(ride)) {
-  const id = session;
-  const loop = () => {
-    if (!alive(id) || Game.ride !== ride || ride.moving) return;
-    paintOutside(ride, cfg, pos, 0);
-    requestAnimationFrame(loop);
-  };
-  loop();
+function setLcd(head, stationId, line) {
+  const n = MRT.label(stationId, line), L = LINES[line];
+  World.setLcd(head, n.zh, n.en, L.color, L.text);
 }
 
 async function rideSegment(id) {
   const ride = Game.ride;
+  const from = ride.idx === 0 ? ride.from : ride.stops[ride.idx - 1];
   const to = ride.stops[ride.idx];
   const line = ride.line;
   const fullList = [ride.from, ...ride.stops];
-  $('#routeStrip').innerHTML = Cabin.routeStrip(line, fullList, ride.idx + 1);
+  World.setStrip(line, fullList, ride.idx + 1);
   setLcd('下一站 Next Station', to, line);
   const n = MRT.label(to, line);
   const isTerminal = ride.idx === ride.stops.length - 1;
-  Player.setInteractions([]);
+  World.setInteractions([]);
+  let skip = false;
   setPanel(`<div class="ride-bar">
       <div class="ride-info">${lineChip(line)}<span>往 ${esc(MRT.label(ride.terminal, line).zh)}</span><span class="sep"></span><span>下一站 <b>${esc(n.zh)}</b></span></div>
       <button class="btn small ghost" id="skipBtn">略過行駛</button>
     </div>`);
+  $('#skipBtn').onclick = () => { skip = true; };
 
-  // 關門
-  Sound.doorClose();
-  await sleep(1900); if (!alive(id)) return;
-  cabinDoors(false);
-  await sleep(700); if (!alive(id)) return;
+  if (World.doorsOpen) {
+    Sound.doorClose();
+    await sleep(1900); if (!alive(id)) return;
+    World.clearDoorway();
+    await World.setDoors(false); if (!alive(id)) return;
+  }
   const transfers = MRT.linesAt(to).filter(l => l.line !== line).map(l => LINES[l.line].zh);
   Sound.announce(
     `下一站，${n.zh}。${isTerminal ? '本列車終點站。' : ''}${transfers.length ? `轉乘${transfers.join('、')}的旅客，請在本站換車。` : ''}`,
     `Next station, ${n.en}.${transfers.length ? ' Transfer station.' : ''}`,
+    { chime: true },
   );
 
   // 行駛
-  const cfg = segmentCfg(ride);
-  const T = reduceMotion() ? 2.5 : 13, ta = T * .27, td = T * .33, tc = T - ta - td;
-  const vmax = cfg.D / (ta / 2 + tc + td / 2);
-  const posAt = t => {
-    if (t < ta) return .5 * vmax / ta * t * t;
-    if (t < ta + tc) return .5 * vmax * ta + vmax * (t - ta);
-    const u = Math.min(t - ta - tc, td);
-    return .5 * vmax * ta + vmax * tc + vmax * u - .5 * vmax / td * u * u;
-  };
-  const speedAt = t => (t < ta ? t / ta : t < ta + tc ? 1 : Math.max(0, 1 - (t - ta - tc) / td));
-  const shake = $('#cabinShake');
-  ride.moving = true;
+  Sound.ambience(null);
   Sound.startRumble();
-  let skip = false;
-  $('#skipBtn').onclick = () => { skip = true; };
-  await new Promise(res => {
-    const t0 = performance.now(); let offset = 0;
-    const frame = now => {
-      if (!alive(id)) return res();
-      if (skip) { offset = Math.max(offset, T - 1.6 - (now - t0) / 1000); skip = false; }
-      const t = Math.min(T, (now - t0) / 1000 + offset);
-      const v = speedAt(t);
-      paintOutside(ride, cfg, posAt(t), v);
-      Sound.setSpeed(v);
-      const wob = Math.sin(now / 90) * v * 1.6 + Math.sin(now / 37) * v * .6;
-      shake.setAttribute('transform', `translate(0,${wob.toFixed(2)})`);
-      t < T ? requestAnimationFrame(frame) : res();
-    };
-    requestAnimationFrame(frame);
-  });
+  await World.ride(
+    { fromId: from, toId: to, lineId: line, nextDir: isTerminal ? null : { terminal: ride.terminal } },
+    { duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip },
+  );
   Sound.stopRumble();
-  ride.moving = false;
   if (!alive(id)) return;
 
   // 到站
@@ -628,66 +429,67 @@ async function rideSegment(id) {
   Game.state.rides++;
   saveState();
   updateHud();
-  drawOutsideStatic(ride, cfg.D, cfg);
-  $('#routeStrip').innerHTML = Cabin.routeStrip(line, fullList, ride.idx);
+  World.setStrip(line, fullList, ride.idx);
   setLcd(isTerminal ? '終點站 Terminal' : '本站 This Stop', to, line);
-  Sound.announce(isTerminal ? `${n.zh}到了，本列車終點站，請全部旅客下車。` : `${n.zh}到了。`, `${n.en}.`);
-  await sleep(500); if (!alive(id)) return;
+  Sound.ambience(MRT.undergroundOn(to, line) ? 'underground' : 'elevated');
+  Sound.announce(isTerminal ? `${n.zh}到了，本列車終點站，請全部旅客下車。` : `${n.zh}到了。`, `${n.en}.`, { chime: true });
+  await sleep(1200); if (!alive(id)) return;
   Sound.doorOpen();
-  cabinDoors(true);
-  await sleep(600); if (!alive(id)) return;
+  await World.setDoors(true); if (!alive(id)) return;
 
   // 終點站：獲得該路線的物品
   if (MRT.terminals(line).has(to) && !Game.state.items[line]) {
     Game.state.items[line] = { at: to, time: `${TaipeiTime.date()} ${TaipeiTime.clock()}` };
     saveState(); updateHud();
+    World.setInput(false);
     await showItemGet(line);
+    World.setInput(true);
+    if (!alive(id)) return;
   }
 
   const mustAlight = isTerminal || ride.mustAlight || TaipeiTime.state() !== 'open';
-  let leaving = false, stay = false;
-  Player.setInteractions([{
+  World.setInteractions([{
     id: 'alight', label: '下車',
-    when: p => !leaving && Math.abs(p.x - 800) < 150,
-    run: () => { leaving = true; alight(to, id); },
+    when: p => p.inside && World.nearDoor(p.x, .9),
+    run: () => { const d = World.nearestDoor(World.player.x); Sound.click(); World.walkPath([{ x: d, z: .6 }, { x: d, z: 3.0 }]); },
   }]);
   const head = `${lineChip(line, MRT.code(to, line))}<b>${esc(n.zh)}</b><small>${esc(n.en)}</small>`;
-  if (mustAlight) {
-    setPanel(`<div class="arrive"><div class="arrive-msg">${head}
-        <span class="tag${isTerminal ? '' : ' warn'}">${isTerminal ? '終點站，請下車' : '今日營運已結束，請下車'}</span></div>
-        <span class="panel-hint">走到中間的車門，按 <kbd>E</kbd> 或點「下車」</span></div>`);
-    return;
-  }
-  const next = MRT.label(ride.stops[ride.idx], line);
+  const next = mustAlight ? null : MRT.label(ride.stops[ride.idx], line);
   setPanel(`<div class="arrive">
-      <div class="arrive-msg">${head}<span class="tag">車門開啟 <span id="dwellLeft"></span> 秒</span></div>
-      <span class="panel-hint">要下車就走到中間的車門按 <kbd>E</kbd>；不動就會繼續開往 ${esc(next.zh)}</span>
-      <button class="btn ghost small" id="stayBtn">留在車上</button>
+      <div class="arrive-msg">${head}${mustAlight
+        ? `<span class="tag${isTerminal ? '' : ' warn'}">${isTerminal ? '終點站，請下車' : '今日營運已結束，請下車'}</span>`
+        : '<span class="tag">車門開啟 <span id="dwellLeft"></span> 秒</span>'}</div>
+      <span class="panel-hint">${mustAlight ? '走出車門下車' : `走出車門就下車了；留在車上會繼續開往 ${esc(next.zh)}`}</span>
+      ${mustAlight ? '' : '<button class="btn ghost small" id="stayBtn">留在車上</button>'}
     </div>`);
-  $('#stayBtn').onclick = () => { Sound.click(); stay = true; };
-  const r = await countdown(DWELL, left => {
-    if (leaving || stay) return 'stop';
+  let stay = false;
+  $('#stayBtn') && ($('#stayBtn').onclick = () => { Sound.click(); stay = true; });
+
+  // 等玩家下車，或開門時間結束
+  const r = await countdown(mustAlight ? 99999 : DWELL, left => {
+    if (!World.player.inside && World.player.z > 2.25) return 'stop';   // 已經走到月台
+    if (stay) return 'stop';
     const el = $('#dwellLeft'); if (el) el.textContent = left;
   }, id);
-  if (leaving || r === 'stale') return;
-  rideSegment(id);
+  if (r === 'stale') return;
+  if (!World.player.inside) return alighted(to, id);
+  rideSegment(id);   // 留在車上，繼續開往下一站
 }
 
-async function alight(stationId, id) {
+// 下車後：列車關門離站，玩家留在這個月台
+async function alighted(stationId, id) {
   const ride = Game.ride;
-  Sound.click();
-  Player.setInteractions([]);
-  Player.freeze(true);
-  await Player.walkTo(800, .35, 400, null);
-  await Player.walkTo(800, .35, reduceMotion() ? 10 : 600, 'out');
-  if (!alive(id)) return;
-  window.removeEventListener('resize', ride.fit);
   Game.ride = null;
-  const remaining = ride.stops.slice(ride.idx);
-  await showPlatform(stationId, 'arrive', {
-    line: ride.line, terminal: ride.terminal, stops: remaining, goesRight: ride.goesRight,
-  });
+  World.setInteractions([]);
+  renderPlatformPanel(stationId);
   if (TaipeiTime.state() !== 'open') showClosed();
+  await sleep(2500); if (!alive(id)) return;
+  Sound.doorClose();
+  await sleep(1900); if (!alive(id)) return;
+  World.clearDoorway();
+  await World.setDoors(false); if (!alive(id)) return;
+  await World.trainDepart();
+  void ride;
 }
 
 /* ── 物品 ── */
@@ -731,14 +533,26 @@ function openBag() {
   $('#bag').hidden = false;
 }
 
-let viewMap = null;
 function openMap() {
   $('#mapModal').hidden = false;
   const s = Game.state;
   $('#mapStats').textContent = `已走過 ${Object.keys(s.visited).length} / ${Object.keys(STATIONS).length} 站　搭乘 ${s.rides} 次`;
-  viewMap = MapView($('#viewMap'), { visited: () => s.visited, current: () => s.current });
-  if (s.current) viewMap.focus(s.current, 520);
+  $('#mapCard').hidden = true;
+  Map3D.open($('#map3d'), {
+    visited: s.visited, current: s.current, char: s.char,
+    onPick: id => {
+      const lines = MRT.linesAt(id);
+      const here = id === s.current, been = !!s.visited[id];
+      const card = $('#mapCard');
+      card.innerHTML = `<div class="here">${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(id)}</b></div>
+        <small>${esc(STATIONS[id].en)}</small>
+        <p>${here ? '你現在在這裡' : been ? '去過了' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>`;
+      card.hidden = false;
+      Sound.click();
+    },
+  });
 }
+function closeMap() { $('#mapModal').hidden = true; Map3D.close(); }
 
 /* ── 初始化 ── */
 function init() {
@@ -760,14 +574,17 @@ function init() {
   $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').textContent = on ? '音效 開' : '音效 關'; };
   document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { $('#' + b.dataset.close).hidden = true; });
   $('#closedMap').onclick = openMap;
-  $('#closedTitleBtn').onclick = () => { $('#closedOverlay').hidden = true; newSession(); Player.detach(); renderTitle(); showScreen('title'); };
-  $('#mapZoomIn').onclick = () => viewMap && viewMap.zoom(1 / 1.4);
-  $('#mapZoomOut').onclick = () => viewMap && viewMap.zoom(1.4);
-  $('#mapHere').onclick = () => viewMap && Game.state.current && viewMap.focus(Game.state.current, 420);
+  $('#closedTitleBtn').onclick = () => { $('#closedOverlay').hidden = true; newSession(); Game.ride = null; renderTitle(); showScreen('title'); };
+  $('#mapZoomIn').onclick = () => Map3D.zoom(1 / 1.3);
+  $('#mapZoomOut').onclick = () => Map3D.zoom(1.3);
+  $('#mapRotL').onclick = () => Map3D.rotate(-.4);
+  $('#mapRotR').onclick = () => Map3D.rotate(.4);
+  $('#mapHere').onclick = () => Game.state.current && Map3D.focus(Game.state.current, 40);
+  $('#mapAll').onclick = () => Map3D.overview();
+  $('#mapModal [data-close]').onclick = closeMap;
   $('#charBack').onclick = () => { renderTitle(); showScreen('title'); };
-  $('#stationBack').onclick = () => { renderCharSelect(); showScreen('charSelect'); };
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') ['bag', 'mapModal'].forEach(id => { $('#' + id).hidden = true; });
+    if (e.key === 'Escape') { $('#bag').hidden = true; if (!$('#mapModal').hidden) closeMap(); }
   });
   window.addEventListener('resize', () => {
     if (document.body.dataset.screen === 'game') layoutScene();
