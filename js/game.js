@@ -6,7 +6,7 @@ const Game = {
   state: null,
   ride: null,          // 搭乘中的狀態
   busy: false,         // 動畫進行中，暫停操作
-  service: null,       // open / mist / dawn
+  service: null,       // open / mist
 };
 
 /* ── 存檔 ── */
@@ -98,8 +98,8 @@ function showClosed() {
   const mins = TaipeiTime.minutesToFirstTrain();
   if (st === 'mist') {
     $('#closedTitle').textContent = '迷霧時刻';
-    $('#closedRange').textContent = '00:30 – 05:30';
-    $('#closedBody').textContent = '末班車已經開走了。整座城市被霧吞沒的這段時間，會有不一樣的玩法——即將開放。';
+    $('#closedRange').textContent = '00:30 – 06:00';
+    $('#closedBody').textContent = `末班車已經開走了。整座城市被霧吞沒的這段時間，會有不一樣的玩法——即將開放。首班車 06:00，還有 ${mins} 分鐘。`;
   } else {
     $('#closedTitle').textContent = '車站尚未開放';
     $('#closedRange').textContent = '05:30 – 06:00';
@@ -163,12 +163,8 @@ const sceneEl = () => $('#scene');
 const DWELL = 20;   // 停站開門秒數
 let worldReady = false;
 
-function setPanel(html) {
-  $('#panel').innerHTML = html;
-}
 function layoutScene() {
-  const h = $('.hud').offsetHeight;
-  document.body.style.setProperty('--hud-h', h + 'px');
+  document.body.style.setProperty('--hud-h', $('.hud').offsetHeight + 'px');
 }
 function ensureWorld() {
   if (worldReady) return;
@@ -177,13 +173,18 @@ function ensureWorld() {
   worldReady = true;
 }
 function enterGame(stationId) {
+  if (document.activeElement) document.activeElement.blur();
   showScreen('game');
   layoutScene();
   ensureWorld();
   World.setCharacter(Game.state.char);
+  buildPanel();
   updateHud();
   if (TaipeiTime.state() !== 'open') showClosed();
-  showPlatform(stationId);
+  World.loadStation(stationId);
+  World.spawnInConcourse();
+  Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
+  startStation(stationId);
 }
 
 // 手機：開始遊戲時進入全螢幕（直式、橫式都可以玩）
@@ -194,302 +195,246 @@ function goFullscreen() {
   if (req && !document.fullscreenElement) { try { const p = req.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) { /* 不支援全螢幕 */ } }
 }
 
-// 每次切換場景都開一個新的 session，舊的非同步流程看到 session 不同就會停止
+// 每次換站都開新的 session，舊的非同步流程看到 session 不同就停止
 let session = 0;
 const newSession = () => ++session;
 const alive = id => id === session;
 
-function countdown(sec, onTick, id) {
-  return new Promise(res => {
-    const end = performance.now() + sec * 1000;
-    const tick = () => {
-      if (!alive(id)) return res('stale');
-      const left = Math.ceil((end - performance.now()) / 1000);
-      if (onTick(Math.max(0, left)) === 'stop') return res('stop');
-      if (left <= 0) return res('done');
-      setTimeout(tick, 200);
-    };
-    tick();
-  });
-}
-
 function fmtEta(sec) {
   if (sec == null) return '今日已無班次';
   if (sec <= 10) return '即將進站';
-  return `${Math.floor(sec / 60)} 分 ${String(sec % 60).padStart(2, '0')} 秒`;
-}
-function setPlatformTimer(fn) {
-  clearInterval(Game.platformTimer);
-  Game.platformTimer = fn ? setInterval(fn, 500) : null;
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 }
 
-/* ── 月台 ── */
-function showPlatform(stationId) {
-  newSession();
-  const s = Game.state;
-  s.current = stationId; s.visited[stationId] = true; saveState();
-  updateHud();
-  const dirs = MRT.directionsAt(stationId);
-  World.setStation(stationId, dirs[0].line, null);
-  World.setTrain(dirs[0].line, false);
-  Sound.ambience(MRT.undergroundOn(stationId, dirs[0].line) ? 'underground' : 'elevated');
-  World.placePlayer(0, 4.2);
-  World.setInput(true);
-  renderPlatformPanel(stationId);
+/* ── 小資訊框（畫面左下角） ── */
+function buildPanel() {
+  $('#panel').innerHTML = `<div class="mini">
+      <div class="mini-title" id="pTitle"></div>
+      <div class="mini-rows" id="pRows"></div>
+      <div class="mini-hint" id="pHint"></div>
+      <div class="mini-btns" id="pBtns"></div>
+    </div>`;
 }
+const panelCache = {};
+function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = html; $('#' + id).innerHTML = html; } }
 
-function renderPlatformPanel(stationId) {
-  const dirs = MRT.directionsAt(stationId);
-  const groups = {};
-  dirs.forEach((d, i) => (groups[d.line] = groups[d.line] || []).push({ d, i }));
-  const open = TaipeiTime.state() === 'open';
-  const lines = MRT.linesAt(stationId);
-  setPanel(`
-    <div class="panel-head">
-      <div class="here">${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(stationId)}</b><small>${esc(STATIONS[stationId].en)}</small></div>
-      <div class="panel-hint">${open ? (lines.length > 1 ? '轉乘站：選擇要前往的月台' : '選擇要去的月台') : '目前沒有列車行駛'}</div>
-    </div>
-    <div class="dirs">
-      ${Object.entries(groups).map(([lid, arr]) => arr.map(({ d, i }) => {
-        const t = MRT.label(d.terminal, lid), n = MRT.label(d.stops[0], lid);
-        return `<button class="dir" data-i="${i}" ${open ? '' : 'disabled'} style="--c:${LINES[lid].color};--t:${LINES[lid].text}">
-          <span class="dir-line">${lid}</span>
-          <span class="dir-main"><b>往 ${esc(t.zh)}</b><small>To ${esc(t.en)}</small></span>
-          <span class="dir-next">下一站<b>${esc(n.zh)}</b><span class="eta" data-i="${i}"></span></span>
-        </button>`;
-      }).join('')).join('')}
-    </div>`);
-  const tickEta = () => {
-    document.querySelectorAll('#panel .eta').forEach(el => {
-      const d = dirs[+el.dataset.i];
-      el.textContent = fmtEta(TaipeiTime.nextTrainIn(stationId, d.line, d.terminal));
-    });
-  };
-  tickEta();
-  setPlatformTimer(tickEta);
-  World.setInteractions([]);
-  $('#panel .dirs').onclick = e => {
-    const b = e.target.closest('.dir');
-    if (!b) return;
-    if (TaipeiTime.state() !== 'open') { showClosed(); return; }
-    Sound.click();
-    setPlatformTimer(null);
-    goToPlatform(stationId, dirs[+b.dataset.i]);
-  };
-}
-
-// 走到某方向的月台：等車 → 列車進站 → 開門 → 自己走進車廂
-async function goToPlatform(stationId, dir) {
+/* ── 車站控制：各月台兩側依 3 分鐘班距自動進車 ── */
+let ctl = null;
+function startStation(stationId, carry) {
   const id = newSession();
-  World.setStation(stationId, dir.line, dir);
-  World.setTrain(dir.line, false);
-  Sound.ambience(MRT.undergroundOn(stationId, dir.line) ? 'underground' : 'elevated');
-  World.placePlayer(0, 4.2);
-  World.setInput(true);
-  const t = MRT.label(dir.terminal, dir.line);
-  const L = LINES[dir.line];
-  const backToDirs = () => { newSession(); World.setInteractions([]); renderPlatformPanel(stationId); };
+  clearInterval(Game.ctlTimer);
+  ctl = { id, stationId, busy: new Set(), chimed: new Set(), doors: new Map() };
+  if (carry) ctl.busy.add(carry.key);
+  World.onZone = () => tickStation();
+  Sound.ambience(World.layout.allUnder ? 'underground' : 'elevated');
+  Game.ctlTimer = setInterval(tickStation, 400);
+  doorInteractions();
+  tickStation();
+}
+const trackKey = (k, side) => `${k}:${side}`;
+function sideDirs(P, side) {
+  const dirs = P.sides[side];
+  // 終點站兩側開往同一方向：兩側錯開半個班距
+  const dup = P.sides[1] === P.sides[-1] || (P.sides[1][0] && P.sides[-1][0] && P.sides[1][0].terminal === P.sides[-1][0].terminal);
+  return dirs.map(d => {
+    let eta = TaipeiTime.nextTrainIn(ctl.stationId, d.line, d.terminal);
+    if (eta != null && dup && side < 0) eta = (eta + 90) % TaipeiTime.HEADWAY;
+    return { ...d, eta };
+  }).sort((a, b) => (a.eta ?? 1e9) - (b.eta ?? 1e9));
+}
 
-  for (;;) {
-    // 1) 等車：依台灣時間每 3 分鐘一班
-    setPanel(`<div class="wait">
-        <div class="wait-board" role="timer">
-          <span class="chip" style="--c:${L.color};--t:${L.text}">${dir.line}</span>
-          <span class="lbl">往 ${esc(t.zh)}<b id="waitMsg">下一班列車</b></span>
-          <span class="eta" id="waitEta"></span>
-        </div>
-        <span class="panel-hint">可以在月台上走動，車來了走進車門</span>
-        <button class="btn ghost small" id="changePlatform">換月台</button>
-      </div>`);
-    $('#changePlatform').onclick = () => { Sound.click(); backToDirs(); };
-    World.setInteractions([]);
-    let chimed = false;
-    const r = await new Promise(res => {
-      const tick = () => {
-        if (!alive(id)) return res('stale');
-        const eta = TaipeiTime.nextTrainIn(stationId, dir.line, dir.terminal);
-        if (eta == null) return res('closed');
-        const el = $('#waitEta'); if (!el) return res('stale');
-        el.textContent = eta <= 10 ? '進站中' : `${Math.floor(eta / 60)}:${String(eta % 60).padStart(2, '0')}`;
-        if (eta <= 12 && !chimed) {
-          chimed = true;
-          $('#waitMsg').textContent = '列車即將進站';
-          Sound.arrivalChime(dir.line);
-          setTimeout(() => alive(id) && Sound.announce(`往${t.zh}的列車即將進站，請勿超越月台警戒線。`, `The train to ${t.en} is now arriving.`), 4200);
-        }
-        // 進站動畫約 6.5 秒，提前開始讓車門剛好在整點打開
-        if (eta <= 7 || (chimed && eta > 170)) return res('train');
-        setTimeout(tick, 400);
-      };
-      tick();
-    });
-    if (r === 'stale') return;
-    if (r === 'closed') { backToDirs(); return showClosed(); }
-
-    // 2) 列車進站
-    setPanel(`<div class="panel-note"><span class="blink"></span>往 ${esc(t.zh)} 的列車進站中，請勿超越月台警戒線</div>`);
-    await World.trainArrive();
-    if (!alive(id)) return;
-    await sleep(300);
-    Sound.doorOpen();
-    await World.setDoors(true);
-    if (!alive(id)) return;
-
-    // 3) 開門停站：走進任一車門（或按 E 自動走進去）
-    World.setInteractions([{
-      id: 'board', label: '上車',
-      when: p => !p.inside && p.z < 3.3 && World.nearDoor(p.x, .9),
-      run: () => { const d = World.nearestDoor(World.player.x); Sound.click(); World.walkPath([{ x: d, z: 2.4 }, { x: d, z: .2 }]); },
-    }]);
-    setPanel(`<div class="wait">
-        <div class="wait-board"><span class="chip" style="--c:${L.color};--t:${L.text}">${dir.line}</span>
-          <span class="lbl">往 ${esc(t.zh)}<b>車門開啟中</b></span><span class="eta" id="dwellLeft"></span></div>
-        <span class="panel-hint">走進任一車門就上車了（靠近車門按 <kbd>E</kbd> 也可以）</span>
-      </div>`);
-    await countdown(DWELL, left => { const el = $('#dwellLeft'); if (el) el.textContent = left; }, id);
-    if (!alive(id)) return;
-
-    // 4) 關門
-    World.setInteractions([]);
-    Sound.doorClose();
-    setPanel(`<div class="panel-note"><span class="blink"></span>車門即將關閉</div>`);
-    await sleep(1900); if (!alive(id)) return;
-    World.clearDoorway();
-    await World.setDoors(false);
-    if (!alive(id)) return;
-    if (World.player.inside) {
-      return startRide({ line: dir.line, terminal: dir.terminal, stops: dir.stops, idx: 0, from: stationId });
+function tickStation() {
+  if (!ctl) return;
+  const id = ctl.id, L = World.layout, z = World.zone();
+  const open = TaipeiTime.state() === 'open';
+  // 玩家所在的月台：兩側 LED 更新，並安排進站
+  const P = z.P && !Game.ride ? z.P : null;
+  if (P) {
+    for (const side of [-1, 1]) {
+      const dirs = sideDirs(P, side);
+      World.setLed(P.k, side, dirs.map(d => ({ text: '往 ' + MRT.label(d.terminal, d.line).zh, eta: open ? fmtEta(d.eta) : '--' })));
+      const key = trackKey(P.k, side);
+      if (!open || ctl.busy.has(key) || !dirs[0] || dirs[0].eta == null) continue;
+      const d = dirs[0];
+      if (d.eta <= 12 && !ctl.chimed.has(key)) {
+        ctl.chimed.add(key);
+        Sound.arrivalChime(d.line);
+        const t = MRT.label(d.terminal, d.line);
+        setTimeout(() => alive(id) && Sound.announce(`往${t.zh}的列車即將進站，請勿超越月台警戒線。`, `The train to ${t.en} is now arriving.`), 4200);
+      }
+      if (d.eta <= 7 || (ctl.chimed.has(key) && d.eta > 170)) {
+        ctl.busy.add(key);
+        trainCycle(P.k, side, d, id);
+      }
     }
-    // 沒上車：列車離站，等下一班
-    setPanel(`<div class="panel-note">列車已經開走了。下一班 3 分鐘後進站。</div>`);
-    await World.trainDepart();
-    if (!alive(id)) return;
-    await sleep(1500);
   }
+  renderPanel(z, L);
+}
+
+function renderPanel(z, L) {
+  const st = ctl.stationId, lines = MRT.linesAt(st);
+  const head = `${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(st)}</b>`;
+  if (Game.ride && Game.ride.moving) return;   // 行駛中由搭乘流程顯示
+  let rows = '', hint = '';
+  if (z.kind === 'platform' || (z.kind === 'train' && !Game.ride)) {
+    const P = z.P;
+    const ln = `${lineChip(P.line)} ${LINES[P.line].zh}月台`;
+    rows = [-1, 1].map(side => {
+      const d = sideDirs(P, side)[0];
+      return d ? `<div class="mini-row"><span>往 ${esc(MRT.label(d.terminal, d.line).zh)}</span><b>${TaipeiTime.state() === 'open' ? fmtEta(d.eta) : '--'}</b></div>` : '';
+    }).join('');
+    setPart('pTitle', `${head}<span class="mini-sub">${ln}</span>`);
+    hint = z.kind === 'train' ? '在車廂裡，車門關上就會出發' : (lines.length > 1 ? '搭電扶梯上大廳可以轉乘' : '走到月台哪一側，就搭往那個方向的車');
+  } else if (z.kind === 'concourse') {
+    setPart('pTitle', `${head}<span class="mini-sub">大廳</span>`);
+    hint = lines.length > 1 ? `跟著指標走：${lines.map(l => LINES[l.line].zh).join('、')}月台` : '跟著指標搭電扶梯到月台';
+  } else if (z.kind === 'unpaid') {
+    setPart('pTitle', `${head}<span class="mini-sub">非付費區</span>`);
+    hint = '刷卡進閘門才能到月台';
+  } else if (z.kind === 'ramp') {
+    setPart('pTitle', `${head}<span class="mini-sub">電扶梯</span>`);
+  }
+  setPart('pRows', rows);
+  if (!ctl.doorHint) setPart('pHint', hint);
+}
+
+// 一班列車：進站 → 開門停站 → 關門 → 玩家在車上就出發，不在就離站
+async function trainCycle(k, side, dir, id) {
+  const tr = World.spawnTrain(k, side, dir.line, dir.travel);
+  await World.trainArrive(tr);
+  if (!alive(id)) return;
+  await dwell(tr, dir, id, null);
+}
+
+function doorInteractions() {
+  const list = [];
+  for (const [tr, info] of ctl.doors) {
+    list.push({
+      id: 'board' + info.n, label: '上車',
+      when: p => p.zone.kind === 'platform' && p.zone.P === tr.P && Math.sign(p.z - tr.P.z) === tr.side && Math.abs(p.z - tr.P.z) > 1 && Math.abs(World.nearestDoor(tr, p.x) - p.x) < 1,
+      run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 2.4 }, { x: d, z: tr.P.z + tr.side * (Station3D.TRACK - .2) }]); },
+    });
+    list.push({
+      id: 'alight' + info.n, label: '下車',
+      when: p => p.zone.kind === 'train' && p.zone.train === tr && Math.abs(World.nearestDoor(tr, p.x) - p.x) < 1,
+      run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
+    });
+  }
+  list.push(exitInteraction());
+  World.setInteractions(list);
+}
+let doorSeq = 0;
+
+async function dwell(tr, dir, id, ride) {
+  const key = trackKey(tr.P.k, tr.side);
+  Sound.doorOpen();
+  await World.setDoors(tr, true);
+  if (!alive(id)) return;
+  ctl.doors.set(tr, { n: ++doorSeq });
+  doorInteractions();
+  const isTerminal = ride && ride.idx >= ride.stops.length;
+  const mustAlight = ride && (isTerminal || ride.mustAlight || TaipeiTime.state() !== 'open');
+  const t = MRT.label(dir.terminal, dir.line);
+  const end = performance.now() + DWELL * 1000;
+  // 停站：倒數，或（終點站）等玩家下車
+  for (;;) {
+    await sleep(250);
+    if (!alive(id)) return;
+    const inside = World.isInside(tr), left = Math.max(0, Math.ceil((end - performance.now()) / 1000));
+    const near = inside || (World.zone().P === tr.P);
+    if (!near && ctl.doorHint === tr) { ctl.doorHint = false; setPart('pHint', ''); }
+    if (near) {
+      ctl.doorHint = tr;
+      if (inside && ride && mustAlight) setPart('pHint', `<span class="tag">${isTerminal ? '終點站，請下車' : '今日營運已結束，請下車'}</span>`);
+      else if (inside && ride) setPart('pHint', `車門開啟 ${left} 秒・走出車門下車，留在車上開往 ${esc(MRT.label(ride.stops[ride.idx], ride.line).zh)}`);
+      else setPart('pHint', `往 ${esc(t.zh)} 車門開啟 ${left} 秒・走進車門上車`);
+    }
+    if (mustAlight) { if (!inside) break; continue; }
+    if (left <= 0) break;
+  }
+  if (ctl.doorHint === tr) ctl.doorHint = false;
+  // 關門
+  Sound.doorClose();
+  await sleep(1900); if (!alive(id)) return;
+  ctl.doors.delete(tr); doorInteractions();
+  World.clearDoorway(tr);
+  await World.setDoors(tr, false);
+  if (!alive(id)) return;
+  if (World.isInside(tr) && !mustAlight) {
+    // 玩家在車上：出發
+    const r = ride || { line: dir.line, terminal: dir.terminal, stops: dir.stops, idx: 0, from: ctl.stationId };
+    return doRide(tr, r);
+  }
+  if (ride) { Game.ride = null; }
+  await World.trainDepart(tr);
+  if (!alive(id)) return;
+  ctl.busy.delete(key); ctl.chimed.delete(key);
 }
 
 /* ── 搭乘 ── */
-async function startRide(ride) {
-  setPlatformTimer(null);
-  Game.ride = ride;
-  const id = newSession();
-  rideSegment(id);
-}
-
 function setLcd(head, stationId, line) {
   const n = MRT.label(stationId, line), L = LINES[line];
   World.setLcd(head, n.zh, n.en, L.color, L.text);
 }
-
-async function rideSegment(id) {
-  const ride = Game.ride;
-  const from = ride.idx === 0 ? ride.from : ride.stops[ride.idx - 1];
-  const to = ride.stops[ride.idx];
-  const line = ride.line;
+async function doRide(tr, ride) {
+  newSession(); clearInterval(Game.ctlTimer);
+  Game.ride = ride; ride.moving = true;
+  World.setInteractions([]);
+  const to = ride.stops[ride.idx], line = ride.line;
   const fullList = [ride.from, ...ride.stops];
   World.setStrip(line, fullList, ride.idx + 1);
   setLcd('下一站 Next Station', to, line);
   const n = MRT.label(to, line);
   const isTerminal = ride.idx === ride.stops.length - 1;
-  World.setInteractions([]);
-  let skip = false;
-  setPanel(`<div class="ride-bar">
-      <div class="ride-info">${lineChip(line)}<span>往 ${esc(MRT.label(ride.terminal, line).zh)}</span><span class="sep"></span><span>下一站 <b>${esc(n.zh)}</b></span></div>
-      <button class="btn small ghost" id="skipBtn">略過行駛</button>
-    </div>`);
-  $('#skipBtn').onclick = () => { skip = true; };
-
-  if (World.doorsOpen) {
-    Sound.doorClose();
-    await sleep(1900); if (!alive(id)) return;
-    World.clearDoorway();
-    await World.setDoors(false); if (!alive(id)) return;
-  }
   const transfers = MRT.linesAt(to).filter(l => l.line !== line).map(l => LINES[l.line].zh);
+  let skip = false;
+  setPart('pTitle', `${lineChip(line)}<b>往 ${esc(MRT.label(ride.terminal, line).zh)}</b>`);
+  setPart('pRows', `<div class="mini-row"><span>下一站</span><b>${esc(n.zh)}</b></div>`);
+  setPart('pHint', transfers.length ? `可轉乘 ${transfers.join('、')}` : '');
+  setPart('pBtns', '<button class="btn small ghost" id="skipBtn">略過行駛</button>');
+  $('#skipBtn').onclick = () => { skip = true; };
   Sound.announce(
     `下一站，${n.zh}。${isTerminal ? '本列車終點站。' : ''}${transfers.length ? `轉乘${transfers.join('、')}的旅客，請在本站換車。` : ''}`,
-    `Next station, ${n.en}.${transfers.length ? ' Transfer station.' : ''}`,
-    { chime: true },
-  );
-
-  // 行駛
+    `Next station, ${n.en}.${transfers.length ? ' Transfer station.' : ''}`, { chime: true });
   Sound.ambience(null);
   Sound.startRumble();
-  await World.ride(
-    { fromId: from, toId: to, lineId: line, nextDir: isTerminal ? null : { terminal: ride.terminal } },
-    { duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip },
-  );
+  await World.ride(tr, { toId: to, duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip });
   Sound.stopRumble();
-  if (!alive(id)) return;
-
+  setPart('pBtns', '');
+  ride.moving = false;
   // 到站
   ride.idx++;
-  Game.state.visited[to] = true;
-  Game.state.current = to;
-  Game.state.rides++;
-  saveState();
-  updateHud();
+  const s = Game.state;
+  s.visited[to] = true; s.current = to; s.rides++;
+  saveState(); updateHud();
+  startStation(to, { key: trackKey(tr.P.k, tr.side) });
+  const id = ctl.id;
   World.setStrip(line, fullList, ride.idx);
   setLcd(isTerminal ? '終點站 Terminal' : '本站 This Stop', to, line);
-  Sound.ambience(MRT.undergroundOn(to, line) ? 'underground' : 'elevated');
   Sound.announce(isTerminal ? `${n.zh}到了，本列車終點站，請全部旅客下車。` : `${n.zh}到了。`, `${n.en}.`, { chime: true });
   await sleep(1200); if (!alive(id)) return;
-  Sound.doorOpen();
-  await World.setDoors(true); if (!alive(id)) return;
-
   // 終點站：獲得該路線的物品
-  if (MRT.terminals(line).has(to) && !Game.state.items[line]) {
-    Game.state.items[line] = { at: to, time: `${TaipeiTime.date()} ${TaipeiTime.clock()}` };
+  if (MRT.terminals(line).has(to) && !s.items[line]) {
+    s.items[line] = { at: to, time: `${TaipeiTime.date()} ${TaipeiTime.clock()}` };
     saveState(); updateHud();
     World.setInput(false);
     await showItemGet(line);
     World.setInput(true);
     if (!alive(id)) return;
   }
-
-  const mustAlight = isTerminal || ride.mustAlight || TaipeiTime.state() !== 'open';
-  World.setInteractions([{
-    id: 'alight', label: '下車',
-    when: p => p.inside && World.nearDoor(p.x, .9),
-    run: () => { const d = World.nearestDoor(World.player.x); Sound.click(); World.walkPath([{ x: d, z: .6 }, { x: d, z: 3.0 }]); },
-  }]);
-  const head = `${lineChip(line, MRT.code(to, line))}<b>${esc(n.zh)}</b><small>${esc(n.en)}</small>`;
-  const next = mustAlight ? null : MRT.label(ride.stops[ride.idx], line);
-  setPanel(`<div class="arrive">
-      <div class="arrive-msg">${head}${mustAlight
-        ? `<span class="tag${isTerminal ? '' : ' warn'}">${isTerminal ? '終點站，請下車' : '今日營運已結束，請下車'}</span>`
-        : '<span class="tag">車門開啟 <span id="dwellLeft"></span> 秒</span>'}</div>
-      <span class="panel-hint">${mustAlight ? '走出車門下車' : `走出車門就下車了；留在車上會繼續開往 ${esc(next.zh)}`}</span>
-      ${mustAlight ? '' : '<button class="btn ghost small" id="stayBtn">留在車上</button>'}
-    </div>`);
-  let stay = false;
-  $('#stayBtn') && ($('#stayBtn').onclick = () => { Sound.click(); stay = true; });
-
-  // 等玩家下車，或開門時間結束
-  const r = await countdown(mustAlight ? 99999 : DWELL, left => {
-    if (!World.player.inside && World.player.z > 2.25) return 'stop';   // 已經走到月台
-    if (stay) return 'stop';
-    const el = $('#dwellLeft'); if (el) el.textContent = left;
-  }, id);
-  if (r === 'stale') return;
-  if (!World.player.inside) return alighted(to, id);
-  rideSegment(id);   // 留在車上，繼續開往下一站
+  if (TaipeiTime.state() !== 'open') ride.mustAlight = true;
+  const dir = { line, terminal: ride.terminal, stops: ride.stops.slice(ride.idx), travel: tr.travel };
+  await dwell(tr, dir, id, ride);
+  if (!World.isInside(tr)) { Game.ride = null; if (TaipeiTime.state() !== 'open') showClosed(); }
 }
 
-// 下車後：列車關門離站，玩家留在這個月台
-async function alighted(stationId, id) {
-  const ride = Game.ride;
-  Game.ride = null;
-  World.setInteractions([]);
-  renderPlatformPanel(stationId);
-  if (TaipeiTime.state() !== 'open') showClosed();
-  await sleep(2500); if (!alive(id)) return;
-  Sound.doorClose();
-  await sleep(1900); if (!alive(id)) return;
-  World.clearDoorway();
-  await World.setDoors(false); if (!alive(id)) return;
-  await World.trainDepart();
-  void ride;
+// 出口（地面世界之後開放）
+function exitInteraction() {
+  return {
+    id: 'exit', label: '出站',
+    when: p => p.zone.kind === 'unpaid' && p.z > World.layout.unpaid.z1 - 2.2,
+    run: () => { setPart('pHint', '<span class="tag warn">地面世界尚未開放</span>'); Sound.click(); },
+  };
 }
 
 /* ── 物品 ── */
@@ -538,21 +483,49 @@ function openMap() {
   const s = Game.state;
   $('#mapStats').textContent = `已走過 ${Object.keys(s.visited).length} / ${Object.keys(STATIONS).length} 站　搭乘 ${s.rides} 次`;
   $('#mapCard').hidden = true;
+  $('#mapLines').innerHTML = LINE_ORDER.map(l => `<button class="ml" data-l="${l}" style="--c:${LINES[l].color};--t:${LINES[l].text}" aria-pressed="false">${l}<span>${LINES[l].zh}</span></button>`).join('');
+  $('#mapLines').onclick = e => {
+    const b = e.target.closest('.ml'); if (!b) return;
+    const solo = Map3D.focusLine(b.dataset.l);
+    document.querySelectorAll('#mapLines .ml').forEach(x => x.setAttribute('aria-pressed', x.dataset.l === solo));
+  };
   Map3D.open($('#map3d'), {
-    visited: s.visited, current: s.current, char: s.char,
+    visited: s.visited, current: s.current, char: s.char, compass: $('#compassN').parentElement,
     onPick: id => {
       const lines = MRT.linesAt(id);
       const here = id === s.current, been = !!s.visited[id];
       const card = $('#mapCard');
       card.innerHTML = `<div class="here">${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(id)}</b></div>
         <small>${esc(STATIONS[id].en)}</small>
-        <p>${here ? '你現在在這裡' : been ? '去過了' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>`;
+        <p>${here ? '你現在在這裡' : been ? '去過了，可以傳送' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>
+        ${been && !here ? `<button class="btn primary small" id="tpBtn">傳送到這裡</button>` : ''}
+        ${been && !here && Game.ride ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}`;
       card.hidden = false;
       Sound.click();
+      const tp = $('#tpBtn');
+      if (tp) { tp.disabled = !!Game.ride; tp.onclick = () => teleport(id); }
     },
   });
 }
 function closeMap() { $('#mapModal').hidden = true; Map3D.close(); }
+
+// 傳送：只能去已經到過的車站，出現在該站大廳
+async function teleport(id) {
+  const s = Game.state;
+  if (Game.ride || !s.visited[id] || id === s.current) return;
+  closeMap();
+  newSession(); clearInterval(Game.ctlTimer);
+  const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
+  Sound.teleport();
+  await sleep(450);
+  World.loadStation(id);
+  World.spawnInConcourse();
+  s.current = id; saveState(); updateHud();
+  startStation(id);
+  fx.classList.add('out');
+  await sleep(600);
+  fx.hidden = true;
+}
 
 /* ── 初始化 ── */
 function init() {

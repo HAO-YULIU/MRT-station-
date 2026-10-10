@@ -56,7 +56,7 @@
     <div class="panel" id="panel"></div>
     <button class="action-btn" id="actionBtn" hidden></button>
     <div class="joystick" id="joystick" aria-label="移動搖桿"><span class="knob"></span></div>
-    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　拖曳畫面轉視角　E 互動</p>
+    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　拖曳畫面轉視角　E 上下車</p>
   </section>
 
   <!-- 路網圖 -->
@@ -71,6 +71,8 @@
           <button id="mapHere" aria-label="回到目前位置">◎</button><button id="mapAll" aria-label="看整個路網">全</button>
         </div>
         <div class="map-card" id="mapCard" hidden></div>
+        <div class="compass" aria-hidden="true"><span id="compassN">N</span></div>
+        <div class="map-lines" id="mapLines" aria-label="只看某條路線"></div>
       </div>
       <p class="map-legend"><span class="lg-me"></span>你在這裡　<span class="lg-fog"></span>還沒去過的車站藏在霧裡　高架在地面上、地下段在地面下　拖曳移動、滾輪或雙指縮放、右鍵拖曳或雙指旋轉</p>
     </div>
@@ -86,6 +88,9 @@
 
   <!-- 獲得物品 -->
   <div class="modal item-overlay" id="itemOverlay" hidden></div>
+
+  <!-- 傳送轉場 -->
+  <div class="tp-fx" id="tpFx" hidden></div>
 
   <!-- 停駛時段 -->
   <div class="closed" id="closedOverlay" hidden>
@@ -107,6 +112,7 @@
   <script src="js/time.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/human3d.js"></script>
+  <script src="js/station3d.js"></script>
   <script src="js/world3d.js"></script>
   <script src="js/map3d.js"></script>
   <script src="js/game.js"></script>

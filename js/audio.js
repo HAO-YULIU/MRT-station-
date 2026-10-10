@@ -139,6 +139,10 @@ const Sound = (() => {
   }
   function itemGet() { [523, 659, 784, 1047, 1319].forEach((f, i) => bell(f, i * .11, .16, master, 1.4)); }
   function click() { tone(1400, 0, .035, 'sine', .05); }
+  // 傳送：往上滑的鐘聲
+  function teleport() { [523, 784, 1047, 1568, 2093].forEach((f, i) => bell(f, i * .07, .12, master, 1.2)); noiseBurst(0, .9, 3000, .5, .08, master, .3); }
+  // 閘門刷卡「嗶」
+  function gate() { tone(2350, 0, .09, 'square', .045); tone(2350, .13, .09, 'square', .045); }
 
   /* ── 行駛聲：馬達變頻聲＋輪軌噪音＋接縫聲 ── */
   let run = null, brownBuf = null;
@@ -238,7 +242,7 @@ const Sound = (() => {
 
   return {
     unlock: ensure,
-    doorClose, doorOpen, arrivalChime, onboardChime, itemGet, click,
+    doorClose, doorOpen, arrivalChime, onboardChime, itemGet, click, gate, teleport,
     startRumble, setSpeed, stopRumble, ambience, announce,
     get enabled() { return enabled; },
     toggle() {

@@ -190,6 +190,23 @@ button:disabled { cursor: not-allowed; }
 .tag.warn { background: var(--warn); }
 .arrive-btns { display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* ── 小資訊框（左下角） ── */
+#game .panel {
+  left: 12px; right: auto; bottom: calc(12px + env(safe-area-inset-bottom)); padding: 0; background: none;
+  width: min(330px, calc(100% - 24px));
+}
+.mini { padding: 10px 12px; border-radius: 12px; background: rgba(12,16,20,.82); backdrop-filter: blur(4px); font-size: 14px; line-height: 1.4; }
+.mini-title { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.mini-title b { font-size: 17px; margin-left: 2px; }
+.mini-sub { color: var(--fog); font-size: 13px; margin-left: 6px; }
+.mini-rows:empty, .mini-hint:empty, .mini-btns:empty { display: none; }
+.mini-rows { margin-top: 6px; display: grid; gap: 2px; }
+.mini-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 8px; border-radius: 6px; background: #050607; }
+.mini-row span { color: #e8e2c9; }
+.mini-row b { font: 700 15px var(--latin); color: #ffb347; }
+.mini-hint { margin-top: 6px; color: var(--fog); font-size: 13px; }
+.mini-btns { margin-top: 8px; }
+
 /* ── 操控 ── */
 .action-btn {
   position: absolute; z-index: 6; right: 20px; bottom: 180px;
@@ -224,9 +241,8 @@ button:disabled { cursor: not-allowed; }
 @media (pointer: coarse) {
   .joystick { display: block; }
   .controls-hint { display: none; }
-  #game .panel { top: var(--hud-h, 64px); bottom: auto; padding: 8px 12px; background: linear-gradient(180deg, rgba(10,14,18,.85) 70%, rgba(10,14,18,0)); }
-  #game .dirs { display: flex; overflow-x: auto; gap: 8px; max-height: none; padding-bottom: 4px; }
-  #game .dir { flex: 0 0 auto; min-width: 230px; }
+  #game .panel { top: calc(var(--hud-h, 64px) + 8px); bottom: auto; width: min(300px, calc(100% - 24px)); }
+  .mini { padding: 8px 10px; font-size: 13px; }
   .action-btn { bottom: calc(40px + env(safe-area-inset-bottom)); right: 20px; min-height: 76px; min-width: 120px; }
 }
 
@@ -244,6 +260,15 @@ button:disabled { cursor: not-allowed; }
 .map3d-canvas { width: 100%; height: 100%; display: block; cursor: grab; }
 .map3d-box .zoom { flex-direction: column; }
 .map3d-box .zoom button { font-size: 18px; font-weight: 700; }
+/* 指北針與路線篩選 */
+.compass { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; background: rgba(16,22,28,.85); display: grid; place-items: center; }
+.compass span { font: 700 15px var(--latin); color: #ff4b6e; transform: translateY(-9px); }
+.compass::after { content: ""; position: absolute; width: 2px; height: 30px; background: linear-gradient(#ff4b6e 50%, #fff 50%); }
+.map-lines { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 80px); }
+.ml { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 8px; border: 2px solid var(--c); background: rgba(255,255,255,.92); color: #1c2126; font: 700 13px var(--latin); }
+.ml span { font: 700 13px var(--sans); }
+.ml[aria-pressed="true"] { background: var(--c); color: var(--t); }
+@media (max-width: 600px) { .ml span { display: none; } }
 .map-card {
   position: absolute; left: 12px; bottom: 12px; max-width: min(340px, calc(100% - 90px)); padding: 12px 14px; border-radius: 12px;
   background: rgba(16,22,28,.92); box-shadow: 0 10px 30px rgba(0,0,0,.35);
@@ -278,6 +303,18 @@ button:disabled { cursor: not-allowed; }
 .item-card p { margin: 0 0 12px; color: #3d454d; font-size: 15px; }
 .item-count { font: 700 15px var(--latin); color: #5a646d; margin-bottom: 14px; }
 .item-card .btn.primary { background: var(--ink); color: var(--paper); min-width: 200px; }
+
+/* ── 傳送 ── */
+.tp-fx {
+  position: fixed; inset: 0; z-index: 25; pointer-events: none;
+  background: radial-gradient(circle at 50% 55%, rgba(255,255,255,.95), rgba(201,211,217,.9) 40%, rgba(20,28,36,.95));
+  animation: tpIn .45s ease-out forwards;
+}
+.tp-fx.out { animation: tpOut .6s ease-in forwards; }
+@keyframes tpIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tpOut { from { opacity: 1; } to { opacity: 0; } }
+.map-card .btn { margin-top: 8px; }
+.warn-text { color: var(--warn) !important; }
 
 /* ── 停駛 ── */
 .closed { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; background: rgba(14,20,27,.94); overflow: hidden; }

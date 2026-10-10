@@ -1,7 +1,6 @@
 /* 台灣時間與捷運營運時段
  *  06:00–00:30  營運中（open）
- *  00:30–05:30  迷霧時刻（mist）：特殊玩法，之後開放
- *  05:30–06:00  清晨，車站尚未開放（dawn）
+ *  00:30–06:00  迷霧時刻（mist）：特殊玩法，之後開放
  * 測試用：網址加上 ?time=23:58 可模擬台灣時間（之後仍會繼續走）
  */
 const TaipeiTime = (() => {
@@ -37,8 +36,7 @@ const TaipeiTime = (() => {
   function state(t = now()) {
     const m = t.hour * 60 + t.minute;
     if (m >= 360 || m < 30) return 'open';
-    if (m < 330) return 'mist';
-    return 'dawn';
+    return 'mist';   // 00:30–06:00 迷霧時刻
   }
 
   // 距離 06:00 首班車還有幾分鐘
