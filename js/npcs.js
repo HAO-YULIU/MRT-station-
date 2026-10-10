@@ -102,7 +102,7 @@ const NPCS = {
   xiaoqing: {
     name: '小晴', role: '高中生', station: '景安', spot: 'concourse', hours: [[15, 22]], speed: 1.4,
     look: { girl: true, skin: '#f2cdb9', hair: 'long', hairColor: '#2a1a12', top: '#f4f4f2', pattern: 'uniform', accent: '#2a6a3a', bottom: '#2a3a2a', skirt: true, socks: '#f4f4f2', bag: 'backpack', bagColor: '#f2c200' },
-    likes: ['bubbletea', 'keychain'],
+    gives: ['t_school'], likes: ['bubbletea', 'keychain'],
     lines: ['我在等環狀線。'],
     questTalk: { couple: '阿哲說他錯了？……哼，那你跟他說，明天板橋見。' },
     knows: [{ npc: 'azhe', text: '阿哲那個笨蛋，連道歉都要別人傳。' }],
@@ -157,7 +157,7 @@ const NPCS = {
   ade: {
     name: '阿德', role: '外送員', station: '忠孝復興', spot: 'concourse', hours: [[11, 14], [17, 22]], speed: 1.8,
     look: { skin: '#c89070', hair: 'short', hairColor: '#151515', top: '#2fb36a', pattern: 'plain', bottom: '#2a2a2a', bag: 'backpack', bagColor: '#2fb36a', hat: 'cap', hatColor: '#2fb36a' },
-    gives: ['delivery'], likes: ['chicken', 'sportdrink'],
+    gives: ['delivery', 't_lunch'], likes: ['chicken', 'sportdrink'],
     lines: ['快快快，還有三單！', '騎車太危險了，今天下雨我改坐捷運送。'],
     rumors: ['有一單地址寫「霧站 1 號出口」，我找了一晚上都找不到。'],
     knows: [{ npc: 'zhiming', text: '中山站的志明每天都點同一家便當。' }],
@@ -186,7 +186,7 @@ const NPCS = {
   zhou: {
     name: '老周', role: '夜班保全', station: '南港展覽館', spot: 'concourse', hours: [[19, 24]], speed: .8,
     look: { old: true, skin: '#cf9f86', hair: 'short', hairColor: '#9a9a96', top: '#2a3a4a', pattern: 'plain', bottom: '#1f2a3a', hat: 'cap', hatColor: '#2a3a4a' },
-    likes: ['coffee', 'water'],
+    gives: ['t_patrol'], likes: ['coffee', 'water'],
     lines: ['展覽散場的時候人最多。', '我巡夜巡了十幾年。'],
     rumors: ['收班以後我巡到月台，看到一個提著燈的女孩。我叫她，她回頭笑了一下，就不見了。'],
     knows: [{ npc: 'xiuyu', text: '那個提燈的女孩……如果你看到她，幫我問她冷不冷。' }],
@@ -194,14 +194,14 @@ const NPCS = {
   xiaomei: {
     name: '小梅', role: '花店老闆娘', station: '中山', spot: 'concourse', hours: [[10, 21]], speed: .9,
     look: { girl: true, skin: '#f2cdb9', hair: 'bob', hairColor: '#4a2a1a', top: '#f4e6d8', pattern: 'plain', bottom: '#6a5a48', glasses: true },
-    likes: ['pineapplecake', 'greentea'],
+    gives: ['t_flower'], likes: ['pineapplecake', 'greentea'],
     lines: ['今天的滿天星很漂亮喔。', '常常有人買花，卻不知道要送誰。'],
     rumors: ['有位老先生每天都來買一朵白玫瑰，說要送給「在霧裡等他的人」。'],
   },
   yuan: {
     name: '阿遠', role: '街頭畫家', station: '淡水', spot: 'concourse', hours: [[13, 20]], speed: .5,
     look: { skin: '#d8a888', hair: 'mush', hairColor: '#2a1a12', top: '#d8c3a5', pattern: 'plain', bottom: '#3a3a40', hat: 'beret', hatColor: '#3a3a3a' },
-    likes: ['greentea', 'postcard'],
+    gives: ['t_sunset'], likes: ['greentea', 'postcard'],
     lines: ['淡水的夕陽，每天顏色都不一樣。', '要不要幫你畫一張？'],
     rumors: ['我畫過一張捷運路網圖，畫完才發現多畫了一條線，灰色的。'],
     questTalk: { teacher: '王老師？他還記得我？……幫我跟他說，我現在每天都在畫畫，叫他不要擔心。' },
@@ -209,7 +209,7 @@ const NPCS = {
   jiahao: {
     name: '嘉豪', role: '晨跑族', station: '大安森林公園', spot: 'concourse', hours: [[6, 9]], speed: 2.2,
     look: { skin: '#c89070', hair: 'short', hairColor: '#151515', top: '#e04848', pattern: 'plain', bottom: '#1d1d20', height: 1.04 },
-    likes: ['sportdrink', 'water'],
+    gives: ['t_coffee'], likes: ['sportdrink', 'water'],
     lines: ['早上在公園跑一圈，再坐捷運上班。', '你也要一起跑嗎？'],
     rumors: ['清晨跑步的時候，常看到一個穿白大衣的女孩坐在公園長椅上，好像在等第一班車。'],
   },
@@ -219,6 +219,19 @@ const NPCS = {
     likes: ['coffee', 'onigiri'],
     lines: ['我以前在捷運開車。', '新北投支線只有一站，可是很多人專程來坐。'],
     rumors: ['我最後一次開末班車，到站以後回頭看，車廂裡還坐著一個人。可是我明明清過車了。'],
+  },
+  atao: {
+    name: '阿桃', role: '早餐店老闆娘', station: '景美', spot: 'concourse', hours: [[6, 10]], speed: .9,
+    look: { girl: true, skin: '#e2b49c', hair: 'bun', hairColor: '#2a1a12', top: '#f4f4f2', pattern: 'plain', bottom: '#3a3a40', scarf: '#e07a3a' },
+    gives: ['t_breakfast'], likes: ['soymilk', 'bread'],
+    lines: ['早安！今天也要吃早餐喔。', '我每天四點就起來煎蘿蔔糕。', '十點以後就收攤了。'],
+    rumors: ['天還沒亮的時候，有一位穿白大衣的女孩來買過一次豆漿。她付的是一枚很舊的硬幣。'],
+  },
+  ferryman: {
+    name: '擺渡人', role: '小碧潭的渡口', station: '小碧潭', spot: 'platform', speed: 0,
+    look: { old: true, skin: '#d8b8a8', hair: 'short', hairColor: '#e8e8e4', top: '#4a5a6a', pattern: 'knit', bottom: '#2a2a30', coat: true, hat: 'cap', hatColor: '#2a2a30', lantern: true },
+    lines: ['這條支線只有一站。很多人以為這裡是終點。', '我在等一個帶著六樣東西的人。'],
+    rumors: [],
   },
   eventstaff: {
     name: '活動志工', role: '節慶活動', station: '台北車站', spot: 'concourse', hours: [[9, 21]], speed: 0, event: '*',
@@ -484,6 +497,7 @@ const Dialog = (() => {
 
   function open(npc) {
     if (npc.id === 'xiuyu') return xiuyu(npc);
+    if (npc.id === 'ferryman') return ferryman(npc);
     if (!npc.named) {
       const pool = npc.role === '乘客' ? (TRAIN_TALK[npc.type] || TRAIN_TALK.office) : (CROWD_TALK[npc.type] || CROWD_TALK.casual);
       return show(npc, pick(pool), [{ label: '再聊一下', run: () => open(npc) }, { label: '再見', run: close }]);
@@ -508,7 +522,7 @@ const Dialog = (() => {
       if (Quests.isActive(qid) || Quests.isDone(qid)) continue;
       if (q.type === 'event' && !Quests.eventsNow().includes(qid)) continue;
       const full = q.type === 'side' && Quests.sideCount() >= SIDE_LIMIT;
-      btns.push({ label: full ? `支線已滿（${SIDE_LIMIT}/${SIDE_LIMIT}）` : `接任務：${q.title}`, primary: !full, disabled: full, run: () => { Quests.accept(qid); onAccept(qid); menu(npc, q.desc); } });
+      btns.push({ label: full ? `支線已滿（${SIDE_LIMIT}/${SIDE_LIMIT}）` : q.limit ? `限時任務：${q.title}（${q.limit} 分鐘）` : `接任務：${q.title}`, primary: !full, disabled: full, run: () => { Quests.accept(qid); onAccept(qid); menu(npc, q.desc); } });
     }
     btns.push({ label: '聊天', run: () => chat(npc) });
     btns.push({ label: '送禮', run: () => gift(npc) });
@@ -518,7 +532,9 @@ const Dialog = (() => {
   function onAccept(qid) {
     // 部分任務接下時會拿到東西
     if (qid === 'letter') { Game.state.inv.letter = (Game.state.inv.letter || 0) + 1; toast('<b>拿到 💌 粉紅色信封</b>'); }
-    if (qid === 'delivery') { Game.state.inv.bento = (Game.state.inv.bento || 0) + 1; toast('<b>拿到 🍱 排骨便當</b>'); }
+    const got = { delivery: 'bento', t_lunch: 'bento', t_breakfast: 'breakfast', t_flower: 'flower' }[qid];
+    if (got) { Game.state.inv[got] = (Game.state.inv[got] || 0) + 1; toast(`<b>拿到 ${ITEMS[got].icon} ${ITEMS[got].name}</b>`); }
+    if (QUESTS[qid].limit) toast(`<b>限時任務開始</b><span>${QUESTS[qid].limit} 分鐘內完成</span>`, 'warn');
     saveState(); updateHud();
   }
   function chat(npc) {
@@ -531,7 +547,7 @@ const Dialog = (() => {
   }
   function gift(npc) {
     const s = Game.state;
-    const inv = Object.entries(s.inv).filter(([, n]) => n > 0);
+    const inv = Object.entries(s.inv).filter(([id, n]) => n > 0 && !/^treasure_/.test(id));   // 主線寶物不能送人
     if (!inv.length) return menu(npc, '（你的背包是空的。）');
     show(npc, '要送什麼給' + esc(npc.name) + '？', [
       ...inv.map(([id]) => ({
@@ -588,6 +604,28 @@ const Dialog = (() => {
     const other = line === 'BL' ? 'BR' : 'BL';
     show(NPCS.xiuyu, `好。我會在這裡等你。如果你也想走${LINES[other].zh}，再來找我。<br>之後每到一條新的路線，我都會在那裡——不過，你要自己找到我。`, [{ label: '出發', primary: true, run: close }]);
     current = null;
+  }
+  // 小碧潭的擺渡人：收下六件寶物後，路網圖上會出現新路線
+  function ferryman(npc) {
+    const s = Game.state, lines = Object.keys(MAIN_STORY);
+    const have = lines.filter(l => s.inv['treasure_' + l] > 0);
+    if (s.flags.mistLine) return show(npc, '霧散開了一點。你看，桃園機場捷運已經出現在路網上了。剩下的路，要你自己去走。', [{ label: '再見', run: close }]);
+    if (have.length < lines.length) {
+      const miss = lines.filter(l => !have.includes(l)).map(l => LINES[l].zh);
+      return show(npc, `${pick(npc.lines)}<br><small>（擺渡人看了看你的背包：寶物 ${have.length} / ${lines.length}。還差：${miss.join('、')}的寶物。）</small>`, [{ label: '再見', run: close }]);
+    }
+    show(npc, '六樣東西……都在這裡了。鑰匙、錄音帶、票卡、葉子、發條、指針。<br>把它們交給我吧，我帶你過河。', [
+      { label: '交出六件寶物', primary: true, run: () => {
+        for (const l of lines) s.inv['treasure_' + l]--;
+        s.flags.mistLine = true;
+        if (!Quests.isActive('final') && !Quests.isDone('final')) Quests.accept('final');
+        const done = Quests.emit({ kind: 'handin' });
+        saveState(); updateHud();
+        close();
+        Game.unlockMistLine && Game.unlockMistLine(done.length > 0);
+      } },
+      { label: '再想想', run: close },
+    ]);
   }
   // 單純顯示資訊（告示牌等）
   function info(title, text) { show({ name: title, role: '' }, text, [{ label: '關閉', run: close }]); }

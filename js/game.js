@@ -85,7 +85,8 @@ function updateHud() {
   // 原本的「營運中」改放等級、經驗與新台幣
   const lv = Economy.levelInfo(s.xp || 0);
   const left = TaipeiTime.state(t) === 'open' ? TaipeiTime.minutesToLastTrain(t) : null;
-  $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
+  const dl = Object.values(s.quests.active).map(q => q.deadline).filter(Boolean).sort()[0];
+  $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
     $('#hudName').textContent = CHARACTERS[s.char].name;
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
@@ -144,6 +145,11 @@ Game.reward = (r = {}, label = '') => {
 Game.onQuestChange = (what, id) => {
   const q = QUESTS[id];
   if (what === 'accept') toast(`<b>接下任務</b><span>${q.title}</span>`);
+  if (what === 'fail') { toast(`<b>限時任務失敗</b><span>${q.title}：時間到了。可以再去找${q.giver && NPCS[q.giver] ? NPCS[q.giver].name : '他'}重新接。</span>`, 'warn'); Sound.click(); }
+  // 六條主線都完成：秀蔅指引去小碧潭
+  if (what === 'done' && /^main_/.test(id) && Object.keys(MAIN_STORY).every(l => Quests.isDone('main_' + l)) && !Quests.isActive('final') && !Quests.isDone('final')) {
+    setTimeout(() => { Quests.accept('final'); toast('<b>秀蔅：「六樣東西都到齊了。」</b><span>帶著寶物去小碧潭，月台上有人在等你。</span>', 'level'); }, 1500);
+  }
   if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); }
   if ((what === 'accept' || what === 'done') && ctl) Challenges.spawn(ctl.stationId);
   updateHud();
@@ -157,17 +163,18 @@ function openQuests() {
   const s = Game.state, act = s.quests.active;
   const card = id => {
     const q = QUESTS[id], st = act[id];
-    const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密' }[q.type];
+    const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密', timed: '限時' }[q.type];
     return `<li class="quest q-${q.type}">
       <div class="q-head"><span class="q-tag"${q.line ? ` style="--c:${LINES[q.line].color}"` : ''}>${q.line ? q.line + ' ' : ''}${tag}</span><b>${q.title}</b></div>
       <p>${q.desc}</p>
       <ol>${q.steps.map((p, i) => `<li class="${i < st.step ? 'ok' : i === st.step ? 'now' : ''}">${p.text}${i === st.step ? stepNote(q, st, p) : ''}</li>`).join('')}</ol>
       <div class="q-reward">報酬：${[q.reward.money && `NT$ ${q.reward.money}`, q.reward.xp && `經驗 ${q.reward.xp}`, ...Object.keys(q.reward.items || {}).map(i => ITEMS[i].name)].filter(Boolean).join('、')}</div>
-      ${q.type === 'side' ? `<button class="btn ghost small" data-abandon="${id}">放棄</button>` : ''}
+      ${st.deadline ? `<div class="q-timer">⏱ 剩下 ${fmtLeft(st.deadline)}</div>` : ''}
+      ${q.type === 'side' || q.type === 'timed' ? `<button class="btn ghost small" data-abandon="${id}">放棄</button>` : ''}
     </li>`;
   };
   const ids = Object.keys(act);
-  const order = ['main', 'secret', 'event', 'side'];
+  const order = ['main', 'timed', 'secret', 'event', 'side'];
   ids.sort((a, b) => order.indexOf(QUESTS[a].type) - order.indexOf(QUESTS[b].type));
   const done = Object.keys(s.quests.done).filter(id => QUESTS[id]);
   $('#questCount').textContent = `支線 ${Quests.sideCount()} / ${SIDE_LIMIT}`;
@@ -178,6 +185,7 @@ function openQuests() {
   $('#questLog').hidden = false;
 }
 
+const fmtLeft = t => { const sec = Math.max(0, Math.round((t - Date.now()) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
 // 任務目前這一步的補充說明：謎題進度、寶物感應
 function stepNote(q, st, step) {
   const g = step.goal;
@@ -836,10 +844,27 @@ function showItemGet(line) {
   return new Promise(res => { $('#itemOk').onclick = () => { ov.hidden = true; res(); }; $('#itemOk').focus(); });
 }
 
+// 六件寶物交給擺渡人：路網圖上出現桃園機場捷運
+Game.unlockMistLine = () => {
+  Sound.itemGet();
+  const ov = $('#itemOverlay');
+  ov.innerHTML = `<div class="item-card" style="--c:#8246af" role="dialog" aria-modal="true" aria-labelledby="mistName">
+    <div class="item-line">小碧潭的渡口</div>
+    <div class="item-icon" style="font-size:84px">🌫️</div>
+    <h2 id="mistName">新路線出現了</h2>
+    <p>擺渡人把六件寶物放進提燈裡。燈光穿過霧，一路往西照向機場——路網圖上出現了<b>桃園機場捷運</b>。<br>這條線還在霧裡，暫時不能搭乘。</p>
+    <button class="btn primary" id="mistOk">打開路網圖看看</button>
+  </div>`;
+  ov.hidden = false;
+  $('#mistOk').onclick = () => { ov.hidden = true; openMap(); Map3D.focusMist && Map3D.focusMist(); };
+  $('#mistOk').focus();
+};
+
 function openBag() {
   const s = Game.state;
   const n = Object.keys(s.items).length;
   const inv = Object.entries(s.inv).filter(([, n]) => n > 0);
+  const tre = Object.keys(MAIN_STORY).filter(l => s.inv['treasure_' + l] > 0).length;
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
     <h4 class="bag-h">物品</h4>
@@ -860,9 +885,9 @@ function openBag() {
         </li>`;
       }).join('')}
     </ul>
-    <div class="gate${n === 6 ? ' ready' : ''}">
-      <b>迷霧之門</b>
-      <p>${n === 6 ? '六件物品都到齊了。指定地點即將開放，放入物品就能打開新的地圖。' : `集齊六條路線的物品，放到指定地點，就能打開新的地圖（尚未開放）。還差 ${6 - n} 件。`}</p>
+    <div class="gate${s.flags.mistLine || tre === 6 ? ' ready' : ''}">
+      <b>小碧潭的渡口</b>
+      <p>${s.flags.mistLine ? '六件寶物已經交給擺渡人，路網圖上出現了桃園機場捷運。' : tre === 6 ? '六條主線的寶物都到齊了。去小碧潭的月台，交給擺渡人。' : `完成六條主線、找到各線的寶物（目前 ${tre} / 6），帶到小碧潭交給擺渡人，路網圖上就會出現新路線。`}</p>
     </div>`;
   $('#bag').hidden = false;
   $('#bagBody').onclick = e => {
@@ -905,7 +930,7 @@ function openMap() {
     document.querySelectorAll('#mapLines .ml').forEach(x => x.setAttribute('aria-pressed', x.dataset.l === solo));
   };
   Map3D.open($('#map3d'), {
-    visited: s.visited, current: s.current, char: s.char, compass: $('#compassN').parentElement,
+    visited: s.visited, current: s.current, char: s.char, compass: $('#compassN').parentElement, mistLine: !!s.flags.mistLine,
     onPick: id => {
       const lines = MRT.linesAt(id);
       const here = id === s.current, been = !!s.visited[id];
@@ -950,6 +975,7 @@ function init() {
   updateHud();
   Game.service = TaipeiTime.state();
   setInterval(() => {
+    Quests.tick();
     updateHud();
     checkSecrets();
     const st = TaipeiTime.state();

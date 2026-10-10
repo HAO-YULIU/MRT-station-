@@ -65,6 +65,8 @@ const ITEMS = {
   ch_hat: { name: '毛線帽', desc: '手織的，針腳有點歪。', icon: '🧶' },
   ring: { name: '婚戒', desc: '內側刻著兩個名字的縮寫。', icon: '💍' },
   bento: { name: '排骨便當', desc: '還是熱的，要趕快送到。', icon: '🍱' },
+  breakfast: { name: '早餐', desc: '蘿蔔糕加蛋、一杯溫豆漿，還是熱的。', icon: '🥪' },
+  studentid: { name: '小晴的學生證', desc: '照片裡的她綁著馬尾。', icon: '🪪' },
   ghostticket: { name: '霧的車票', desc: '站名欄寫著「霧」，票價欄是空白的。', icon: '🎟️' },
 };
 
@@ -216,6 +218,71 @@ const QUESTS = {
       { text: '回古亭告訴王老師', goal: { kind: 'talk', npc: 'wang' } },
     ],
     reward: { money: 220, xp: 180, friend: { wang: 20, yuan: 10 } },
+  },
+
+  /* ── 限時任務：只有在 NPC 出現的時段接得到，接下後要在時間內完成（失敗可以再找他重接） ── */
+  t_coffee: {
+    type: 'timed', title: '八點半的會議', giver: 'jiahao', limit: 25,
+    desc: '晨跑完的嘉豪八點半要開會，可是還沒喝到咖啡。',
+    steps: [
+      { text: '買一杯美式咖啡（商店）', goal: { kind: 'buy', item: 'coffee' } },
+      { text: '拿到大安森林公園交給嘉豪', goal: { kind: 'give', npc: 'jiahao', item: 'coffee' } },
+    ],
+    reward: { money: 180, xp: 120, friend: { jiahao: 15 } },
+  },
+  t_breakfast: {
+    type: 'timed', title: '趁熱送到', giver: 'atao', limit: 35,
+    desc: '早餐店的阿桃做了一份早餐給在台北車站值班的老陳，要趁熱送到。',
+    steps: [{ text: '把早餐交給台北車站的站務員老陳', goal: { kind: 'give', npc: 'chen', item: 'breakfast' } }],
+    reward: { money: 150, xp: 120, friend: { atao: 10, chen: 10 } },
+  },
+  t_lunch: {
+    type: 'timed', title: '午休只有一小時', giver: 'ade', limit: 20,
+    desc: '中午尖峰，阿德忙不過來。科技大樓的維修工阿凱還在等午餐。',
+    steps: [{ text: '把便當交給科技大樓的阿凱', goal: { kind: 'give', npc: 'kai', item: 'bento' } }],
+    reward: { money: 160, xp: 120, friend: { ade: 10, kai: 10 } },
+  },
+  t_flower: {
+    type: 'timed', title: '老師的生日', giver: 'xiaomei', limit: 30,
+    desc: '有位學生在花店訂了一束花，要送給古亭的王老師（王老師下午五點就回家了）。',
+    steps: [{ text: '把花交給古亭的王老師', goal: { kind: 'give', npc: 'wang', item: 'flower' } }],
+    reward: { money: 200, xp: 140, friend: { xiaomei: 10, wang: 15 } },
+  },
+  t_sunset: {
+    type: 'timed', title: '趕在太陽下山前', giver: 'yuan', limit: 10,
+    desc: '阿遠正在畫夕陽，口渴得不得了，可是不能離開畫架。',
+    steps: [
+      { text: '在販賣機買一瓶無糖綠茶', goal: { kind: 'buy', item: 'greentea' } },
+      { text: '交給淡水的阿遠', goal: { kind: 'give', npc: 'yuan', item: 'greentea' } },
+    ],
+    reward: { money: 120, xp: 100, friend: { yuan: 15 } },
+  },
+  t_patrol: {
+    type: 'timed', title: '夜間巡站', giver: 'zhou', limit: 25,
+    desc: '老周聽說隔壁幾站的月台晚上有奇怪的聲音，請你幫他去看看。',
+    steps: [
+      { text: '到南港', goal: { kind: 'reach', station: '南港' } },
+      { text: '到昆陽', goal: { kind: 'reach', station: '昆陽' } },
+      { text: '回南港展覽館告訴老周', goal: { kind: 'talk', npc: 'zhou' } },
+    ],
+    reward: { money: 220, xp: 160, friend: { zhou: 15 } },
+  },
+  t_school: {
+    type: 'timed', title: '補習班要點名了', giver: 'xiaoqing', limit: 40,
+    desc: '小晴的學生證掉在板橋站，沒有學生證不能進補習班。',
+    steps: [
+      { text: '在板橋站找到學生證', goal: { kind: 'find', item: 'studentid', station: '板橋' } },
+      { text: '拿回景安還給小晴', goal: { kind: 'give', npc: 'xiaoqing', item: 'studentid' } },
+    ],
+    reward: { money: 180, xp: 150, friend: { xiaoqing: 15 } },
+  },
+
+  /* ── 最終：六件寶物交給小碧潭的擺渡人 ── */
+  final: {
+    type: 'main', title: '小碧潭的渡口', giver: 'xiuyu',
+    desc: '六條主線的寶物都到齊了。秀蔅說，小碧潭的月台上有一個人一直在等。',
+    steps: [{ text: '帶著六件寶物到小碧潭，交給擺渡人', goal: { kind: 'handin' } }],
+    reward: { money: 2000, xp: 1500, friend: { xiuyu: 30 } },
   },
 
   /* ── 限時活動 ── */
@@ -394,6 +461,7 @@ const Quests = (() => {
   function accept(id) {
     if (!canAccept(id)) return false;
     active()[id] = { step: 0, v: 2 };
+    if (QUESTS[id].limit) active()[id].deadline = Date.now() + QUESTS[id].limit * 60000;
     saveState();
     Game.onQuestChange && Game.onQuestChange('accept', id);
     return true;
@@ -432,7 +500,7 @@ const Quests = (() => {
         if (g.kind === 'reach' && ev.kind === 'ride') ok = match(where(g.station), ev.station);
       } else if (g.kind === 'reach') ok = match(where(g.station), ev.station);
       else if (g.kind === 'ride') ok = (g.line == null || g.line === ev.line) && (g.station == null || match(where(g.station), ev.station));
-      else if (g.kind === 'terminal' || g.kind === 'anomaly' || g.kind === 'sit') ok = true;
+      else if (g.kind === 'terminal' || g.kind === 'anomaly' || g.kind === 'sit' || g.kind === 'handin') ok = true;
       else if (g.kind === 'talk') ok = g.npc === ev.npc;
       else if (g.kind === 'inspect') ok = g.spot === ev.spot && match(g.station, ev.station);
       else if (g.kind === 'find') ok = g.item === ev.item && (g.station == null || match(where(g.station), ev.station));
@@ -469,6 +537,16 @@ const Quests = (() => {
       || (q.dates || []).some(([y, m, d0, d1]) => (!y || y === t.year) && m === t.month && t.day >= d0 && t.day <= d1);
     return Object.keys(QUESTS).filter(id => QUESTS[id].type === 'event' && on(QUESTS[id]));
   }
+  // 限時任務：時間到了還沒完成就失敗（可以再接）
+  function tick() {
+    const now = Date.now();
+    for (const id of Object.keys(active())) {
+      const st = active()[id];
+      if (!st.deadline || now <= st.deadline) continue;
+      delete active()[id]; saveState();
+      Game.onQuestChange && Game.onQuestChange('fail', id);
+    }
+  }
   // 秘密任務：達成隱藏條件時觸發（extra 會存進任務進度，例如 target）
   function secret(id, extra) {
     if (!QUESTS[id] || QUESTS[id].type !== 'secret' || !canAccept(id)) return false;
@@ -477,5 +555,5 @@ const Quests = (() => {
     Game.onQuestChange && Game.onQuestChange('secret', id);
     return true;
   }
-  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow, secret };
+  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow, secret, tick };
 })();
