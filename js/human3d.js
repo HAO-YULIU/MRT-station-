@@ -473,7 +473,7 @@ const Human3D = (() => {
       const lan = new T.Group();
       lan.add(new T.Mesh(new T.CylinderGeometry(.045, .05, .12, 8), mat('#b58a3a', { metal: .7, rough: .3 })));
       const glow = new T.Mesh(new T.SphereGeometry(.035, 10, 8), new T.MeshBasicMaterial({ color: '#ffe2a0' })); lan.add(glow);
-      const pl = new T.PointLight('#ffd890', 1.6, 3, 2); lan.add(pl);
+      
       lan.position.set(0, -P.fore - .16, .02); arms[1].el.add(lan);
     }
     return { root, hips, spine, headJ, arms, legs, P, armSwing: L.armSwing ?? .32 };

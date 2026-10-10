@@ -76,7 +76,13 @@ const Station3D = (() => {
   }
   function tiled(tex, rx, ry) { const t = tex.clone(); t.needsUpdate = true; t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(rx, ry); return t; }
 
-  const M = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: o.r ?? .7, metalness: o.m ?? 0, map: o.map || null, transparent: !!o.t, opacity: o.o ?? 1, side: o.side || T.FrontSide, emissive: o.e || '#000', emissiveIntensity: o.ei ?? 1, emissiveMap: o.em || null, depthWrite: o.dw ?? true });
+  // 相同參數的材質共用同一個（沒有貼圖時），合併網格才有效
+  const matCache = new Map();
+  const M = (color, o = {}) => {
+    if (!o.map && !o.em) { const k = JSON.stringify([color, o]); if (!matCache.has(k)) matCache.set(k, M0(color, o)); return matCache.get(k); }
+    return M0(color, o);
+  };
+  const M0 = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: o.r ?? .7, metalness: o.m ?? 0, map: o.map || null, transparent: !!o.t, opacity: o.o ?? 1, side: o.side || T.FrontSide, emissive: o.e || '#000', emissiveIntensity: o.ei ?? 1, emissiveMap: o.em || null, depthWrite: o.dw ?? true });
   function box(w, h, d, mat, x, y, z, parent) { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); parent && parent.add(m); return m; }
   function plane(w, h, mat, parent) { const m = new T.Mesh(new T.PlaneGeometry(w, h), mat); parent && parent.add(m); return m; }
   // 兩面都看得到的看板
@@ -114,6 +120,46 @@ const Station3D = (() => {
       const m = box(w, thick, d, mat, (r.x0 + r.x1) / 2, y - (up ? thick / 2 : -thick / 2), (r.z0 + r.z1) / 2, parent);
       if (mat.map) { m.material = mat.clone(); m.material.map = tiled(mat.map, w / 2.4, d / 2.4); }
     }
+  }
+
+  /* ── 效能：把靜態網格依材質合併，大幅減少繪製次數 ── */
+  function mergeStatic(root, skip) {
+    root.updateMatrixWorld(true);
+    const inv = new T.Matrix4().copy(root.matrixWorld).invert();
+    const groups = new Map(), victims = [];
+    root.traverse(o => {
+      if (!o.isMesh || o.isInstancedMesh || o.isSprite) return;
+      for (let p = o; p && p !== root; p = p.parent) if (p.userData && (p.userData.dynamic || p.userData.leaf) || (skip && skip(p))) return;
+      const m = Array.isArray(o.material) ? null : o.material; if (!m) return;
+      const key = m.uuid;
+      if (!groups.has(key)) groups.set(key, { mat: m, parts: [] });
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      g.applyMatrix4(new T.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+      groups.get(key).parts.push(g);
+      victims.push(o);
+    });
+    for (const o of victims) o.parent.remove(o);
+    for (const { mat, parts } of groups.values()) {
+      let n = 0; for (const g of parts) n += g.attributes.position.count;
+      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+      let o3 = 0, o2 = 0;
+      for (const g of parts) {
+        pos.set(g.attributes.position.array, o3);
+        if (g.attributes.normal) nor.set(g.attributes.normal.array, o3);
+        if (g.attributes.uv) uv.set(g.attributes.uv.array, o2);
+        o3 += g.attributes.position.count * 3; o2 += g.attributes.position.count * 2;
+        g.dispose();
+      }
+      const geo = new T.BufferGeometry();
+      geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new T.BufferAttribute(nor, 3));
+      geo.setAttribute('uv', new T.BufferAttribute(uv, 2));
+      geo.computeBoundingSphere();
+      const mesh = new T.Mesh(geo, mat);
+      if (mat.transparent) mesh.renderOrder = 1;
+      root.add(mesh);
+    }
+    return root;
   }
 
   /* ── 看板貼圖 ── */
@@ -286,7 +332,7 @@ const Station3D = (() => {
             const leaf = new T.Group();
             box(.7, psdH, .04, glass, sx * .35, psdH / 2, 0, leaf);
             box(.05, psdH, .07, frame, sx * .68, psdH / 2, 0, leaf);
-            leaf.position.set(d, 0, s * PSD); leaf.userData = { sx, base: d };
+            leaf.position.set(d, 0, s * PSD); leaf.userData = { sx, base: d, dynamic: true };
             pg.add(leaf); psd[`${P.k}:${s}`].push(leaf);
           }
           box(.12, psdH, .14, frame, d - .76, psdH / 2, s * PSD, pg); box(.12, psdH, .14, frame, d + .76, psdH / 2, s * PSD, pg);
@@ -324,7 +370,6 @@ const Station3D = (() => {
         const ceilHoles = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return { x0: a - .2, x1: b + .2, z0: -1.9, z1: 1.9 }; });
         slab(rectsMinus({ x0: -LEN / 2 - 150, x1: LEN / 2 + 150, z0: -7, z1: 7 }, ceilHoles), 3.4, M('#d9d9d4', { r: .9 }), pg, .2, false);
         for (const z of [-4.6, -2, 2, 4.6]) for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) if (!(Math.abs(z) < 2.1 && P.ramps.some(r => (x + P.x - r.xa) * (x + P.x - r.xb) < 0))) box(2.2, .04, .14, lightM, x, 3.37, z, pg);
-        for (const x of [-20, 0, 20]) { const pl = new T.PointLight('#fff2dc', 5, 16, 1.6); pl.position.set(x, 3, 0); pg.add(pl); }
       } else {
         box(LEN + 4, .18, 14.5, M(night ? '#2a2f35' : '#5b6168'), 0, 3.9, 0, pg);
         for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) box(2.2, .04, .14, M('#ffffff', { e: '#fff6e0', ei: night ? 1.4 : .6 }), x, 3.8, 0, pg);
@@ -372,7 +417,6 @@ const Station3D = (() => {
       if (ceilHoles.some(h => x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1)) continue;
       box(1.6, .04, .4, lightM, x, hallH - .03, z, g);
     }
-    for (const [x, z] of [[0, (C.z0 + L.gateZ) / 2], [0, L.gateZ + 7]]) { const pl = new T.PointLight('#fff6e8', 8, 30, 1.4); pl.position.set(x, 3.6, z); g.add(pl); }
     // 大廳站名牆
     const stnBig = M('#ffffff', { map: stationSignTex(L.stationId, L.platforms[0].line) });
     const big = plane(8, 2, stnBig, g); big.position.set(0, 2.4, C.z0 + .02);
@@ -463,6 +507,7 @@ const Station3D = (() => {
     const mapBig = plane(2.4, 2.4, M('#ffffff', { map: routeMapTex() }), g); mapBig.position.set(U.x0 + .02 + 0, 1.7, U.z0 + 6); mapBig.rotation.y = Math.PI / 2; mapBig.position.x = U.x0 + .02;
 
     g.userData = { psd, layout: L };
+    mergeStatic(g);
     return g;
   }
 
@@ -592,15 +637,17 @@ const Station3D = (() => {
       box(CAR_GAP + .2, .1, HALF_W * 2, M('#2b2f33'), gx, 2.25, 0, g);
       box(CAR_GAP + .2, .05, HALF_W * 2 - .2, floorM, gx, -.03, 0, g);
     }
+    mergeStatic(g);
+    g.userData.lightM = lightM;
     trainCache[lineId] = g;
     return g;
   }
   // 每次進站複製一列（共用幾何與材質）
   function makeTrain(lineId) {
-    const g = trainTemplate(lineId).clone(true);
+    const tpl = trainTemplate(lineId), g = tpl.clone(true);
     const leaves = [];
     g.traverse(o => { if (o.userData && o.userData.leaf) leaves.push(o); });
-    g.userData = { leaves, line: lineId };
+    g.userData = { leaves, line: lineId, lightM: tpl.userData.lightM };
     return g;
   }
 
@@ -674,7 +721,7 @@ const Station3D = (() => {
     const ground = plane(x1 - x0 + 200, 260, M(night ? '#1b2027' : '#7b7f78'), parent);
     ground.rotation.x = -Math.PI / 2; ground.position.set((x0 + x1) / 2, y - 13, zc);
   }
-  function segment(xa, xb, y, zc, ugA, ugB, lineId, seed, night) {
+  function segment(xa, xb, y, zc, ugA, ugB, lineId, seed, night, anomaly) {
     textures();
     const g = new T.Group();
     const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb), mid = (x0 + x1) / 2;
@@ -688,7 +735,9 @@ const Station3D = (() => {
         const top = plane(len, 4.8, wallM, g); top.rotation.x = Math.PI / 2; top.position.set(cx, y + 3.2, zc);
         const bed = plane(len, 4.8, M('#2a2a28'), g); bed.rotation.x = -Math.PI / 2; bed.position.set(cx, y - 1.15, zc);
         const n = Math.floor(len / 9);
-        const li = new T.InstancedMesh(new T.BoxGeometry(.5, .08, .06), M('#ffffff', { e: '#ffe8b8', ei: 2 }), n * 2);
+        const hue = (seed % 360) / 360;   // 每段隧道的燈色略有不同
+        const tc = new T.Color().setHSL(.1 + Math.sin(hue * 6.28) * .06, .55, .75);
+        const li = new T.InstancedMesh(new T.BoxGeometry(.5, .08, .06), M('#ffffff', { e: tc, ei: 2 }), n * 2);
         const m4 = new T.Matrix4(); let k = 0;
         for (let i = 0; i < n; i++) for (const s of [-1, 1]) { m4.makeTranslation(a + 4 + i * 9, y + 2.1, zc + s * 2.35); li.setMatrixAt(k++, m4); }
         g.add(li);
@@ -703,6 +752,28 @@ const Station3D = (() => {
       }
     }
     if (parts.some(p => !p[2])) city(x0 - 60, x1 + 60, seed, g, y, zc, night);
+    mergeStatic(g);
+    // 異常：隧道中間出現一座不存在的月台
+    if (anomaly && parts.some(p => p[2])) {
+      const ax = mid, gm = M('#7fae9a', { e: '#3a6a5a', ei: .6, t: true, o: .85 });
+      box(60, .4, 3.5, gm, ax, y - .2, zc + 4.2, g);
+      for (let x = -24; x <= 24; x += 12) box(.4, 3, .4, M('#4a6a60', { t: true, o: .7 }), ax + x, y + 1.3, zc + 5.4, g);
+      const st = canvasTex(1024, 256, (c) => {
+        c.fillStyle = '#e8f2ee'; c.fillRect(0, 0, 1024, 256); c.fillStyle = '#5a8a7a'; c.fillRect(0, 0, 1024, 22);
+        c.fillStyle = '#1c2126'; c.font = '900 120px "Noto Serif TC", serif'; c.fillText('霧', 80, 170);
+        c.font = '600 54px "Barlow Semi Condensed", sans-serif'; c.fillText('Mist · M00', 260, 160);
+      });
+      for (const x of [-14, 14]) { const p = plane(2.6, .65, new T.MeshBasicMaterial({ map: st, transparent: true, opacity: .9 }), g); p.position.set(ax + x, y + 2.2, zc + 2.5); }
+      // 月台上的人影（紅帽子）
+      const sil = new T.Group(); sil.position.set(ax + 6, y, zc + 3.2);
+      sil.add(box(.4, 1.3, .25, M('#e8ecf0', { t: true, o: .55 }), 0, .9, 0, null));
+      sil.add(box(.36, .1, .36, M('#c4162a', { e: '#c4162a', ei: .5 }), 0, 1.75, 0, null));
+      sil.add(box(.22, .26, .22, M('#e8ecf0', { t: true, o: .55 }), 0, 1.65, 0, null));
+      g.add(sil);
+      // 不用點光源（光源數量一變就要重編所有材質），改用發光的霧面板
+      const glow = plane(30, 4, M('#9fe0c8', { e: '#9fe0c8', ei: 1.2, t: true, o: .35 }), g); glow.position.set(ax, y + 2.2, zc + 1.2);
+      g.userData.anomalyX = ax;
+    }
     return g;
   }
 

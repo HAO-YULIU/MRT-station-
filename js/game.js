@@ -247,8 +247,9 @@ function ensureWorld() {
   World.init(sceneEl());
   World.bindJoystick($('#joystick'));
   World.onGate = onGate;
-  World.blocker = (x, z, y) => NPCManager.blocks(x, z, y);
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Pickups.tick(now); Secrets.tick(); });
+  World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y);
+  World.onRecenter(W => Passengers.shift(W));
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Secrets.tick(); });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -408,7 +409,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), npcInteraction, spotInteraction, pickupInteraction, secretInteraction);
+  list.push(exitInteraction(), npcInteraction, spotInteraction, pickupInteraction, secretInteraction, seatInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -449,11 +450,13 @@ async function dwell(tr, dir, id, ride) {
   await World.setDoors(tr, false);
   if (!alive(id)) return;
   if (World.isInside(tr) && !mustAlight) {
+    Passengers.board(tr);
     // 玩家在車上：出發
     const r = ride || { line: dir.line, terminal: dir.terminal, stops: dir.stops, idx: 0, from: ctl.stationId };
     return doRide(tr, r);
   }
   if (ride) { Game.ride = null; }
+  if (Passengers.train === tr) Passengers.clear();
   await World.trainDepart(tr);
   if (!alive(id)) return;
   ctl.busy.delete(key); ctl.chimed.delete(key);
@@ -484,9 +487,14 @@ async function doRide(tr, ride) {
   Sound.announce(
     `下一站，${n.zh}。${isTerminal ? '本列車終點站。' : ''}${transfers.length ? `轉乘${transfers.join('、')}的旅客，請在本站換車。` : ''}`,
     `Next station, ${n.en}.${transfers.length ? ' Transfer station.' : ''}`, { chime: true });
+  Passengers.board(tr);
+  World.setInteractions([npcInteraction, seatInteraction, dropInteraction]);   // 行駛中：可以和乘客聊天、坐下、撿東西
+  setTimeout(() => Passengers.maybeDrop(tr), 3000);
+  const anomaly = Math.random() < .2;   // 偶爾在隧道裡看到不該存在的月台
   Sound.ambience(null);
   Sound.startRumble();
-  await World.ride(tr, { toId: to, duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip });
+  await World.ride(tr, { toId: to, duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip, anomaly });
+  if (anomaly && MRT.undergroundOn(to, line)) toast('<b>剛剛窗外……</b><span>好像有一座綠色的月台，站名寫著「霧」。</span>');
   Sound.stopRumble();
   setPart('pBtns', '');
   ride.moving = false;
@@ -518,11 +526,26 @@ async function doRide(tr, ride) {
 }
 
 // 和附近的人說話
+const nearPerson = p => (p.zone.kind === 'train' ? Passengers.nearest(p, 1.5) : null) || NPCManager.nearest(p, 2.4);
 const npcInteraction = {
-  get id() { const n = NPCManager.nearest(World.player, 2.4); return n ? 'npc:' + n.id : 'npc'; },
-  get label() { const n = NPCManager.nearest(World.player, 2.4); return n ? `說話：${n.named ? n.name : n.name}` : '說話'; },
-  when: p => !Dialog.with && !!NPCManager.nearest(p, 2.4) && (p.zone.kind !== 'train' || !Game.ride || !Game.ride.moving),
-  run: () => { const n = NPCManager.nearest(World.player, 2.4); if (n) Dialog.open(n); },
+  get id() { const n = nearPerson(World.player); return n ? 'npc:' + n.id : 'npc'; },
+  get label() { const n = nearPerson(World.player); return n ? `說話：${n.name}` : '說話'; },
+  when: p => !Dialog.with && !World.sitting && !!nearPerson(p),
+  run: () => { const n = nearPerson(World.player); if (n) Dialog.open(n); },
+};
+// 車廂裡坐下／起身
+const seatInteraction = {
+  get id() { return World.sitting ? 'stand' : 'sit'; },
+  get label() { return World.sitting ? '起身' : '坐下'; },
+  when: p => !Dialog.with && p.zone.kind === 'train' && (World.sitting || !!Passengers.freeSeat(p)),
+  run: () => { if (World.sitting) World.sit(null); else { const seat = Passengers.freeSeat(World.player); if (seat) World.sit(seat); } },
+};
+// 撿起乘客遺落的東西
+const dropInteraction = {
+  get id() { const d = Passengers.dropNear(World.player); return d ? 'drop:' + d.item : 'drop'; },
+  get label() { const d = Passengers.dropNear(World.player); return d ? `撿起：${d.item === 'coin' ? '硬幣' : ITEMS[d.item].name}` : '撿起'; },
+  when: p => !World.sitting && !!Passengers.dropNear(p),
+  run: () => Passengers.takeDrop(),
 };
 // 查看告示牌、塗鴉、路線圖
 const SPOT_NAME = { notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店' };

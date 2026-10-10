@@ -359,7 +359,10 @@ const Dialog = (() => {
 
   function open(npc) {
     if (npc.id === 'xiuyu') return xiuyu(npc);
-    if (!npc.named) return show(npc, pick(CROWD_TALK[npc.type] || CROWD_TALK.casual), [{ label: '再見', run: close }]);
+    if (!npc.named) {
+      const pool = npc.role === '乘客' ? (TRAIN_TALK[npc.type] || TRAIN_TALK.office) : (CROWD_TALK[npc.type] || CROWD_TALK.casual);
+      return show(npc, pick(pool), [{ label: '再聊一下', run: () => open(npc) }, { label: '再見', run: close }]);
+    }
     const s = Game.state, f = s.friends[npc.id] || 0;
     // 先處理任務步驟（和他說話）
     const done = Quests.emit({ kind: 'talk', npc: npc.id });
@@ -596,4 +599,99 @@ const Secrets = (() => {
     Dialog.info(s.sc.name, s.sc.text + extra);
   }
   return { spawn, clear, tick, near, look };
+})();
+
+/* ── 車廂裡的乘客：不同車廂遇到不同的人；可以聊天、聽傳聞，撿到遺落的東西 ── */
+const TRAIN_TALK = {
+  student: ['你也是坐到終點嗎？', '剛剛窗外是不是閃過一個月台？', '這班車好像比平常多一節……我數錯了嗎？'],
+  office: ['（打瞌睡中）……下一站？喔，還沒到。', '每天都在車上補眠。', '你聽說了嗎，有人在車窗上看到戴紅帽子的女生。'],
+  elder: ['年輕人，坐這裡吧。', '我搭這條線搭了三十年，從來沒看過那個月台。'],
+  tourist: ['Is this the right train?', '台北的捷運好安靜喔。'],
+  storyteller: [
+    '我跟你說，末班車開走以後，有一班車會繼續開。沒有站名，只有霧。',
+    '有個女孩每天都在找自己上車的那一站。她提著一盞燈，從來不坐下。',
+    '第七節車廂？我年輕的時候坐過一次。裡面的人，都在等一個不會來的人。',
+    '如果你在隧道裡看到綠色的月台，千萬別下車。',
+  ],
+};
+const Passengers = (() => {
+  const T = THREE, S = Station3D;
+  let list = [], drop = null, tr = null;
+  const CAR_TYPES = [['student', 'student', 'casual'], ['office', 'elder', 'office'], ['tourist', 'casual', 'storyteller']];
+  function board(train) {
+    if (tr === train && list.length) return;
+    clear(); tr = train;
+    const P = train.P, tx = P.x + train.x, tz = P.z + train.side * S.TRACK;
+    const hour = TaipeiTime.now().hour, busy = (hour >= 7 && hour < 9) || (hour >= 17 && hour < 20);
+    let r = (hour * 97 + P.x * 13 + 7) % 233280;
+    const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+    S.CAR_X.forEach((cx, ci) => {
+      const n = busy ? 4 : 2;
+      for (let i = 0; i < n; i++) {
+        let type = CAR_TYPES[ci][(rnd() * 3) | 0];
+        if (type === 'storyteller' && list.some(p => p.type === 'storyteller')) type = 'casual';
+        const sitting = rnd() < .6;
+        let x = tx + cx + (rnd() - .5) * 16;
+        if (S.DOORS.some(d => Math.abs(x - (tx + d)) < .9)) x += 1.4;
+        const sideZ = rnd() < .5 ? -1 : 1;
+        const z = sitting ? tz + sideZ * 1.12 : tz + (rnd() - .5) * .9;
+        const C = CROWD_TYPES[type === 'storyteller' ? 'elder' : type];
+        const look = { skin: ['#e9c0a8', '#dcae95', '#cf9f86', '#f2cdb9'][(rnd() * 4) | 0], hairColor: '#1a1a1a', height: .94 + rnd() * .1, ...C.gen(rnd) };
+        look.hair = look.girl ? ['long', 'bob', 'bun'][(rnd() * 3) | 0] : ['short', 'mush'][(rnd() * 2) | 0];
+        if (look.old) look.hairColor = '#cfcfcf';
+        if (type === 'storyteller') Object.assign(look, { old: true, girl: false, hat: 'cap', hatColor: '#3a3a3a', top: '#5a4a3a', glasses: true, hairColor: '#d8d8d8' });
+        const rig = Human3D.buildPerson(look);
+        rig.sit = sitting ? 1 : 0;
+        rig.root.position.set(x, P.y, z);
+        rig.root.rotation.y = sitting ? (sideZ > 0 ? Math.PI : 0) : rnd() * 6.28;
+        World.scene.add(rig.root);
+        list.push({ id: 'pax' + list.length, type, rig, x, y: P.y, z, sitting, named: false, name: type === 'storyteller' ? '說故事的老伯' : { student: '學生', office: '上班族', elder: '長輩', tourist: '觀光客', casual: '乘客' }[type], role: '乘客', car: ci });
+      }
+    });
+  }
+  // 行駛中可能有人遺落東西
+  function maybeDrop(train) {
+    if (drop) return;
+    const umbrellaQuest = Quests.wants('find', g => g.item === 'umbrella');
+    if (!umbrellaQuest && Math.random() > .35) return;
+    const pool = ['coin', 'onigiri', 'keychain'];
+    const item = umbrellaQuest ? 'umbrella' : pool[(Math.random() * pool.length) | 0];
+    const P = train.P, tx = P.x + train.x, tz = P.z + train.side * S.TRACK;
+    const x = tx + S.CAR_X[(Math.random() * 3) | 0] + (Math.random() - .5) * 12, z = tz + (Math.random() < .5 ? -.6 : .6);
+    const c = document.createElement('canvas'); c.width = c.height = 96;
+    const g = c.getContext('2d'); g.font = '60px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(item === 'coin' ? '🪙' : ITEMS[item].icon, 48, 52);
+    const mesh = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), transparent: true, depthWrite: false }));
+    mesh.scale.set(.36, .36, 1); mesh.position.set(x, P.y + .2, z);
+    World.scene.add(mesh);
+    drop = { item, x, y: P.y, z, mesh };
+  }
+  function takeDrop() {
+    const s = Game.state, d = drop; if (!d) return;
+    World.scene.remove(d.mesh); drop = null;
+    if (d.item === 'coin') { Game.reward({ money: 50 }, '撿到 50 元硬幣'); return; }
+    s.inv[d.item] = (s.inv[d.item] || 0) + 1; saveState(); updateHud();
+    Sound.itemGet();
+    toast(`<b>撿到 ${ITEMS[d.item].icon} ${ITEMS[d.item].name}</b><span>好像是哪位乘客忘記帶走的。</span>`);
+    for (const q of Quests.emit({ kind: 'find', item: d.item, station: null })) toast(`<b>${QUESTS[q.id].title}</b><span>✓ ${q.text}</span>`);
+  }
+  function clear() { for (const p of list) World.scene.remove(p.rig.root); list = []; if (drop) World.scene.remove(drop.mesh); drop = null; tr = null; }
+  function tick(dt, now) { for (const p of list) { if (Dialog.with === p && !p.sitting) p.rig.root.rotation.y = Math.atan2(World.player.x - p.x, World.player.z - p.z); p.rig.update(dt, 0, now / 1000); } }
+  function blocks(x, z, y) { return list.some(p => Math.abs(p.y - y) < .6 && Math.hypot(p.x - x, p.z - z) < .45); }
+  function nearest(pp, r = 1.5) { let b = null, bd = r; for (const p of list) { const d = Math.hypot(p.x - pp.x, p.z - pp.z); if (Math.abs(p.y - pp.y) < .6 && d < bd) { bd = d; b = p; } } return b; }
+  function dropNear(pp) { return drop && Math.abs(drop.y - pp.y) < .6 && Math.hypot(drop.x - pp.x, drop.z - pp.z) < 1.2 ? drop : null; }
+  // 找空位：玩家附近、靠牆、沒有人坐、不在門口
+  function freeSeat(pp) {
+    const t = World.trainOf(pp.x, pp.z, pp.y); if (!t) return null;
+    const tx = t.P.x + t.x, tz = t.P.z + t.side * S.TRACK;
+    if (S.DOORS.some(d => Math.abs(pp.x - (tx + d)) < 1)) return null;
+    const sideZ = pp.z >= tz ? 1 : -1, z = tz + sideZ * 1.12;
+    if (list.some(p => p.sitting && Math.abs(p.z - z) < .3 && Math.abs(p.x - pp.x) < .6)) return null;
+    return { x: pp.x, z, face: sideZ > 0 ? Math.PI : 0 };
+  }
+  // 到站後世界重新對齊時，乘客跟著列車移動
+  function shift(W) {
+    for (const p of list) { p.x -= W.x; p.y -= W.y; p.z -= W.z; p.rig.root.position.set(p.x, p.y, p.z); }
+    if (drop) { drop.x -= W.x; drop.y -= W.y; drop.z -= W.z; drop.mesh.position.set(drop.x, drop.y + .2, drop.z); }
+  }
+  return { board, maybeDrop, takeDrop, clear, tick, blocks, nearest, dropNear, freeSeat, shift, get train() { return tr; } };
 })();

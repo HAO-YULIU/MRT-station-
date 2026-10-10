@@ -11,13 +11,13 @@ const World = (() => {
   let rig = null, charId = null, hemi, sun;
   const trains = new Set();   // 目前場上的列車
   let riding = null;          // 正在搭乘的列車
-  const player = { x: 0, y: 0, z: 0, face: Math.PI, speed: 0, inputOn: true, auto: null };
+  const player = { x: 0, y: 0, z: 0, face: Math.PI, speed: 0, inputOn: true, auto: null, sitting: false };
   const cam = { yaw: 0, pitch: .32, dist: 4.4, pos: new T.Vector3(0, 2.4, 6) };
   let interactions = [];
   let last = 0, shake = 0, lastGateSide = 0;
   let onZoneChange = null, lastZoneKey = '';
   let gateCheck = null, blocked = null;
-  const tickers = [];
+  const tickers = [], recenterHooks = [];
 
   const SKY = {
     day: { bg: '#a9c6dc', fog: '#c7d6df', hemi: 1.25, sun: 1.6 },
@@ -29,10 +29,10 @@ const World = (() => {
     const s = SKY[TaipeiTime.sky()];
     if (!open) {
       scene.background = new T.Color('#1a1c1e'); scene.fog = new T.Fog('#2a2e33', 35, 110);
-      hemi.intensity = 1.15; sun.intensity = .35;
+      hemi.intensity = 1.75; sun.intensity = .45;
     } else {
       scene.background = new T.Color(s.bg); scene.fog = new T.Fog(s.fog, 50, 240);
-      hemi.intensity = Math.max(.9, s.hemi); sun.intensity = s.sun;
+      hemi.intensity = Math.max(1.3, s.hemi + .4); sun.intensity = s.sun;
     }
   }
   const night = () => TaipeiTime.sky() === 'night';
@@ -216,7 +216,7 @@ const World = (() => {
         player.x += dx / d * sp; player.z += dz / d * sp; player.face = Math.atan2(dx, dz); player.speed = 1.6; moved = true;
         const h = groundAt(player.x, player.z, player.y); if (h != null) player.y = h;
       }
-    } else if (player.inputOn) {
+    } else if (player.inputOn && !player.sitting) {
       let ix = 0, iy = 0;
       if (keys.l) ix -= 1; if (keys.r) ix += 1; if (keys.u) iy += 1; if (keys.d) iy -= 1;
       ix += joy.x; iy += joy.y;
@@ -249,6 +249,7 @@ const World = (() => {
     if (rig) {
       rig.root.position.set(player.x, player.y, player.z);
       rig.root.rotation.y = player.face;
+      rig.sit += ((player.sitting ? 1 : 0) - rig.sit) * Math.min(1, dt * 6);
       rig.update(dt, player.speed, now / 1000);
     }
     // 區域變化通知
@@ -330,7 +331,7 @@ const World = (() => {
       el.appendChild(renderer.domElement);
       scene = new T.Scene();
       camera = new T.PerspectiveCamera(55, 1, .05, 700);
-      hemi = new T.HemisphereLight('#ffffff', '#6b6d70', 1.1); scene.add(hemi);
+      hemi = new T.HemisphereLight('#ffffff', '#8a8c90', 1.7); scene.add(hemi);
       sun = new T.DirectionalLight('#fff4e0', 1); sun.position.set(20, 40, 25); scene.add(sun);
       env = new T.Group(); scene.add(env);
       bindInput();
@@ -347,7 +348,15 @@ const World = (() => {
     get env() { return env; },
     get camera() { return camera; },
     setRun(on) { runToggle = on; },
+    // 坐下／起身
+    sit(pos) {
+      if (pos) { player.sitting = true; player.x = pos.x; player.z = pos.z; player.face = pos.face; player.speed = 0; }
+      else { player.sitting = false; const tr = trainOf(player.x, player.z, player.y); if (tr) { const tz = tr.P.z + tr.side * S.TRACK; player.z = tz + Math.sign(player.z - tz) * .5; } }
+    },
+    get sitting() { return player.sitting; },
+    trainOf: (x, z, y) => trainOf(x, z, y),
     addTicker(fn) { tickers.push(fn); },
+    onRecenter(fn) { recenterHooks.push(fn); },
     get running() { return runToggle; },
     groundAt: (x, z, y) => groundAt(x, z, y),
     setCharacter(id) {
@@ -408,7 +417,7 @@ const World = (() => {
       if (rel > S.PLAT_HALF - .1 && rel < S.TRACK - 1.3) player.z = rel < (S.PSD + .2) ? tr.P.z + tr.side * (S.PLAT_HALF - .2) : tz - tr.side * 1.25;
     },
     // 搭乘：從目前車站開到 toId，回傳新車站版面；列車會停在新車站同一條線、同一側
-    async ride(tr, { toId, duration = 22, onSpeed, skip }) {
+    async ride(tr, { toId, duration = 22, onSpeed, skip, anomaly }) {
       const P = tr.P, travel = tr.travel, D = 520;
       const tx0 = P.x + tr.x, tz = P.z + tr.side * S.TRACK, ty = P.y;
       for (const o of [...trains]) if (o !== tr) this.removeTrain(o);
@@ -419,7 +428,7 @@ const World = (() => {
       const nextSur = S.surroundings(nextL, night());
       const off = new T.Vector3(tx0 + travel * D - P2.x, ty - P2.y, tz - (P2.z + tr.side * S.TRACK));
       nextGroup.position.copy(off); nextSur.position.copy(off);
-      segGroup = S.segment(tx0 + travel * 38, tx0 + travel * (D - 38), ty, tz, P.under, P2.under, tr.line, toId.charCodeAt(0), night());
+      segGroup = S.segment(tx0 + travel * 38, tx0 + travel * (D - 38), ty, tz, P.under, P2.under, tr.line, toId.charCodeAt(0) + toId.length * 17, night(), anomaly);
       env.add(nextGroup); env.add(nextSur); env.add(segGroup);
       const T0 = duration, ta = T0 * .25, td = T0 * .3, tc = T0 - ta - td;
       const vmax = D / (ta / 2 + tc + td / 2);
@@ -440,6 +449,9 @@ const World = (() => {
           env.position.x = -travel * p;
           shake = v;
           if (!skyDone && p > D / 2) { skyDone = true; applySky(!P2.under || nextL.hasElevated); }
+          // 經過幽靈月台時車廂燈閃爍
+          const lm = tr.group.userData.lightM;
+          if (lm) lm.emissiveIntensity = anomaly && Math.abs(p - D / 2) < 45 ? (Math.sin(now / 37) > .2 ? 1.6 : .15) : 1.6;
           onSpeed && onSpeed(v);
           t < T0 ? requestAnimationFrame(step) : res();
         };
@@ -453,6 +465,7 @@ const World = (() => {
       stationGroup.position.set(0, 0, 0); surround.position.set(0, 0, 0); env.position.set(0, 0, 0);
       player.x -= W.x; player.y -= W.y; player.z -= W.z;
       cam.pos.sub(W);
+      for (const fn of recenterHooks) fn(W);
       layout = nextL;
       tr.P = P2; tr.x = 0; placeTrain(tr); applyDoors(tr);
       riding = null;
