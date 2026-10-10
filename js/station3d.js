@@ -290,12 +290,29 @@ const Station3D = (() => {
     if (SHOPS[stationId]) spots.push({ kind: 'shop', x: unpaid.x0 + 2, y: 0, z: unpaid.z0 + 7 });
     if (GRAFFITI.includes(stationId)) spots.push({ kind: 'graffiti', x: concourse.x1 - 4, y: 0, z: concourse.z0 + .9 });
     for (const P of platforms) for (const s of [-1, 1]) spots.push({ kind: 'map', x: P.x, y: P.y, z: P.z + s * .9, line: P.line });
+    // 其他車站設施（可以查看）
+    const C = concourse, U = unpaid, big = !!SHOPS[stationId];
+    spots.push({ kind: 'fountain', x: C.x1 - 8, y: 0, z: C.z0 + .9 });
+    spots.push({ kind: 'aed', x: C.x1 - 10.5, y: 0, z: C.z0 + .9 });
+    spots.push({ kind: 'art', x: C.x0 + 14, y: 0, z: C.z0 + 1.1 });
+    spots.push({ kind: 'nursing', x: C.x1 - 1, y: 0, z: C.z0 + 5 });
+    spots.push({ kind: 'office', x: C.x0 + 1, y: 0, z: C.z0 + 5 });
+    spots.push({ kind: 'vending', x: U.x1 - 1.2, y: 0, z: U.z0 + 6.2 });
+    spots.push({ kind: 'areamap', x: -7.5, y: 0, z: U.z1 - 2.7 });
+    spots.push({ kind: 'timetable', x: 9.5, y: 0, z: gateZ + 2.4 });
+    spots.push({ kind: 'phone', x: U.x0 + 1.1, y: 0, z: U.z0 + 2.2 });
+    if (big) { spots.push({ kind: 'locker', x: U.x0 + 1.3, y: 0, z: U.z0 + 10.1 }); spots.push({ kind: 'atm', x: U.x1 - 1.3, y: 0, z: U.z0 + 4.7 }); }
+    for (const P of platforms) {
+      spots.push({ kind: 'fountain', x: P.x + 26.4, y: P.y, z: P.z + .9 });
+      spots.push({ kind: 'women', x: P.x - 12, y: P.y, z: P.z + 2.2, line: P.line });
+    }
     return { stationId, platforms, concourse, gateZ, unpaid, gates, spots, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
   }
 
   /* ── 建造車站 ── */
   function build(L, skyName) {
     textures();
+    clocks.length = 0;
     const g = new T.Group();
     const night = skyName === 'night';
     const frame = M('#4a5259', { r: .5, m: .4 });
@@ -506,9 +523,181 @@ const Station3D = (() => {
     sign(plainSign('失物招領', 'Lost & Found', '#23272b', '#fff', { bg: '#e08a2a', fg: '#fff', text: '?' }), 2.6, .65, U.x1 - 8.2, 2.9, U.z0 + 3, g);
     const mapBig = plane(2.4, 2.4, M('#ffffff', { map: routeMapTex() }), g); mapBig.position.set(U.x0 + .02 + 0, 1.7, U.z0 + 6); mapBig.rotation.y = Math.PI / 2; mapBig.position.x = U.x0 + .02;
 
+    furnish(L, g, night);
     g.userData = { psd, layout: L };
     mergeStatic(g);
     return g;
+  }
+
+
+  /* ── 車站設施：飲水機、AED、哺集乳室、站務室、公共藝術、廣告燈箱、時鐘、監視器、消防栓、
+   *    販賣機、資源回收桶、周邊地圖、首末班車時刻表、公共電話、置物櫃、ATM、緊急按鈕、夜間婦女候車區 ── */
+  const clocks = [];
+  function clockTex() {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace;
+    const ck = { c, t, last: -1 }; clocks.push(ck); drawClock(ck, true);
+    return t;
+  }
+  function drawClock(ck, force) {
+    const now = TaipeiTime.now(), m = now.hour * 60 + now.minute;
+    if (!force && m === ck.last) return;
+    ck.last = m;
+    const g = ck.c.getContext('2d');
+    g.fillStyle = '#1c2126'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#fbfbf8'; g.beginPath(); g.arc(64, 64, 58, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#23272b';
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; g.fillRect(64 + Math.sin(a) * 48 - 2, 64 - Math.cos(a) * 48 - 2, 4, 4); }
+    const hand = (a, len, w) => { g.lineWidth = w; g.lineCap = 'round'; g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.sin(a) * len, 64 - Math.cos(a) * len); g.stroke(); };
+    g.strokeStyle = '#23272b'; hand((now.hour % 12 + now.minute / 60) / 12 * Math.PI * 2, 30, 6); hand(now.minute / 60 * Math.PI * 2, 44, 4);
+    g.fillStyle = '#c4162a'; g.beginPath(); g.arc(64, 64, 4, 0, Math.PI * 2); g.fill();
+    ck.t.needsUpdate = true;
+  }
+  function tickClocks() { for (const ck of clocks) drawClock(ck); }
+  // 公益、活動廣告（虛構，不是真實品牌）
+  const ADS = [
+    { bg: '#c4162a', fg: '#fff', zh: '捐血一袋　救人一命', en: 'Donate blood, save lives' },
+    { bg: '#1f6f8b', fg: '#fff', zh: '淡水夕照攝影展', en: 'Tamsui Sunset Photo Exhibition' },
+    { bg: '#f2c200', fg: '#23272b', zh: '搭電扶梯　請緊握扶手', en: 'Hold the handrail' },
+    { bg: '#2a9d8f', fg: '#fff', zh: '台北城市散步　週末導覽', en: 'Taipei city walks' },
+    { bg: '#3a2a5a', fg: '#e9e7f0', zh: '霧——你看見了嗎？', en: 'Have you seen the mist?' },
+    { bg: '#e07a3a', fg: '#fff', zh: '夜市小吃節　開跑', en: 'Night market food festival' },
+    { bg: '#23272b', fg: '#f2c200', zh: '請勿在月台奔跑', en: 'Please do not run on the platform' },
+  ];
+  function adTex(i) {
+    const a = ADS[((i % ADS.length) + ADS.length) % ADS.length];
+    return canvasTex(512, 256, g => {
+      g.fillStyle = a.bg; g.fillRect(0, 0, 512, 256);
+      g.fillStyle = 'rgba(255,255,255,.12)'; for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(420 - k * 30, 60 + k * 25, 80 - k * 8, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = a.fg; g.font = 'bold 44px "Noto Sans TC", sans-serif'; g.fillText(a.zh, 30, 130);
+      g.font = '24px "Barlow Semi Condensed", sans-serif'; g.fillText(a.en, 32, 180);
+    });
+  }
+  // 公共藝術：每站不同的抽象畫
+  function artTex(stationId, color) {
+    const seed = [...stationId].reduce((a, c) => a * 31 + c.charCodeAt(0), 7);
+    let x = seed % 2147483647 || 1; const r = () => (x = x * 16807 % 2147483647) / 2147483647;
+    return canvasTex(512, 256, g => {
+      const gr = g.createLinearGradient(0, 0, 512, 256); gr.addColorStop(0, '#f4efe6'); gr.addColorStop(1, '#dcd6ca'); g.fillStyle = gr; g.fillRect(0, 0, 512, 256);
+      const pal = [color, '#c4162a', '#f2c200', '#2a5fb0', '#3d7a4a', '#23272b'];
+      for (let i = 0; i < 14; i++) {
+        g.globalAlpha = .55 + r() * .4; g.fillStyle = pal[(r() * pal.length) | 0];
+        if (r() < .5) { g.beginPath(); g.arc(r() * 512, r() * 256, 10 + r() * 60, 0, Math.PI * 2); g.fill(); }
+        else { g.save(); g.translate(r() * 512, r() * 256); g.rotate(r() * 3); g.fillRect(-60, -6, 120 + r() * 120, 8 + r() * 18); g.restore(); }
+      }
+      g.globalAlpha = 1; g.strokeStyle = color; g.lineWidth = 6; g.beginPath();
+      for (let i = 0; i <= 512; i += 8) g.lineTo(i, 200 + Math.sin(i / 40 + seed) * 24); g.stroke();
+      g.fillStyle = '#23272b'; g.font = '16px "Noto Sans TC", sans-serif'; g.fillText(`公共藝術　${stationId}`, 14, 244);
+    });
+  }
+  function furnish(L, g, night) {
+    const C = L.concourse, U = L.unpaid, hallH = 4.2, sp = k => L.spots.filter(x => x.kind === k);
+    const red = M('#c8202a', { r: .5 }), steelM = M('#c8cdd2', { r: .3, m: .8 }), darkM = M('#30363c', { r: .5 });
+    const domeM = M('#1c2126', { r: .2, m: .3 });
+    const cam = (x, y, z) => { box(.06, .2, .06, darkM, x, y - .1, z, g); const d = new T.Mesh(new T.SphereGeometry(.09, 10, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), domeM); d.position.set(x, y - .2, z); g.add(d); };
+    const speaker = (x, y, z) => box(.3, .06, .3, M('#e8e8e4'), x, y - .03, z, g);
+    const hydrant = (x, y, z, rot) => { const b = box(.7, 1.2, .2, red, x, y + .9, z, g); b.rotation.y = rot; const w = box(.5, .3, .21, M('#f6f6f4'), x, y + 1.15, z, g); w.rotation.y = rot; };
+    const fountain = (x, y, z, rot) => {
+      const grp = new T.Group(); grp.position.set(x, y, z); grp.rotation.y = rot; g.add(grp);
+      box(.5, .85, .4, steelM, 0, .425, 0, grp); box(.46, .06, .36, M('#e8ecf0', { m: .9, r: .15 }), 0, .88, .02, grp);
+      box(.08, .12, .06, steelM, 0, .97, -.1, grp);
+      sign(plainSign('飲水機', 'Drinking water', '#23272b', '#fff', { bg: '#2a7de1', fg: '#fff', text: '💧' }), .9, .22, 0, 1.55, -.19, grp);
+    };
+    // ── 大廳（付費區）──
+    const fz = C.z0 + .3;
+    fountain(C.x1 - 8, 0, C.z0 + .25, 0);
+    // AED
+    box(.5, .6, .18, M('#2f9e5a'), C.x1 - 10.5, 1.4, fz, g);
+    sign(plainSign('AED', '自動體外心臟電擊去顫器', '#2f9e5a', '#fff', { bg: '#fff', fg: '#c4162a', text: '♥' }), 1.2, .3, C.x1 - 10.5, 1.95, fz + .05, g);
+    // 廣告燈箱
+    for (const [x, i] of [[C.x1 - 15, 0], [C.x0 + 22, 3]]) if (x > 5 || x < -5) { box(3.2, 1.7, .12, M('#e8e8e4'), x, 1.7, fz, g); const p = plane(3, 1.5, M('#ffffff', { map: adTex(i + L.stationId.length), e: '#ffffff', ei: .15 }), g); p.position.set(x, 1.7, fz + .07); }
+    // 公共藝術（牆面大畫）
+    const art = plane(5, 2.5, M('#ffffff', { map: artTex(L.stationId, LINES[L.platforms[0].line].color) }), g); art.position.set(C.x0 + 14, 2.1, C.z0 + .03);
+    box(5.2, .08, .1, darkM, C.x0 + 14, .82, C.z0 + .05, g);
+    // 哺集乳室、站務室（側牆上的門）
+    for (const [x, zh, en, col, rot] of [[C.x1 - .02, '哺集乳室', 'Nursing room', '#e08aa8', -Math.PI / 2], [C.x0 + .02, '站務室', 'Staff only', '#5d6b7a', Math.PI / 2]]) {
+      const d = plane(1.2, 2.2, M(col === '#5d6b7a' ? '#7a8590' : '#f2d6de'), g); d.position.set(x, 1.1, C.z0 + 5); d.rotation.y = rot;
+      sign(plainSign(zh, en, '#23272b', '#fff', { bg: col, fg: '#fff', text: zh === '站務室' ? '⚙' : '♡' }), 1.8, .45, x + (rot < 0 ? -.05 : .05), 2.6, C.z0 + 5, g, rot);
+    }
+    hydrant(C.x1 - .15, 0, C.z0 + 8, -Math.PI / 2); hydrant(C.x0 + .15, 0, C.z0 + 8, Math.PI / 2);
+    // 時鐘、監視器、喇叭
+    const ct = M('#ffffff', { map: clockTex() });
+    for (const z of [L.gateZ - 2.5]) { box(.04, .4, .04, darkM, 0, hallH - .2, z, g); for (const s of [-1, 1]) { const c = plane(.7, .7, ct, g); c.position.set(0, hallH - .75, z + s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
+    for (const [x, z] of [[C.x0 + 3, C.z0 + 3], [C.x1 - 3, C.z0 + 3], [0, L.gateZ - 1.5], [C.x0 + 3, L.gateZ - 3], [C.x1 - 3, L.gateZ - 3]]) cam(x, hallH, z);
+    for (let x = C.x0 + 6; x < C.x1 - 3; x += 12) speaker(x, hallH, (C.z0 + L.gateZ) / 2);
+    // 無障礙寬閘門標示
+    sign(plainSign('寬閘門', 'Wide gate', '#2a5fb0', '#fff', { bg: '#fff', fg: '#2a5fb0', text: '♿' }), 1.4, .35, L.gates[L.gates.length - 1] + 1.2, 1.6, L.gateZ + .6, g);
+    // ── 非付費區 ──
+    // 自動販賣機
+    box(.9, 1.9, .8, M('#e8e8e4'), U.x1 - .5, .95, U.z0 + 6.2, g);
+    const vt = canvasTex(128, 256, x => { x.fillStyle = '#1f6f8b'; x.fillRect(0, 0, 128, 256); x.fillStyle = '#fff'; x.font = 'bold 18px sans-serif'; x.fillText('飲料', 40, 26); const cs = ['#e04848', '#f2c200', '#2a9d8f', '#f4f4f2', '#3a6a3a', '#a86a2a']; for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) { x.fillStyle = cs[(r + c) % 6]; x.fillRect(12 + c * 28, 44 + r * 46, 18, 34); } });
+    const vp = plane(.8, 1.6, M('#ffffff', { map: vt, e: '#ffffff', ei: .25 }), g); vp.position.set(U.x1 - .94, 1.05, U.z0 + 6.2); vp.rotation.y = -Math.PI / 2;
+    // 資源回收桶
+    for (const x of [-4, 4]) { box(.4, .8, .4, M('#2f9e5a'), x - .22, .4, U.z1 - .5, g); box(.4, .8, .4, M('#2a7de1'), x + .22, .4, U.z1 - .5, g); box(.86, .05, .42, darkM, x, .82, U.z1 - .5, g); }
+    // 周邊地圖
+    box(2, 1.4, .1, darkM, -7.5, 1.5, U.z1 - .15, g);
+    const am = canvasTex(512, 360, x => {
+      x.fillStyle = '#f6f3ea'; x.fillRect(0, 0, 512, 360); x.strokeStyle = '#d8d0bf'; x.lineWidth = 10;
+      for (let i = 40; i < 512; i += 90) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 30, 360); x.stroke(); } for (let i = 50; i < 360; i += 80) { x.beginPath(); x.moveTo(0, i); x.lineTo(512, i - 20); x.stroke(); }
+      x.fillStyle = '#3d7a4a'; x.globalAlpha = .4; x.fillRect(300, 210, 120, 90); x.globalAlpha = 1;
+      x.fillStyle = '#c4162a'; x.beginPath(); x.arc(256, 180, 12, 0, Math.PI * 2); x.fill();
+      x.fillStyle = '#23272b'; x.font = 'bold 26px "Noto Sans TC", sans-serif'; x.fillText(`${L.stationId}${L.stationId.endsWith('站') ? '' : '站'} 周邊地圖`, 16, 34);
+      x.font = '18px "Noto Sans TC", sans-serif'; ['1', '2', '3'].forEach((n, i) => { x.fillStyle = '#f2c200'; x.fillRect(150 + i * 90, 220, 30, 26); x.fillStyle = '#23272b'; x.fillText(n, 160 + i * 90, 240); });
+    });
+    const amp = plane(1.9, 1.3, M('#ffffff', { map: am }), g); amp.position.set(-7.5, 1.5, U.z1 - .21); amp.rotation.y = Math.PI;
+    // 首末班車時刻表
+    box(1.4, 1.8, .1, darkM, 9.5, 1.6, L.gateZ + 1.4, g); box(.1, .7, .1, darkM, 9.5, .35, L.gateZ + 1.4, g);
+    const tt = canvasTex(256, 330, x => {
+      x.fillStyle = '#fbfbf8'; x.fillRect(0, 0, 256, 330); x.fillStyle = '#23272b'; x.font = 'bold 22px "Noto Sans TC", sans-serif'; x.fillText('首末班車時刻', 14, 32);
+      x.font = '15px "Noto Sans TC", sans-serif'; let y = 64;
+      for (const P of L.platforms) for (const s of [1, -1]) for (const d of P.sides[s]) { if (y > 310) break; x.fillStyle = LINES[P.line].color; x.fillRect(14, y - 14, 8, 18); x.fillStyle = '#23272b'; x.fillText(`往 ${MRT.label(d.terminal, P.line).zh}　首班 06:00`, 28, y); y += 26; }
+    });
+    const ttp = plane(1.3, 1.67, M('#ffffff', { map: tt }), g); ttp.position.set(9.5, 1.6, L.gateZ + 1.46);
+    // 公共電話
+    box(.4, .6, .25, M('#2f9e5a'), U.x0 + .2, 1.4, U.z0 + 2.2, g); box(.1, .2, .1, darkM, U.x0 + .35, 1.45, U.z0 + 2.05, g);
+    sign(plainSign('公共電話', 'Public phone', '#23272b', '#fff'), 1.2, .3, U.x0 + .1, 2.05, U.z0 + 2.2, g, Math.PI / 2);
+    // 大站：置物櫃、ATM
+    if (SHOPS[L.stationId]) {
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) box(.62, .5, .02, M(['#f2c200', '#e8e8e4'][(i + j) % 2]), U.x0 + .72, .4 + j * .55, U.z0 + 9.45 + i * .66, g).rotation.y = Math.PI / 2;
+      box(.7, 2.3, 2.1, M('#b9c0c6', { m: .5 }), U.x0 + .35, 1.15, U.z0 + 10.1, g);
+      sign(plainSign('置物櫃', 'Lockers', '#23272b', '#fff'), 1.4, .35, U.x0 + .8, 2.6, U.z0 + 10.1, g, Math.PI / 2);
+      box(.8, 1.7, .7, M('#3a4a5a', { m: .4 }), U.x1 - .45, .85, U.z0 + 4.7, g);
+      const atm = plane(.4, .3, M('#2a7de1', { e: '#2a7de1', ei: .6 }), g); atm.position.set(U.x1 - .86, 1.3, U.z0 + 4.7); atm.rotation.y = -Math.PI / 2;
+      sign(plainSign('ATM', '提款機', '#23272b', '#fff'), 1, .3, U.x1 - .9, 2.1, U.z0 + 4.7, g, -Math.PI / 2);
+    }
+    for (const [x, z] of [[U.x0 + 3, U.z0 + 2], [U.x1 - 3, U.z1 - 3], [0, U.z0 + 6]]) cam(x, hallH, z);
+    // ── 月台 ──
+    for (const P of L.platforms) {
+      const pg = new T.Group(); pg.position.set(P.x, P.y, P.z); g.add(pg);
+      const top = P.under ? 3.4 : 3.8;
+      // 飲水機（靠近端點的柱子）
+      const f = new T.Group(); f.position.set(26.4, 0, .45); pg.add(f);
+      box(.5, .85, .4, steelM, 0, .425, 0, f); box(.46, .06, .36, M('#e8ecf0', { m: .9, r: .15 }), 0, .88, 0, f);
+      // 柱子上的緊急停止按鈕、消防栓
+      for (const x of [-28, 0, 28]) {
+        box(.2, .2, .08, M('#f2c200'), x, 1.5, .39, pg); box(.1, .1, .04, red, x, 1.5, .44, pg);
+        box(.22, .2, .08, M('#f2c200'), x, 1.5, -.39, pg); box(.1, .1, .04, red, x, 1.5, -.44, pg);
+      }
+      if (P.under) for (const ex of [-1, 1]) { const h = box(.2, 1.2, .7, red, ex * (LEN / 2 - .05), .9, -1.6, pg); void h; }
+      // 時鐘
+      const pct = M('#ffffff', { map: clockTex() });
+      for (const x of [-10, 10]) { box(.04, .35, .04, darkM, x, top - .17, 0, pg); for (const s of [-1, 1]) { const c = plane(.6, .6, pct, pg); c.position.set(x, top - .65, s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
+      // 監視器、喇叭
+      for (const x of [-30, -16, 2, 16, 30]) { cam(P.x + x, P.y + top, P.z + 1.4); cam(P.x + x + 2, P.y + top, P.z - 1.4); }
+      for (const x of [-20, 0, 20]) speaker(P.x + x + 4, P.y + top, P.z);
+      // 夜間婦女候車區（+1 側地面＋吊牌）
+      const wz = plane(3, .9, M('#d870a0', { t: true, o: .55 }), pg); wz.rotation.x = -Math.PI / 2; wz.position.set(-12, .007, 2.2);
+      sign(plainSign('夜間婦女候車區', 'Women\'s waiting zone (night)', '#d870a0', '#fff'), 2, .45, -12, 2.4, 2.35, pg);
+      // 軌道外牆的廣告燈箱（地下月台）
+      if (P.under) for (const s of [-1, 1]) for (const [k, x] of [-24, -12, 0, 12, 24].entries()) {
+        const p = plane(3.2, 1.6, M('#ffffff', { map: adTex(k + s + P.k), e: '#ffffff', ei: .2 }), pg); p.position.set(x, 1.4, s * 6.86); p.rotation.y = s > 0 ? Math.PI : 0;
+      }
+      // 車門編號（全高月台門上方）
+      if (P.under || P.line === 'BR') for (const s of [-1, 1]) DOORS.forEach((d, i) => {
+        const nt = canvasTex(64, 32, x => { x.fillStyle = '#23272b'; x.fillRect(0, 0, 64, 32); x.fillStyle = '#fff'; x.font = 'bold 20px "Barlow Semi Condensed", sans-serif'; x.textAlign = 'center'; x.fillText(`${Math.floor(i / DOOR_OFF.length) + 1}-${i % DOOR_OFF.length + 1}`, 32, 24); });
+        const p = plane(.4, .2, M('#ffffff', { map: nt }), pg); p.position.set(d, 2.52, s * (PSD - .17)); p.rotation.y = s > 0 ? Math.PI : 0;
+      });
+    }
   }
 
   // 電扶梯（往大廳、往月台）＋中間樓梯
@@ -786,7 +975,7 @@ const Station3D = (() => {
   }
 
   return {
-    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS,
+    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS, tickClocks,
     layout, build, makeTrain, segment, surroundings, sides,
     drawLcd, drawStrip, drawLed, SKY_CITY,
   };

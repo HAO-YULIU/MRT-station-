@@ -26,6 +26,9 @@ const ITEMS = {
   bubbletea: { name: '珍珠奶茶', desc: '半糖少冰。可以送人，也可以自己喝。', icon: '🧋', price: 60, shop: true, eat: '喝' },
   coffee: { name: '美式咖啡', desc: '上班族最需要的東西。', icon: '☕', price: 55, shop: true, eat: '喝' },
   onigiri: { name: '御飯糰', desc: '鮪魚口味。', icon: '🍙', price: 35, shop: true, eat: '吃' },
+  water: { name: '礦泉水', desc: '販賣機買的，冰的。', icon: '💧', price: 20, shop: true, eat: '喝' },
+  greentea: { name: '無糖綠茶', desc: '販賣機買的。', icon: '🍵', price: 25, shop: true, eat: '喝' },
+  sportdrink: { name: '運動飲料', desc: '跑完步最需要的。', icon: '🥤', price: 30, shop: true, eat: '喝' },
   soymilk: { name: '冰豆漿', desc: '早餐店的味道。', icon: '🥛', price: 25, shop: true, eat: '喝' },
   bread: { name: '菠蘿麵包', desc: '外皮酥酥的，還是溫的。', icon: '🍞', price: 35, shop: true, eat: '吃' },
   chicken: { name: '炸雞排', desc: '比臉還大，要切不要辣。', icon: '🍗', price: 80, shop: true, eat: '吃' },
@@ -60,6 +63,8 @@ const ITEMS = {
   ch_phone: { name: '手機', desc: '鎖定畫面是一隻柴犬。', icon: '📱' },
   ch_keys: { name: '鑰匙圈', desc: '上面掛著一個迷你月台吊飾。', icon: '🔑' },
   ch_hat: { name: '毛線帽', desc: '手織的，針腳有點歪。', icon: '🧶' },
+  ring: { name: '婚戒', desc: '內側刻著兩個名字的縮寫。', icon: '💍' },
+  bento: { name: '排骨便當', desc: '還是熱的，要趕快送到。', icon: '🍱' },
   ghostticket: { name: '霧的車票', desc: '站名欄寫著「霧」，票價欄是空白的。', icon: '🎟️' },
 };
 
@@ -185,6 +190,32 @@ const QUESTS = {
       { text: '在淡水找到紙條（三）', goal: { kind: 'find', item: 'note3', station: '淡水' } },
     ],
     reward: { money: 250, xp: 200 },
+  },
+
+  /* ── 新增支線 ── */
+  ring: {
+    type: 'side', title: '月台縫裡的戒指', giver: 'afang',
+    desc: '清潔阿姨阿芳說，昨天有位小姐的婚戒掉在西門站，一直找不到。',
+    steps: [
+      { text: '在西門站的月台或大廳角落找到戒指', goal: { kind: 'find', item: 'ring', station: '西門' } },
+      { text: '把戒指交給阿芳', goal: { kind: 'give', npc: 'afang', item: 'ring' } },
+    ],
+    reward: { money: 250, xp: 150, friend: { afang: 15 } },
+  },
+  delivery: {
+    type: 'side', title: '趕時間的便當', giver: 'ade',
+    desc: '外送員阿德手上還有三單，請你幫忙把一個便當送到中山站的捷運警察志明手上。',
+    steps: [{ text: '把排骨便當交給中山站的志明', goal: { kind: 'give', npc: 'zhiming', item: 'bento' } }],
+    reward: { money: 200, xp: 140, friend: { ade: 10, zhiming: 10 } },
+  },
+  teacher: {
+    type: 'side', title: '三十年前的學生', giver: 'wang',
+    desc: '王老師想知道，以前那個上課都在畫畫的學生阿遠，現在過得好不好。',
+    steps: [
+      { text: '到淡水找街頭畫家阿遠', goal: { kind: 'talk', npc: 'yuan' } },
+      { text: '回古亭告訴王老師', goal: { kind: 'talk', npc: 'wang' } },
+    ],
+    reward: { money: 220, xp: 180, friend: { wang: 20, yuan: 10 } },
   },
 
   /* ── 限時活動 ── */

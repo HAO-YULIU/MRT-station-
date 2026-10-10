@@ -389,6 +389,7 @@ function sideDirs(P, side) {
 
 function tickStation() {
   if (!ctl) return;
+  Station3D.tickClocks();
   const id = ctl.id, L = World.layout, z = World.zone();
   const open = TaipeiTime.state() === 'open';
   // 玩家所在的月台：兩側 LED 更新，並安排進站
@@ -619,8 +620,12 @@ const dropInteraction = {
   run: () => Passengers.takeDrop(),
 };
 // 查看告示牌、塗鴉、路線圖
-const SPOT_NAME = { notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店' };
-const SPOT_VERB = { elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店' };
+const SPOT_NAME = {
+  notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
+  fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
+  timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
+};
+const SPOT_VERB = { elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
@@ -632,11 +637,44 @@ const spotInteraction = {
     if (sp.kind === 'ticket') return Dialog.info('售票機・票價表', fareTable(st));
     if (sp.kind === 'toilet') return restroom();
     if (sp.kind === 'shop') return shopMenu(st);
+    if (FACILITY[sp.kind]) return FACILITY[sp.kind](sp, st);
     const done = Quests.emit({ kind: 'inspect', spot: sp.kind, station: st });
     Dialog.info(SPOT_NAME[sp.kind], spotText(sp, st, done.length > 0));
     for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
   },
 };
+// 車站設施
+const FACILITY = {
+  fountain: () => { Sound.click(); toast(['<b>喝了幾口水</b><span>冰冰涼涼的。</span>', '<b>喝了幾口水</b><span>出水有點小，要湊很近。</span>', '<b>喝了幾口水</b><span>精神好一點了。</span>'][(Math.random() * 3) | 0]); },
+  aed: () => Dialog.info('AED', '自動體外心臟電擊去顫器。打開箱門會有警報聲，裡面的機器會用語音一步一步教你怎麼用。<br>旁邊貼著站務員的分機號碼。'),
+  art: (sp, st) => Dialog.info('公共藝術', `這幅作品叫《${esc(st)}・${['晨光', '流動', '交會', '回聲', '城市的呼吸', '月台之間'][st.length % 6]}》。<br>藝術家用${esc(LINES[MRT.linesAt(st)[0].line].zh)}的顏色畫了一條穿過城市的線。${TaipeiTime.state() !== 'open' ? '' : TaipeiTime.now().hour >= 23 ? '<br>……夜深了，畫裡好像多了一個戴紅色貝雷帽的小人影。' : ''}`),
+  nursing: () => Dialog.info('哺集乳室', '給需要哺乳、集乳的人使用。門口有按鈕，使用中會亮紅燈。裡面有沙發、尿布台和洗手台。'),
+  office: () => Dialog.info('站務室', '門上寫著「非工作人員請勿進入」。<br>門縫底下透出一點光，裡面的螢幕牆顯示著每一座月台的監視畫面。'),
+  women: () => Dialog.info('夜間婦女候車區', '晚上 10 點到隔天早上 6 點，女性旅客可以在這一區候車。這裡在監視器拍得到的範圍，旁邊就有緊急對講機。'),
+  locker: () => Dialog.info('置物櫃', '大小兩種櫃子，用悠遊卡付費。大部分都有人用了，只剩最下面一格空著。'),
+  atm: () => Dialog.info('ATM', '提款機。螢幕上寫著：「本機暫停服務」。'),
+  phone: () => {
+    const t = TaipeiTime.now();
+    if (t.hour === 0) return Dialog.info('公共電話', '你拿起話筒。沒有撥號音，只有一陣很遠的列車聲。<br>然後有人輕輕地說：「下一站，霧。」<br>……電話斷了。');
+    Dialog.info('公共電話', ['嘟——嘟——……沒有人接。', '話筒裡傳來報時台的聲音：「現在時間，' + TaipeiTime.clock() + '。」', '你想了半天，發現自己已經不記得任何人的電話號碼了。'][(Math.random() * 3) | 0]);
+  },
+  areamap: (sp, st) => {
+    const lm = Puzzles.LANDMARK[st], rail = Puzzles.RAIL[st];
+    Dialog.info(`${esc(st)}${st.endsWith('站') ? '' : '站'} 周邊地圖`, `你在這裡（紅點）。${lm ? `<br>出站後最有名的是：<b>${esc(lm)}</b>。` : '<br>附近大多是住宅區和街道，地圖上標了公車站和公園。'}${rail ? `<br>本站還可以轉乘：<b>${esc(rail)}</b>。` : ''}`);
+  },
+  timetable: (sp, st) => {
+    const rows = MRT.directionsAt(st).map(d => `<tr><td>${lineChip(d.line)}往 ${esc(MRT.label(d.terminal, d.line).zh)}</td><td>首班 06:00</td></tr>`).join('');
+    Dialog.info('首末班車時刻表', `<table class="fares">${rows}</table><small>末班車時間依各方向不同，月台 LED 看板會顯示「末班車」。全線 00:30 前收班。</small>`);
+  },
+  vending: () => vendMenu(),
+};
+function vendMenu() {
+  const s = Game.state;
+  Dialog.show({ name: '自動販賣機', role: '嗶一下悠遊卡' }, `餘額 NT$ ${s.money}。`, ['water', 'greentea', 'sportdrink'].map(id => ({
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}`, disabled: s.money < ITEMS[id].price,
+    run: () => { s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>咚！${ITEMS[id].icon} ${ITEMS[id].name} 掉下來了</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); vendMenu(); },
+  })).concat([{ label: '離開', run: () => Dialog.close() }]));
+}
 function spotText(sp, st, questHit) {
   const h = TaipeiTime.now().hour;
   if (sp.kind === 'map') {

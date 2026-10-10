@@ -128,6 +128,98 @@ const NPCS = {
     lines: ['文湖線的車是自動駕駛的，但我們還是每天要巡。'],
     questTalk: { main_BR: '駕駛室有人說話？……我們的紀錄器確實錄到一段聲音，在報站名，報的是一個不存在的站。' },
   },
+  afang: {
+    name: '阿芳', role: '清潔阿姨', station: '西門', spot: 'concourse', hours: [[6, 14]], speed: .9,
+    look: { girl: true, old: true, skin: '#d8a888', hair: 'bun', hairColor: '#5a4a40', top: '#5a8a6a', pattern: 'plain', bottom: '#2a3a3a', hat: 'cap', hatColor: '#5a8a6a' },
+    gives: ['ring'], likes: ['soymilk', 'bread'],
+    lines: ['地板剛拖過，小心滑喔。', '西門站假日的垃圾，比平常多三倍。', '每天第一班車以前，這裡安靜得像另一個地方。'],
+    rumors: ['清晨五點多拖月台的時候，常常看到地上有濕濕的腳印，一路走到軌道那邊就不見了。'],
+    questTalk: { ring: '就是這個！我昨天聽到那位小姐一直哭……我會好好交給她。謝謝你，孩子。' },
+    knows: [{ npc: 'zhiming', text: '中山站的志明是好警察，有事可以找他。' }],
+  },
+  zhiming: {
+    name: '志明', role: '捷運警察', station: '中山', spot: 'concourse', hours: [[8, 22]], speed: 1.0,
+    look: { skin: '#d8a888', hair: 'short', hairColor: '#151515', top: '#1f2f4a', pattern: 'plain', bottom: '#1f2a3a', hat: 'cap', hatColor: '#1f2f4a', height: 1.05 },
+    likes: ['coffee', 'bento'],
+    lines: ['有需要幫忙可以跟我說。', '搭電扶梯請站穩扶好。', '最近扒手比較多，包包要背前面。'],
+    rumors: ['監視器有一段畫面，凌晨一點，有個戴紅色貝雷帽的女孩站在月台上。可是那時候車站早就關了。'],
+    questTalk: { delivery: '我的便當！我還以為今天要餓肚子了，謝謝。' },
+  },
+  wang: {
+    name: '王老師', role: '退休國文老師', station: '古亭', spot: 'platform', hours: [[9, 17]], speed: .7,
+    look: { old: true, skin: '#e2b49c', hair: 'short', hairColor: '#cfcfcf', top: '#6a5a4a', pattern: 'knit', bottom: '#3a3a40', glasses: true },
+    gives: ['teacher'], likes: ['nougat', 'sunnycake', 'greentea'],
+    lines: ['年輕人，坐捷運也要記得看看窗外。', '我教了三十年書，記得每一個學生的名字。'],
+    rumors: ['以前有個學生跟我說，她在霧裡看過一座車站，站名只有一個字。'],
+    questTalk: { teacher: '阿遠？他還在畫畫……那就好，那就好。' },
+    knows: [{ npc: 'yuan', text: '阿遠以前上課都在課本上畫畫，現在聽說在淡水。' }],
+  },
+  ade: {
+    name: '阿德', role: '外送員', station: '忠孝復興', spot: 'concourse', hours: [[11, 14], [17, 22]], speed: 1.8,
+    look: { skin: '#c89070', hair: 'short', hairColor: '#151515', top: '#2fb36a', pattern: 'plain', bottom: '#2a2a2a', bag: 'backpack', bagColor: '#2fb36a', hat: 'cap', hatColor: '#2fb36a' },
+    gives: ['delivery'], likes: ['chicken', 'sportdrink'],
+    lines: ['快快快，還有三單！', '騎車太危險了，今天下雨我改坐捷運送。'],
+    rumors: ['有一單地址寫「霧站 1 號出口」，我找了一晚上都找不到。'],
+    knows: [{ npc: 'zhiming', text: '中山站的志明每天都點同一家便當。' }],
+  },
+  lily: {
+    name: 'Lily', role: '交換學生', station: '公館', spot: 'concourse', hours: [[10, 20]], speed: 1.2,
+    look: { girl: true, skin: '#f2d2c0', hair: 'long', hairColor: '#c8a060', top: '#3aa0c0', pattern: 'plain', bottom: '#2a3a5a', bag: 'tote', bagColor: '#e6dcc6' },
+    likes: ['bubbletea', 'postcard', 'pineapplecake'],
+    lines: ['我在這裡交換一年，中文還在學……', '台灣的珍珠奶茶 is the best!', '捷運上大家都好安靜。'],
+    rumors: ['My roommate said 半夜的捷運廣播會說一個 station name 她查不到。'],
+  },
+  grandma: {
+    name: '陳奶奶', role: '帶孫子出門', station: '木柵', spot: 'platform', hours: [[9, 12], [15, 18]], speed: .6,
+    look: { girl: true, old: true, skin: '#e2b49c', hair: 'bun', hairColor: '#d8d8d4', top: '#8a4a5a', pattern: 'knit', bottom: '#3a3a40' },
+    likes: ['bread', 'pineapplecake'],
+    lines: ['帶孫子去動物園。', '文湖線看得到外面，孫子最喜歡坐第一節。'],
+    rumors: ['我先生以前在文湖線工作。他說有一次試車，車子自己停在一個不存在的站。'],
+  },
+  xiaojie: {
+    name: '小傑', role: '街舞少年', station: '劍潭', spot: 'concourse', hours: [[16, 23]], speed: 1.6,
+    look: { skin: '#d8a888', hair: 'mush', hairColor: '#151515', top: '#1d1d20', pattern: 'plain', bottom: '#4a4a52', hat: 'cap', hatColor: '#c4162a' },
+    likes: ['sausage', 'sportdrink'],
+    lines: ['晚上大家都在這附近練舞。', '下個月比賽，我一定要贏。'],
+    rumors: ['練到很晚的時候，玻璃上的倒影會多一個人跟著我們跳。'],
+  },
+  zhou: {
+    name: '老周', role: '夜班保全', station: '南港展覽館', spot: 'concourse', hours: [[19, 24]], speed: .8,
+    look: { old: true, skin: '#cf9f86', hair: 'short', hairColor: '#9a9a96', top: '#2a3a4a', pattern: 'plain', bottom: '#1f2a3a', hat: 'cap', hatColor: '#2a3a4a' },
+    likes: ['coffee', 'water'],
+    lines: ['展覽散場的時候人最多。', '我巡夜巡了十幾年。'],
+    rumors: ['收班以後我巡到月台，看到一個提著燈的女孩。我叫她，她回頭笑了一下，就不見了。'],
+    knows: [{ npc: 'xiuyu', text: '那個提燈的女孩……如果你看到她，幫我問她冷不冷。' }],
+  },
+  xiaomei: {
+    name: '小梅', role: '花店老闆娘', station: '中山', spot: 'concourse', hours: [[10, 21]], speed: .9,
+    look: { girl: true, skin: '#f2cdb9', hair: 'bob', hairColor: '#4a2a1a', top: '#f4e6d8', pattern: 'plain', bottom: '#6a5a48', glasses: true },
+    likes: ['pineapplecake', 'greentea'],
+    lines: ['今天的滿天星很漂亮喔。', '常常有人買花，卻不知道要送誰。'],
+    rumors: ['有位老先生每天都來買一朵白玫瑰，說要送給「在霧裡等他的人」。'],
+  },
+  yuan: {
+    name: '阿遠', role: '街頭畫家', station: '淡水', spot: 'concourse', hours: [[13, 20]], speed: .5,
+    look: { skin: '#d8a888', hair: 'mush', hairColor: '#2a1a12', top: '#d8c3a5', pattern: 'plain', bottom: '#3a3a40', hat: 'beret', hatColor: '#3a3a3a' },
+    likes: ['greentea', 'postcard'],
+    lines: ['淡水的夕陽，每天顏色都不一樣。', '要不要幫你畫一張？'],
+    rumors: ['我畫過一張捷運路網圖，畫完才發現多畫了一條線，灰色的。'],
+    questTalk: { teacher: '王老師？他還記得我？……幫我跟他說，我現在每天都在畫畫，叫他不要擔心。' },
+  },
+  jiahao: {
+    name: '嘉豪', role: '晨跑族', station: '大安森林公園', spot: 'concourse', hours: [[6, 9]], speed: 2.2,
+    look: { skin: '#c89070', hair: 'short', hairColor: '#151515', top: '#e04848', pattern: 'plain', bottom: '#1d1d20', height: 1.04 },
+    likes: ['sportdrink', 'water'],
+    lines: ['早上在公園跑一圈，再坐捷運上班。', '你也要一起跑嗎？'],
+    rumors: ['清晨跑步的時候，常看到一個穿白大衣的女孩坐在公園長椅上，好像在等第一班車。'],
+  },
+  linbo: {
+    name: '林伯', role: '退休司機', station: '北投', spot: 'platform', hours: [[8, 16]], speed: .7,
+    look: { old: true, skin: '#cf9f86', hair: 'short', hairColor: '#cfcfcf', top: '#4a5a6a', pattern: 'plain', bottom: '#2a2a30', hat: 'cap', hatColor: '#4a5a6a' },
+    likes: ['coffee', 'onigiri'],
+    lines: ['我以前在捷運開車。', '新北投支線只有一站，可是很多人專程來坐。'],
+    rumors: ['我最後一次開末班車，到站以後回頭看，車廂裡還坐著一個人。可是我明明清過車了。'],
+  },
   eventstaff: {
     name: '活動志工', role: '節慶活動', station: '台北車站', spot: 'concourse', hours: [[9, 21]], speed: 0, event: '*',
     look: { girl: true, skin: '#efc4ae', hair: 'bun', hairColor: '#1a1a1a', top: '#c4162a', pattern: 'plain', bottom: '#f4f4f2', hat: 'cap', hatColor: '#1f3a8a' },
@@ -157,8 +249,22 @@ const CROWD_TYPES = {
   elder: { speed: [.6, .9], gen: r => ({ girl: r() < .5, old: true, top: ['#7a5a7a', '#6b7a5a', '#8a7a6a'][r() * 3 | 0], pattern: 'knit', bottom: '#3a3a40', hat: r() < .4 ? 'cap' : null, hatColor: '#6b5a3a' }) },
   tourist: { speed: [.9, 1.2], gen: r => ({ girl: r() < .5, top: ['#e07a3a', '#3aa0c0', '#f2c200', '#c03a6a'][r() * 4 | 0], pattern: 'plain', bottom: '#6a7a5a', bag: r() < .6 ? 'backpack' : 'tote', hat: r() < .5 ? 'cap' : null }) },
   casual: { speed: [1.1, 1.5], gen: r => ({ girl: r() < .5, top: ['#2a2a2a', '#d8c3a5', '#4a5a7a', '#a33a3a', '#3d6b5a'][r() * 5 | 0], pattern: r() < .3 ? 'stripe' : 'plain', bottom: ['#2a3a5a', '#1a1a1a', '#6a5a4a'][r() * 3 | 0], bag: r() < .4 ? 'tote' : null }) },
+  staff: { speed: [.9, 1.2], gen: r => ({ girl: r() < .4, top: '#e9edf2', pattern: 'uniform', accent: '#1f3a6b', bottom: '#1f2a3a', hat: 'cap', hatColor: '#1f3a6b' }) },
+  cleaner: { speed: [.6, .9], gen: r => ({ girl: r() < .7, old: r() < .6, top: '#5a8a6a', pattern: 'plain', bottom: '#2a3a3a', hat: 'cap', hatColor: '#5a8a6a' }) },
+  police: { speed: [1.0, 1.2], gen: r => ({ girl: r() < .2, top: '#1f2f4a', pattern: 'plain', bottom: '#1f2a3a', hat: 'cap', hatColor: '#1f2f4a', height: 1.04 }) },
+  delivery: { speed: [1.8, 2.3], gen: r => ({ girl: r() < .2, top: ['#2fb36a', '#e0447a'][r() * 2 | 0], pattern: 'plain', bottom: '#2a2a2a', bag: 'backpack', bagColor: '#2fb36a', hat: 'cap', hatColor: '#2a2a2a' }) },
+  kid: { speed: [1.3, 1.8], gen: r => ({ girl: r() < .5, top: ['#f2c200', '#e07a8a', '#3aa0c0', '#7ac04a'][r() * 4 | 0], pattern: r() < .4 ? 'stripe' : 'plain', bottom: '#2a3a5a', height: .62, bag: r() < .5 ? 'backpack' : null, bagColor: '#e04848' }) },
+  runner: { speed: [2.2, 2.8], gen: r => ({ girl: r() < .4, top: ['#e04848', '#2a7de1', '#f2c200'][r() * 3 | 0], pattern: 'plain', bottom: '#1d1d20' }) },
+  foreigner: { speed: [1.0, 1.3], gen: r => ({ girl: r() < .5, top: ['#f4f4f2', '#3a6a9a', '#a86a2a'][r() * 3 | 0], pattern: 'plain', bottom: '#6a7a5a', bag: 'backpack', bagColor: '#5a5a5a', height: 1.06, foreign: true }) },
 };
 const CROWD_TALK = {
+  staff: ['列車進站，請勿超越黃色警戒線。', '需要幫忙嗎？', '轉乘請往電扶梯上大廳。'],
+  cleaner: ['小心地滑喔。', '垃圾請帶走，謝謝。', '這站的地板我拖了十年。'],
+  police: ['包包請背在前面。', '有任何問題可以找我們。', '晚上回家注意安全。'],
+  delivery: ['不好意思借過！', '還有兩單要送……', '電梯呢電梯在哪？'],
+  kid: ['我要坐第一節車廂！', '媽媽說不可以在月台跑。', '你看！列車來了！'],
+  runner: ['呼……呼……再一站。', '早上空氣比較好。', '借過借過！'],
+  foreigner: ['Excuse me, where is the exit?', '謝謝！Thank you!', 'This station is so clean.'],
   office: ['要遲到了要遲到了……', '今天又要開一整天的會。', '捷運上睡著，差點坐過站。'],
   student: ['明天要小考，我完全沒讀。', '放學要不要去西門？', '你也是這個學校的嗎？'],
   elder: ['年輕人，走慢一點啦。', '以前這裡都是稻田喔。', '敬老卡真好用。'],
@@ -173,6 +279,11 @@ function crowdMix(hour) {
   if (hour >= 17 && hour < 20) return { n: 11, w: { office: 6, student: 2, casual: 3 } };
   if (hour >= 20 && hour < 23) return { n: 6, w: { casual: 4, office: 2 } };
   return { n: 3, w: { casual: 2, office: 1 } };
+}
+// 依時段的人群之外，再加上站務、清潔、警察、外送、小孩、跑步、外國旅客
+function crowdExtra(hour) {
+  const w = { staff: 2, cleaner: hour < 10 ? 2 : 1, police: 1, foreigner: hour >= 9 && hour < 21 ? 2 : 0, delivery: (hour >= 11 && hour < 14) || (hour >= 17 && hour < 21) ? 2 : 0, kid: (hour >= 9 && hour < 19) ? 2 : 0, runner: hour >= 6 && hour < 9 ? 2 : 0 };
+  return { n: hour >= 6 && hour < 23 ? 4 : 2, w };
 }
 
 /* ── NPC 管理 ── */
@@ -251,17 +362,19 @@ const NPCManager = (() => {
       addNpc({ id: 'xiuyu', ...NPCS.xiuyu, pos, named: true, area: xs.hidden ? xs.area : { kind: 'concourse' }, speed: xs.hidden ? 0 : .8 });
     }
     // 人群
-    const mix = crowdMix(TaipeiTime.now().hour);
+    const hr = TaipeiTime.now().hour, mix = crowdMix(hr), ex = crowdExtra(hr);
     const types = Object.entries(mix.w).flatMap(([k, n]) => Array(n).fill(k));
-    for (let i = 0; i < mix.n; i++) {
-      const type = types[(rnd() * types.length) | 0], C = CROWD_TYPES[type];
+    const extra = Object.entries(ex.w).flatMap(([k, n]) => Array(n).fill(k));
+    for (let i = 0; i < mix.n + ex.n; i++) {
+      const type = i < mix.n ? types[(rnd() * types.length) | 0] : extra[(rnd() * extra.length) | 0], C = CROWD_TYPES[type];
       const look = { skin: SKINS[(rnd() * SKINS.length) | 0], hairColor: HAIRS[(rnd() * HAIRS.length) | 0], height: .94 + rnd() * .12, ...C.gen(rnd) };
       look.hair = look.girl ? ['long', 'bob', 'bun'][(rnd() * 3) | 0] : ['short', 'mush', 'short'][(rnd() * 3) | 0];
       if (look.old) look.hairColor = '#cfcfcf';
-      if (look.girl && type !== 'student' && rnd() < .4) look.skirt = true;
+      if (look.foreign) { look.skin = ['#f2d6c8', '#f5dccf', '#8a5a40'][(rnd() * 3) | 0]; look.hairColor = ['#c8a060', '#8a5a30', '#1a1a1a'][(rnd() * 3) | 0]; }
+      if (look.girl && type !== 'student' && type !== 'kid' && rnd() < .4) look.skirt = true;
       const area = rnd() < .5 ? { kind: 'concourse' } : { kind: 'platform', P: L.platforms[(rnd() * L.platforms.length) | 0] };
       const pos = randomPoint(area); if (!pos) continue;
-      addNpc({ id: 'crowd' + i, name: { office: '上班族', student: '學生', elder: '長輩', tourist: '觀光客', casual: '路人' }[type], type, look, pos, area, speed: C.speed[0] + rnd() * (C.speed[1] - C.speed[0]) });
+      addNpc({ id: 'crowd' + i, name: { office: '上班族', student: '學生', elder: '長輩', tourist: '觀光客', casual: '路人', staff: '站務員', cleaner: '清潔人員', police: '捷運警察', delivery: '外送員', kid: '小朋友', runner: '晨跑的人', foreigner: '外國旅客' }[type], type, look, pos, area, speed: C.speed[0] + rnd() * (C.speed[1] - C.speed[0]) });
     }
   }
   // 秀蔅藏身處：某個月台的端點附近，或大廳角落
@@ -405,6 +518,7 @@ const Dialog = (() => {
   function onAccept(qid) {
     // 部分任務接下時會拿到東西
     if (qid === 'letter') { Game.state.inv.letter = (Game.state.inv.letter || 0) + 1; toast('<b>拿到 💌 粉紅色信封</b>'); }
+    if (qid === 'delivery') { Game.state.inv.bento = (Game.state.inv.bento || 0) + 1; toast('<b>拿到 🍱 排骨便當</b>'); }
     saveState(); updateHud();
   }
   function chat(npc) {

@@ -195,5 +195,5 @@ const Puzzles = (() => {
     return (chCache[key] = c);
   }
 
-  return { stations, hops, question, challenge, LOST };
+  return { stations, hops, question, challenge, LOST, LANDMARK, RAIL };
 })();
