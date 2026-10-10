@@ -147,21 +147,28 @@ const World = (() => {
     });
     window.addEventListener('keyup', e => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
     window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-    let drag = null;
+    // 單指拖曳轉視角；雙指捏合縮放（拉近／拉遠鏡頭）
+    const pts = new Map();
+    let pinch = null;
+    const zoomTo = d => { cam.dist = Math.min(9, Math.max(1.2, d)); };
+    const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
     container.addEventListener('pointerdown', e => {
       if (e.target.closest('.joystick')) return;
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
-      container.setPointerCapture(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { container.setPointerCapture(e.pointerId); } catch (_) {}
+      if (pts.size === 2) pinch = { d: spread(), dist: cam.dist };
     });
     container.addEventListener('pointermove', e => {
-      if (!drag || drag.id !== e.pointerId) return;
-      cam.yaw -= (e.clientX - drag.x) * .006;
-      cam.pitch = Math.min(.9, Math.max(.05, cam.pitch + (e.clientY - drag.y) * .004));
-      drag.x = e.clientX; drag.y = e.clientY;
+      const p = pts.get(e.pointerId); if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size >= 2) { if (pinch) zoomTo(pinch.dist * pinch.d / Math.max(20, spread())); return; }
+      cam.yaw -= dx * .006;
+      cam.pitch = Math.min(.9, Math.max(.05, cam.pitch + dy * .004));
     });
-    const end = e => { if (drag && drag.id === e.pointerId) drag = null; };
+    const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
     container.addEventListener('pointerup', end); container.addEventListener('pointercancel', end);
-    container.addEventListener('wheel', e => { cam.dist = Math.min(7, Math.max(2.2, cam.dist + e.deltaY * .003)); e.preventDefault(); }, { passive: false });
+    container.addEventListener('wheel', e => { zoomTo(cam.dist + e.deltaY * .003); e.preventDefault(); }, { passive: false });
   }
   function bindJoystick(el) {
     const knob = el.querySelector('.knob');
@@ -258,7 +265,7 @@ const World = (() => {
     if (key !== lastZoneKey) { lastZoneKey = key; onZoneChange && onZoneChange(z); }
     // 鏡頭
     const inTrain = z.kind === 'train';
-    const dist = inTrain ? Math.min(cam.dist, 2.4) : cam.dist;
+    const dist = inTrain ? Math.min(cam.dist, 2.6) : cam.dist;
     const pitch = inTrain ? Math.min(cam.pitch, .12) : cam.pitch;
     const tx = player.x, ty = player.y + 1.5, tz = player.z;
     let px = tx + Math.sin(cam.yaw) * Math.cos(pitch) * dist;
