@@ -233,13 +233,26 @@ const Station3D = (() => {
   // 大站的商店（只在大站出現，賣該站對應的東西）
   const SHOPS = {
     台北車站: { name: '捷運便利商店・地下街', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'soymilk', 'bread', 'bubbletea', 'pineapplecake', 'keychain', 'postcard', 'easycard'] },
-    西門: { name: '西門町服飾＆小吃', sign: '服飾', color: '#e07a3a', items: ['bubbletea', 'coffee', 'chicken', 'sausage'] },
+    西門: { name: '西門町服飾＆小吃', sign: '服飾', color: '#e07a3a', items: ['bubbletea', 'coffee', 'chicken', 'sausage', 'camera'] },
     南港: { name: '南港伴手禮', sign: '伴手禮', color: '#8a5a3a', items: ['pineapplecake', 'sunnycake', 'nougat', 'keychain', 'postcard', 'easycard'] },
     中山: { name: '中山花店＆選物', sign: '花店', color: '#d06a8a', items: ['flower', 'postcard'] },
     市政府: { name: '信義百貨', sign: '百貨', color: '#5a4030', items: ['coffee', 'onigiri', 'nougat'] },
     板橋: { name: '板橋便利商店', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'soymilk', 'bubbletea', 'chicken'] },
     忠孝復興: { name: '東區選物＆麵包坊', sign: '選物', color: '#c08a3a', items: ['bread', 'onigiri', 'coffee', 'pineapplecake'] },
   };
+
+  // 任務需要的特別場所：咖啡店（市政府）、街頭表演舞台（東門）；收藏品商人的攤車由 STATION_EXTRAS 決定在哪一站
+  const PLACES = { 市政府: ['cafe'], 東門: ['stage'] };
+  const placesOf = id => (PLACES[id] || []).concat(typeof STATION_EXTRAS === 'function' ? STATION_EXTRAS(id) : []);
+  // 場所的位置（NPC 站的位置也用這個）
+  function placeAt(L, kind) {
+    const C = L.concourse, U = L.unpaid;
+    if (kind === 'cafe') return { x: C.x1 - .65, y: 0, z: C.z0 + 14, buy: { x: C.x1 - 2.6, z: C.z0 + 14 } };
+    if (kind === 'stage') return { x: C.x0 + 3, y: 0, z: C.z0 + 13.5 };
+    if (kind === 'stall') return { x: C.x1 - 3.4, y: 0, z: C.z0 + 18.5 };
+    if (kind === 'shop') return { x: U.x0 + 1.9, y: 0, z: U.z0 + 7 };
+    return null;
+  }
 
   // 有「霧」塗鴉的車站
   const GRAFFITI = ['龍山寺', '西門', '南港', '古亭', '中山', '頂埔', '淡水', '大直'];
@@ -289,6 +302,8 @@ const Station3D = (() => {
     spots.push({ kind: 'toilet', x: unpaid.x1 - 1.4, y: 0, z: unpaid.z0 + 9 });
     if (SHOPS[stationId]) spots.push({ kind: 'shop', x: unpaid.x0 + 2, y: 0, z: unpaid.z0 + 7 });
     if (GRAFFITI.includes(stationId)) spots.push({ kind: 'graffiti', x: concourse.x1 - 4, y: 0, z: concourse.z0 + .9 });
+    const L0 = { concourse, unpaid };
+    for (const k of placesOf(stationId)) { const p = placeAt(L0, k); if (k === 'cafe') spots.push({ kind: 'cafe', x: p.buy.x, y: 0, z: p.buy.z }); if (k === 'stage') spots.push({ kind: 'stage', x: p.x + 1.6, y: 0, z: p.z }); }
     for (const P of platforms) for (const s of [-1, 1]) spots.push({ kind: 'map', x: P.x, y: P.y, z: P.z + s * .9, line: P.line });
     // 其他車站設施（可以查看）
     const C = concourse, U = unpaid, big = !!SHOPS[stationId];
@@ -524,11 +539,49 @@ const Station3D = (() => {
     const mapBig = plane(2.4, 2.4, M('#ffffff', { map: routeMapTex() }), g); mapBig.position.set(U.x0 + .02 + 0, 1.7, U.z0 + 6); mapBig.rotation.y = Math.PI / 2; mapBig.position.x = U.x0 + .02;
 
     furnish(L, g, night);
+    for (const k of placesOf(L.stationId)) buildPlace(L, g, k);
     g.userData = { psd, layout: L };
     mergeStatic(g);
     return g;
   }
 
+
+  /* ── 特別場所 ── */
+  function buildPlace(L, g, kind) {
+    const p = placeAt(L, kind), wood = M('#8a5a3a', { r: .7 }), dark = M('#30363c', { r: .5 }), cream = M('#efe6d6', { r: .8 });
+    if (kind === 'cafe') {
+      const x1 = L.concourse.x1;
+      box(1.2, 1.05, 4.2, wood, x1 - 1.6, .525, p.z, g);                     // 吧台
+      box(1.3, .06, 4.3, M('#2a2a2a', { r: .3 }), x1 - 1.6, 1.08, p.z, g);
+      box(.45, .5, .4, M('#c8cdd2', { m: .8, r: .25 }), x1 - 1.6, 1.36, p.z - 1.2, g);   // 咖啡機
+      box(.12, .18, .12, dark, x1 - 1.6, 1.2, p.z - .7, g);
+      for (let i = 0; i < 4; i++) box(.1, .12, .1, M(['#f4f4f2', '#c4162a', '#2a9d8f', '#f4f4f2'][i]), x1 - 1.55, 1.17, p.z + .3 + i * .3, g);
+      box(.15, 2.2, 4.6, cream, x1 - .08, 1.4, p.z, g);                        // 背牆
+      for (const dz of [-1.4, 0, 1.4]) box(.3, .04, .9, wood, x1 - .2, 1.6 + Math.abs(dz) * .1, p.z + dz, g);   // 層架
+      sign(plainSign('Leo 咖啡', 'Café', '#5a4030', '#fff'), 2.6, .6, x1 - 1.6, 2.9, p.z, g, -Math.PI / 2);
+      for (const [dx, dz] of [[-4.2, -1.2], [-4.2, 1.4]]) {                       // 小圓桌、椅子
+        const t = new T.Mesh(new T.CylinderGeometry(.38, .38, .04, 18), wood); t.position.set(x1 + dx, .74, p.z + dz); g.add(t);
+        box(.06, .72, .06, dark, x1 + dx, .36, p.z + dz, g);
+        for (const s of [-1, 1]) { box(.34, .04, .34, dark, x1 + dx + s * .62, .45, p.z + dz, g); box(.04, .45, .04, dark, x1 + dx + s * .62, .22, p.z + dz, g); }
+      }
+    }
+    if (kind === 'stage') {
+      box(2.6, .16, 2.2, M('#3a3a42', { r: .8 }), p.x, .08, p.z, g);          // 舞台
+      box(.04, 1.4, .04, dark, p.x + .7, .86, p.z, g); box(.1, .14, .1, dark, p.x + .7, 1.6, p.z, g);   // 麥克風架
+      box(.5, .6, .35, M('#1d1d20', { r: .6 }), p.x - .8, .46, p.z - .6, g);    // 音箱
+      box(1.0, .12, .36, M('#1d1d20', { r: .6 }), p.x + .2, .22, p.z + .8, g);  // 吉他盒
+      box(.9, .02, .3, M('#c4162a', { r: .9 }), p.x + .2, .29, p.z + .8, g);
+      sign(plainSign('街頭藝人表演區', 'Street performance', '#e07a3a', '#fff'), 2.2, .5, p.x, 2.6, p.z - 1.2, g);
+    }
+    if (kind === 'stall') {
+      box(1.8, .9, .9, wood, p.x, .45, p.z, g);                               // 攤車
+      for (const s of [-1, 1]) { const w = new T.Mesh(new T.CylinderGeometry(.18, .18, .08, 14), dark); w.rotation.x = Math.PI / 2; w.position.set(p.x + s * .6, .18, p.z + .48); g.add(w); }
+      for (let i = 0; i < 5; i++) box(.28, .06, .2, M(['#e6dcc6', '#c4162a', '#2a5fb0', '#f2c200', '#3d7a4a'][i]), p.x - .7 + i * .35, .93, p.z, g);
+      box(.04, 1.6, .04, dark, p.x - .85, 1.7, p.z - .4, g); box(.04, 1.6, .04, dark, p.x + .85, 1.7, p.z - .4, g);
+      box(2.0, .05, 1.1, M('#c4162a', { r: .8 }), p.x, 2.5, p.z, g);
+      sign(plainSign('老 K 的收藏攤', 'Collectibles', '#5a3a2a', '#fff'), 1.8, .45, p.x, 2.25, p.z + .6, g);
+    }
+  }
 
   /* ── 車站設施：飲水機、AED、哺集乳室、站務室、公共藝術、廣告燈箱、時鐘、監視器、消防栓、
    *    販賣機、資源回收桶、周邊地圖、首末班車時刻表、公共電話、置物櫃、ATM、緊急按鈕、夜間婦女候車區 ── */
@@ -975,7 +1028,7 @@ const Station3D = (() => {
   }
 
   return {
-    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS, tickClocks,
+    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS, tickClocks, placeAt,
     layout, build, makeTrain, segment, surroundings, sides,
     drawLcd, drawStrip, drawLed, SKY_CITY,
   };

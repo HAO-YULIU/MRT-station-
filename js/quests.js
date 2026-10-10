@@ -465,6 +465,7 @@ const Quests = (() => {
     if (!canAccept(id)) return false;
     active()[id] = { step: 0, v: 2 };
     if (QUESTS[id].limit) active()[id].deadline = Date.now() + QUESTS[id].limit * 60000;
+    for (const [it, n] of Object.entries(QUESTS[id].gain || {})) S().inv[it] = (S().inv[it] || 0) + n;
     saveState();
     Game.onQuestChange && Game.onQuestChange('accept', id);
     return true;
@@ -476,6 +477,23 @@ const Quests = (() => {
     return true;
   }
   const match = (want, got) => (Array.isArray(want) ? want.includes(got) : want === got);
+  function goalMatch(g, ev, st) {
+    const where = x => (typeof x === 'string' && x[0] === '@' ? st[x.slice(1)] : x);
+    if (g.kind !== ev.kind) return g.kind === 'reach' && ev.kind === 'ride' && match(where(g.station), ev.station);   // 搭到某站也算「到達」
+    switch (g.kind) {
+      case 'reach': return match(where(g.station), ev.station);
+      case 'ride': return (g.line == null || g.line === ev.line) && (g.station == null || match(where(g.station), ev.station));
+      case 'terminal': case 'anomaly': case 'sit': case 'handin': return true;
+      case 'talk': return g.npc === ev.npc;
+      case 'inspect': return g.spot === ev.spot && (g.station == null || match(g.station, ev.station));
+      case 'find': return g.item === ev.item && (g.station == null || match(where(g.station), ev.station));
+      case 'give': return g.npc === ev.npc && g.item === ev.item;
+      case 'buy': return g.item === ev.item;
+      case 'photo': return (g.station == null || match(g.station, ev.station)) && (g.spot == null || g.spot === ev.spot) && (g.zone == null || g.zone === ev.zone) && (!g.hours || (ev.hour >= g.hours[0] && ev.hour < g.hours[1]));
+      case 'decide': case 'work': return g.npc === ev.npc && !!st.resolving;
+    }
+    return false;
+  }
   // 事件：{kind, station, line, npc, item, spot}；回傳完成的步驟描述
   function emit(ev) {
     const done = [];
@@ -497,18 +515,12 @@ const Quests = (() => {
         done.push({ id, text: `${LINES[g.line].zh}每一站的委託都完成了！寶物出現在${LINES[g.line].zh}的某一站` });
         continue;
       }
-      const where = x => (typeof x === 'string' && x[0] === '@' ? st[x.slice(1)] : x);
-      if (g.kind !== ev.kind) {
-        // 搭到某站也算「到達」
-        if (g.kind === 'reach' && ev.kind === 'ride') ok = match(where(g.station), ev.station);
-      } else if (g.kind === 'reach') ok = match(where(g.station), ev.station);
-      else if (g.kind === 'ride') ok = (g.line == null || g.line === ev.line) && (g.station == null || match(where(g.station), ev.station));
-      else if (g.kind === 'terminal' || g.kind === 'anomaly' || g.kind === 'sit' || g.kind === 'handin') ok = true;
-      else if (g.kind === 'talk') ok = g.npc === ev.npc;
-      else if (g.kind === 'inspect') ok = g.spot === ev.spot && match(g.station, ev.station);
-      else if (g.kind === 'find') ok = g.item === ev.item && (g.station == null || match(where(g.station), ev.station));
-      else if (g.kind === 'give') ok = g.npc === ev.npc && g.item === ev.item;
-      else if (g.kind === 'buy') ok = g.item === ev.item;
+      // 可選線索：任何時候都能蒐集，影響結局評價
+      for (const c of q.clues || []) {
+        if (st.clues && st.clues[c.id]) continue;
+        if (goalMatch(c.goal, ev, st)) { (st.clues = st.clues || {})[c.id] = true; done.push({ id, text: `線索：${c.text}`, clue: c.id }); }
+      }
+      ok = goalMatch(g, ev, st);
       if (!ok) continue;
       st.step++;
       if (step.gain) for (const [it, n] of Object.entries(step.gain)) S().inv[it] = (S().inv[it] || 0) + n;
@@ -518,12 +530,40 @@ const Quests = (() => {
     if (done.length) saveState();
     return done;
   }
+  // 結局：完整成功／一般成功／意外結果／選擇不同／隱藏成功／特殊結局……
+  const OUTCOME_NAME = { perfect: '完整成功', normal: '一般成功', surprise: '意外結果', hidden: '隱藏成功', special: '特殊結局', wrong: '判斷錯誤' };
+  function outcomeOf(q, st) {
+    if (!q.outcomes) return null;
+    const allClues = (q.clues || []).every(c => st.clues && st.clues[c.id]);
+    let k = st.outcome;
+    if (!k) k = st.hidden && q.outcomes.hidden ? 'hidden' : allClues && q.outcomes.perfect ? 'perfect' : 'normal';
+    if (k === 'perfect' && !allClues && q.outcomes.normal) k = 'normal';
+    if (st.special && q.outcomes.special) k = 'special';
+    return q.outcomes[k] ? k : 'normal';
+  }
   function finish(id) {
-    const q = QUESTS[id];
+    const q = QUESTS[id], st = active()[id];
+    const k = outcomeOf(q, st), o = k && q.outcomes[k] ? q.outcomes[k] : null;
     delete active()[id];
     S().quests.done[id] = Date.now();
-    Game.reward(q.reward, `完成任務「${q.title}」`);
-    Game.onQuestChange && Game.onQuestChange('done', id);
+    if (k) (S().quests.outcome = S().quests.outcome || {})[id] = k;
+    const rw = o && o.reward ? o.reward : q.reward;
+    Game.reward(rw, `完成任務「${q.title}」${k ? `——${(o && o.name) || OUTCOME_NAME[k] || ''}` : ''}`);
+    Game.onQuestChange && Game.onQuestChange('done', id, o, k);
+    // 後續委託：完成後自動收到
+    const next = (o && o.next) || q.next;
+    if (next && canAccept(next)) setTimeout(() => { accept(next); Game.onQuestChange && Game.onQuestChange('next', next); }, 1600);
+  }
+  // 玩家在對話中做的選擇／打工結果：記錄結局並完成這一步
+  function resolve(id, outcome, extra) {
+    const st = active()[id]; if (!st) return [];
+    if (outcome) st.outcome = outcome;
+    Object.assign(st, extra || {});
+    const q = QUESTS[id], step = q.steps[st.step];
+    st.resolving = true;
+    const done = emit({ kind: step.goal.kind, npc: step.goal.npc });
+    delete st.resolving;
+    return done;
   }
   // 某個步驟現在需要的 NPC／物品／查看點（給 NPC 與場景判斷用）
   function wants(kind, pred) {
@@ -550,6 +590,9 @@ const Quests = (() => {
       S().quests.failed = S().quests.failed || {}; S().quests.failed[id] = TaipeiTime.date();
       saveState();
       Game.onQuestChange && Game.onQuestChange('fail', id);
+      // 暫時失敗：留下補救的後續任務
+      const fix = QUESTS[id].remedy;
+      if (fix && canAccept(fix)) setTimeout(() => { accept(fix); Game.onQuestChange && Game.onQuestChange('next', fix); }, 1500);
     }
   }
   // 秘密任務：達成隱藏條件時觸發（extra 會存進任務進度，例如 target）
@@ -560,5 +603,5 @@ const Quests = (() => {
     Game.onQuestChange && Game.onQuestChange('secret', id);
     return true;
   }
-  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow, secret, tick, failedToday };
+  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow, secret, tick, failedToday, resolve, OUTCOME_NAME, state: id => active()[id] };
 })();

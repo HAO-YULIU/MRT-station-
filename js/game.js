@@ -143,8 +143,13 @@ Game.reward = (r = {}, label = '') => {
   const after = Economy.levelInfo(s.xp).lv;
   if (after > before) setTimeout(() => { toast(`<b>升級！Lv ${after}</b>`, 'level'); Sound.itemGet(); }, 900);
 };
-Game.onQuestChange = (what, id) => {
+Game.onQuestChange = (what, id, o, k) => {
   const q = QUESTS[id];
+  if (what === 'next') toast(`<b>收到後續委託</b><span>${q.title}</span>`, 'level');
+  if (what === 'done') {
+    SideQuests.onDone(id);
+    if (o && o.text) setTimeout(() => Dialog.info(`${q.title}——${o.name || Quests.OUTCOME_NAME[k] || ''}`, o.text), 700);
+  }
   if (what === 'accept') toast(`<b>接下任務</b><span>${q.title}</span>`);
   if (what === 'fail') { toast(`<b>限時任務失敗</b><span>${q.title}：時間到了。今天來不及了，請之後或明天再來找${q.giver && NPCS[q.giver] ? NPCS[q.giver].name : '他'}。</span>`, 'warn'); Sound.click(); }
   // 六條主線都完成：秀蔅指引去小碧潭
@@ -196,6 +201,10 @@ function stepNote(q, st, step) {
     const all = Puzzles.stations(g.line), left = all.filter(x => !(st.solved && st.solved[x]));
     const doing = Object.keys(st.ch || {}).map(x => `${esc(x)}（${esc((Puzzles.challenge(g.line, x).giver || {}).name || '')}）`);
     return `<small class="q-note">${Challenges.storyNote(g.line)}<br>已完成 ${all.length - left.length} / ${all.length} 站　還沒完成：${left.slice(0, 8).map(esc).join('、')}${left.length > 8 ? `…等 ${left.length} 站` : ''}${doing.length ? `<br>進行中的委託：${doing.join('、')}` : ''}</small>`;
+  }
+  if (q.clues && q.clues.length) {
+    const n = q.clues.filter(c => st.clues && st.clues[c.id]).length;
+    return `<small class="q-note">線索 ${n} / ${q.clues.length}${n ? '：' + q.clues.filter(c => st.clues && st.clues[c.id]).map(c => esc(c.text)).join('；') : '（多問問相關的人，結局會更好）'}</small>`;
   }
   if (g.station === '@treasure' && st.treasure) return `<small class="q-note">${treasureSense(q.line, Game.state.current, st.treasure)}</small>`;
   return '';
@@ -377,6 +386,7 @@ function startStation(stationId, carry) {
 }
 // 到站時：支線秘密任務、寶物感應
 function arriveChecks(stationId) {
+  SideQuests.onArrive(stationId);
   const other = { 新北投: '小碧潭', 小碧潭: '新北投' }[stationId];
   if (other) Quests.secret('sec_branch', { target: other });
   const act = Game.state.quests.active;
@@ -634,10 +644,10 @@ const dropInteraction = {
 // 查看告示牌、塗鴉、路線圖
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
-  fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
+  cafe: '咖啡店', stage: '街頭藝人表演區', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
   timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
-const SPOT_VERB = { elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
+const SPOT_VERB = { cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
@@ -649,10 +659,12 @@ const spotInteraction = {
     if (sp.kind === 'ticket') return Dialog.info('售票機・票價表', fareTable(st));
     if (sp.kind === 'toilet') return restroom();
     if (sp.kind === 'shop') return shopMenu(st);
-    if (FACILITY[sp.kind]) return FACILITY[sp.kind](sp, st);
     const done = Quests.emit({ kind: 'inspect', spot: sp.kind, station: st });
-    Dialog.info(SPOT_NAME[sp.kind], spotText(sp, st, done.length > 0));
     for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
+    if (typeof Achievements !== 'undefined') Achievements.onInspect(sp, st);
+    if (SideQuests.onInspect(sp.kind, st)) return;   // 公告欄、路線圖上的委託
+    if (FACILITY[sp.kind]) return FACILITY[sp.kind](sp, st);
+    Dialog.info(SPOT_NAME[sp.kind], spotText(sp, st, done.length > 0));
   },
 };
 // 車站設施
@@ -679,7 +691,20 @@ const FACILITY = {
     Dialog.info('首末班車時刻表', `<table class="fares">${rows}</table><small>末班車時間依各方向不同，月台 LED 看板會顯示「末班車」。全線 00:30 前收班。</small>`);
   },
   vending: () => vendMenu(),
+  cafe: () => cafeMenu(),
+  stage: () => {
+    const h = TaipeiTime.now().hour, ok = Quests.isDone('sq_musician') && Game.state.quests.outcome && Game.state.quests.outcome.sq_musician === 'perfect';
+    if (ok && h >= 20 && h < 22) { Sound.arrivalChime('Y'); return Dialog.info('街頭藝人表演區', '小黑正在唱〈月台之歌〉。圍觀的人跟著打拍子，有人把零錢放進吉他盒。<br>唱到最後一句，他看了你一眼，笑了。'); }
+    Dialog.info('街頭藝人表演區', '經過登記的街頭藝人可以在這裡表演。現在沒有人在唱。');
+  },
 };
+function cafeMenu() {
+  const s = Game.state, items = ['coffee', 'bread', 'greentea'].concat(Quests.eventsNow().includes('event_halloween') ? ['pumpkinlatte'] : []);
+  Dialog.show({ name: 'Leo 咖啡', role: '吧台' }, `餘額 NT$ ${s.money}。今天想喝什麼？`, items.map(id => ({
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}`, disabled: s.money < ITEMS[id].price,
+    run: () => { s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); cafeMenu(); },
+  })).concat([{ label: '離開', run: () => Dialog.close() }]));
+}
 function vendMenu() {
   const s = Game.state;
   Dialog.show({ name: '自動販賣機', role: '嗶一下悠遊卡' }, `餘額 NT$ ${s.money}。`, ['water', 'greentea', 'sportdrink'].map(id => ({
@@ -886,7 +911,7 @@ function openBag() {
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
     <h4 class="bag-h">物品</h4>
-    ${inv.length ? `<ul class="inv">${inv.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : '<p class="empty-q">背包是空的。</p>'}
+    ${inv.length ? `<ul class="inv">${inv.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : '<p class="empty-q">背包是空的。</p>'}
     <h4 class="bag-h">換裝</h4>
     ${wardrobeHtml()}
     <h4 class="bag-h">路線收藏</h4>
@@ -909,6 +934,7 @@ function openBag() {
     </div>`;
   $('#bag').hidden = false;
   $('#bagBody').onclick = e => {
+    if (e.target.closest('[data-photo]')) { $('#bag').hidden = true; return SideQuests.photo(); }
     const w = e.target.closest('[data-wear]'), f = e.target.closest('[data-eat]');
     if (w) { Sound.click(); putOn(w.dataset.wear); openBag(); }
     if (f) { Sound.click(); eat(f.dataset.eat); openBag(); }

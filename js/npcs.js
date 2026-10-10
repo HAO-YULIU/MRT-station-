@@ -299,6 +299,14 @@ function crowdExtra(hour) {
   return { n: hour >= 6 && hour < 23 ? 4 : 2, w };
 }
 
+// NPC 今天在哪一站：固定車站、依時段的行程（schedule）、每天換一站（rotate）
+function npcStation(def) {
+  const t = TaipeiTime.now();
+  if (def.schedule) { const s = def.schedule.find(([a, b]) => t.hour >= a && t.hour < b); return s ? s[2] : null; }
+  if (def.rotate) return def.rotate[(t.year * 372 + t.month * 31 + t.day) % def.rotate.length];
+  return def.station;
+}
+
 /* ── NPC 管理 ── */
 const NPCManager = (() => {
   const T = THREE;
@@ -347,6 +355,7 @@ const NPCManager = (() => {
   }
   function placeFor(def) {
     const L = layout, U = L.unpaid;
+    if (['cafe', 'stage', 'stall', 'shop'].includes(def.spot)) return Station3D.placeAt(L, def.spot);
     if (def.spot === 'service') return { x: U.x1 - 3.5, y: 0, z: U.z0 + 4.4 };
     if (def.spot === 'lostfound') return { x: U.x1 - 8.2, y: 0, z: U.z0 + 4.4 };
     if (def.spot === 'bench') { const P = L.platforms[0]; return { x: P.x + 31, y: P.y, z: P.z + .15 }; }
@@ -363,7 +372,8 @@ const NPCManager = (() => {
       if (nid === 'xiuyu') continue;
       const qp = NPC_QUEST_PLACES[nid];
       const forced = qp && Quests.isActive(qp.quest) && qp.station === id;
-      if (!forced && (def.station !== id || !inHours(def))) continue;
+      if (!forced && (npcStation(def) !== id || !inHours(def))) continue;
+      if (def.onlyQuest && !def.onlyQuest.some(q => Quests.isActive(q))) continue;   // 只在任務進行時出現
       if (def.event && !(def.event === '*' ? Quests.eventsNow().length : Quests.eventsNow().includes(def.event))) continue;
       const pos = placeFor(def); if (!pos) continue;
       addNpc({ id: nid, ...def, pos, named: true, area: areaOf(def.spot), speed: forced ? .9 : def.speed });
@@ -503,6 +513,13 @@ const Dialog = (() => {
       return show(npc, pick(pool), [{ label: '再聊一下', run: () => open(npc) }, { label: '再見', run: close }]);
     }
     const s = Game.state, f = s.friends[npc.id] || 0;
+    // 需要做選擇或打工的任務步驟
+    const want = Quests.wants('decide', g => g.npc === npc.id) || Quests.wants('work', g => g.npc === npc.id);
+    if (want) {
+      const pre = Quests.emit({ kind: 'talk', npc: npc.id });   // 同時算作和他說過話（線索）
+      for (const d of pre) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
+      return SideQuests.run(npc, want);
+    }
     // 先處理任務步驟（和他說話）
     const done = Quests.emit({ kind: 'talk', npc: npc.id });
     let text = '';
@@ -517,7 +534,7 @@ const Dialog = (() => {
   function menu(npc, text) {
     const s = Game.state, f = s.friends[npc.id] || 0;
     const btns = [];
-    for (const qid of npc.gives || []) {
+    for (const qid of (npc.gives || []).concat(SideQuests.itemOffers(npc.id))) {
       const q = QUESTS[qid];
       if (Quests.isActive(qid) || Quests.isDone(qid)) continue;
       if (q.type === 'event' && !Quests.eventsNow().includes(qid)) continue;
@@ -585,6 +602,7 @@ const Dialog = (() => {
     const text = done.length ? '被你找到了。……你比我想的還要快。' : pick(npc.lines);
     show(npc, text, [
       ...offers.map(id => ({ label: `接主線：${LINES[QUESTS[id].line].zh}・${QUESTS[id].title}`, primary: true, run: () => { Quests.accept(id); close(); } })),
+      ...(npc.gives || []).filter(id => Quests.canAccept(id)).map(id => ({ label: `接任務：${QUESTS[id].title}`, run: () => { Quests.accept(id); close(); } })),
       { label: '聊天', run: () => { s.friends.xiuyu = (s.friends.xiuyu || 0) + 2; saveState(); xiuyuChat(npc); } },
       { label: '送禮', run: () => gift(npc) },
       { label: '再見', run: close },
@@ -661,6 +679,8 @@ const Pickups = (() => {
       const st = step.goal.station === '@treasure' ? s.quests.active[id].treasure : step.goal.station;
       if ((Array.isArray(st) ? st.includes(stationId) : st === stationId) && !out.includes(step.goal.item)) out.push(step.goal.item);
     }
+    // 撿到就會觸發支線的物品
+    for (const it of SideQuests.pickupItems(stationId)) if (!out.includes(it)) out.push(it);
     // 第一張紙條：沒人給，自己會在南港展覽館發現
     if (stationId === '南港展覽館' && !Quests.isActive('notes') && !Quests.isDone('notes') && !s.inv.note1) out.push('note1');
     return out;
@@ -696,6 +716,7 @@ const Pickups = (() => {
     }
     Sound.itemGet();
     toast(`<b>撿到 ${ITEMS[it.item].icon} ${ITEMS[it.item].name}</b><span>${ITEMS[it.item].desc}</span>`);
+    SideQuests.onPickup(it.item);
     for (const d of Quests.emit({ kind: 'find', item: it.item, station: it.station })) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
     saveState(); updateHud();
     spawn(it.station);   // 下一步可能要在同一站找別的東西
