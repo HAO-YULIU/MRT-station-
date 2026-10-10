@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#121a21">
+  <title>迷霧</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@700;900&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-screen="title">
+
+  <!-- 標題 -->
+  <section class="screen" id="title">
+    <div class="title-map" id="titleMap" aria-hidden="true"></div>
+    <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="title-inner">
+      <h1 class="logo">迷霧</h1>
+      <p class="tagline">從台北捷運的任何一站出發。<br>每條路線的終點，都留著一件東西。</p>
+      <div class="title-actions" id="titleActions"></div>
+      <p class="title-clock" id="titleClock"></p>
+    </div>
+  </section>
+
+  <!-- 選角色 -->
+  <section class="screen" id="charSelect">
+    <header class="step-head">
+      <button class="back" id="charBack" aria-label="返回">‹</button>
+      <h2>選擇主角</h2>
+    </header>
+    <div class="char-cards" id="charCards"></div>
+    <div class="step-foot"><button class="btn primary" id="charConfirm" disabled>選一位主角</button></div>
+  </section>
+
+  <!-- 選出發站 -->
+  <section class="screen" id="stationSelect">
+    <header class="step-head">
+      <button class="back" id="stationBack" aria-label="返回">‹</button>
+      <h2>從哪一站出發？</h2>
+      <p>第一站就是你的起點。之後從這裡搭到任何地方。</p>
+    </header>
+    <div class="select-body">
+      <div class="map-box">
+        <div class="map" id="selectMap"></div>
+        <div class="zoom"><button id="zoomIn" aria-label="放大">＋</button><button id="zoomOut" aria-label="縮小">－</button></div>
+      </div>
+      <aside class="station-pick">
+        <div class="line-tabs" id="lineTabs"></div>
+        <input class="search" id="stationSearch" type="search" placeholder="搜尋站名，例如 西門、Tamsui" aria-label="搜尋站名">
+        <ul class="station-list" id="stationList"></ul>
+        <div class="start-confirm" id="startConfirm" hidden>
+          <div class="start-name" id="startName"></div>
+          <button class="btn primary" id="startGo">從這裡出發</button>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 遊戲 -->
+  <section class="screen" id="game">
+    <div class="scene" id="scene"></div>
+    <div class="scene-fog" aria-hidden="true"></div>
+    <header class="hud">
+      <div class="hud-me">
+        <div class="hud-avatar" id="hudAvatar"></div>
+        <div><b id="hudName"></b><small id="hudWhere"></small></div>
+      </div>
+      <div class="hud-time">
+        <b id="hudTime">--:--</b>
+        <small id="hudDate"></small>
+        <span class="status" id="hudStatus"></span>
+      </div>
+      <nav class="hud-btns">
+        <button id="btnMap">路網圖</button>
+        <button id="btnBag">背包 <span id="hudItems">0/6</span></button>
+        <button id="btnSound" aria-pressed="true">音效 開</button>
+      </nav>
+    </header>
+    <div class="panel" id="panel"></div>
+    <button class="action-btn" id="actionBtn" hidden></button>
+    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　E 互動　也可以直接點地板移動</p>
+  </section>
+
+  <!-- 路網圖 -->
+  <div class="modal" id="mapModal" hidden>
+    <div class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
+      <header><h3 id="mapTitle">路網圖</h3><span id="mapStats"></span><button class="x" data-close="mapModal" aria-label="關閉">×</button></header>
+      <div class="map-box">
+        <div class="map" id="viewMap"></div>
+        <div class="zoom"><button id="mapZoomIn" aria-label="放大">＋</button><button id="mapZoomOut" aria-label="縮小">－</button><button id="mapHere" aria-label="回到目前位置">◎</button></div>
+      </div>
+      <p class="map-legend"><span class="lg-me"></span>你在這裡　<span class="lg-fog"></span>還沒去過的車站藏在霧裡</p>
+    </div>
+  </div>
+
+  <!-- 背包 -->
+  <div class="modal" id="bag" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
+      <header><h3 id="bagTitle">背包</h3><button class="x" data-close="bag" aria-label="關閉">×</button></header>
+      <div id="bagBody"></div>
+    </div>
+  </div>
+
+  <!-- 獲得物品 -->
+  <div class="modal item-overlay" id="itemOverlay" hidden></div>
+
+  <!-- 停駛時段 -->
+  <div class="closed" id="closedOverlay" hidden>
+    <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="closed-inner">
+      <p class="closed-range" id="closedRange"></p>
+      <h2 id="closedTitle"></h2>
+      <p id="closedBody"></p>
+      <div class="closed-btns">
+        <button class="btn ghost" id="closedMap">查看路網圖</button>
+        <button class="btn ghost" id="closedTitleBtn">回到標題</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/characters.js"></script>
+  <script src="js/time.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/scenes.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
