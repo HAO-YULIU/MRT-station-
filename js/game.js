@@ -13,7 +13,7 @@ const Game = {
 function newState() {
   return {
     char: null, start: null, current: null, items: {}, visited: {}, rides: 0,
-    money: 500, xp: 0, inv: {}, quests: { active: {}, done: {}, failed: {} }, trip: null, friends: {}, linesMet: {}, flags: {},
+    money: 500, xp: 0, inv: {}, quests: { active: {}, done: {}, failed: {} }, trip: null, friends: {}, linesMet: {}, flags: {}, story: {},
     wardrobe: { own: {}, wear: {} },   // 買過的服裝、身上穿的（沒寫的部位用預設）
   };
 }
@@ -151,6 +151,8 @@ Game.onQuestChange = (what, id) => {
   if (what === 'done' && /^main_/.test(id) && Object.keys(MAIN_STORY).every(l => Quests.isDone('main_' + l)) && !Quests.isActive('final') && !Quests.isDone('final')) {
     setTimeout(() => { Quests.accept('final'); toast('<b>秀蔅：「六樣東西都到齊了。」</b><span>帶著寶物去小碧潭，月台上有人在等你。</span>', 'level'); }, 1500);
   }
+  // 主線完成：揭曉這條線的結局
+  if (what === 'done' && /^main_/.test(id) && STORY[q.line]) setTimeout(() => showEnding(q.line), 1200);
   if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); }
   if ((what === 'accept' || what === 'done') && ctl) Challenges.spawn(ctl.stationId);
   updateHud();
@@ -193,7 +195,7 @@ function stepNote(q, st, step) {
   if (g.kind === 'puzzles') {
     const all = Puzzles.stations(g.line), left = all.filter(x => !(st.solved && st.solved[x]));
     const doing = Object.keys(st.ch || {}).map(x => `${esc(x)}（${esc((Puzzles.challenge(g.line, x).giver || {}).name || '')}）`);
-    return `<small class="q-note">已完成 ${all.length - left.length} / ${all.length} 站　還沒完成：${left.slice(0, 8).map(esc).join('、')}${left.length > 8 ? `…等 ${left.length} 站` : ''}${doing.length ? `<br>進行中的委託：${doing.join('、')}` : ''}</small>`;
+    return `<small class="q-note">${Challenges.storyNote(g.line)}<br>已完成 ${all.length - left.length} / ${all.length} 站　還沒完成：${left.slice(0, 8).map(esc).join('、')}${left.length > 8 ? `…等 ${left.length} 站` : ''}${doing.length ? `<br>進行中的委託：${doing.join('、')}` : ''}</small>`;
   }
   if (g.station === '@treasure' && st.treasure) return `<small class="q-note">${treasureSense(q.line, Game.state.current, st.treasure)}</small>`;
   return '';
@@ -846,6 +848,20 @@ function showItemGet(line) {
   return new Promise(res => { $('#itemOk').onclick = () => { ov.hidden = true; res(); }; $('#itemOk').focus(); });
 }
 
+function showEnding(line) {
+  const e = Challenges.ending(line); if (!e) return;
+  const tag = { true: '真結局', normal: '一般結局', bad: '遺憾結局' }[e.kind];
+  const ov = $('#itemOverlay');
+  ov.innerHTML = `<div class="item-card" style="--c:${LINES[line].color}" role="dialog" aria-modal="true" aria-labelledby="endName">
+    <div class="item-line">${lineChip(line)}${LINES[line].zh}　${tag}</div>
+    <h2 id="endName">${e.title}</h2>
+    <p>${e.text}</p>
+    <div class="item-count">證據 ${e.ev} / ${e.total}</div>
+    <button class="btn primary" id="endOk">繼續</button>
+  </div>`;
+  ov.hidden = false;
+  $('#endOk').onclick = () => { ov.hidden = true; }; $('#endOk').focus();
+}
 // 六件寶物交給擺渡人：路網圖上出現桃園機場捷運
 Game.unlockMistLine = () => {
   Sound.itemGet();
@@ -854,7 +870,7 @@ Game.unlockMistLine = () => {
     <div class="item-line">小碧潭的渡口</div>
     <div class="item-icon" style="font-size:84px">🌫️</div>
     <h2 id="mistName">新路線出現了</h2>
-    <p>擺渡人把六件寶物放進提燈裡。燈光穿過霧，一路往西照向機場——路網圖上出現了<b>桃園機場捷運</b>。<br>從台北車站、三重、新北產業園區都可以轉乘，一路坐到機場和老街溪。</p>
+    <p>${(() => { const n = Object.values(Game.state.story || {}).filter(x => x.ending === 'true').length; return n === 6 ? '擺渡人看著你：「六個真相，你一個都沒有錯過。」<br>' : n >= 3 ? `擺渡人說：「你看清了 ${n} 個真相。剩下的，霧還替你留著。」<br>` : '擺渡人說：「有些真相，你還沒看清楚。不過，路還很長。」<br>'; })()}擺渡人把六件寶物放進提燈裡。燈光穿過霧，一路往西照向機場——路網圖上出現了<b>桃園機場捷運</b>。<br>從台北車站、三重、新北產業園區都可以轉乘，一路坐到機場和老街溪。</p>
     <button class="btn primary" id="mistOk">打開路網圖看看</button>
   </div>`;
   ov.hidden = false;
@@ -978,6 +994,7 @@ function init() {
   Game.service = TaipeiTime.state();
   setInterval(() => {
     Quests.tick();
+    Challenges.storyTick();
     updateHud();
     checkSecrets();
     const st = TaipeiTime.state();

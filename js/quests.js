@@ -443,7 +443,7 @@ const SECRET_QUESTS = {
   },
 };
 for (const [id, q] of Object.entries(SECRET_QUESTS)) QUESTS[id] = { type: 'secret', giver: null, ...q };
-const SIDE_LIMIT = 5;
+const SIDE_LIMIT = 10;
 
 /* ── 任務進度 ── */
 const Quests = (() => {

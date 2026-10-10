@@ -754,13 +754,155 @@ const Challenges = (() => {
     World.scene.add(rig.root); e.rig = rig; ents.push(e); return e;
   }
 
+
+  /* ── 主線劇情（story.js）：劇情站取代原本的委託，依章節順序 ── */
+  const storyOf = line => { const s = S(); s.story = s.story || {}; return (s.story[line] = s.story[line] || { ch: 0, ev: {}, choice: {} }); };
+  const chapterAt = (line, st) => { const d = STORY[line]; if (!d) return null; const i = d.chapters.findIndex(c => c.station === st); return i < 0 ? null : { i, c: d.chapters[i] }; };
+  const evTotal = line => new Set(STORY[line].chapters.flatMap(c => [c.evidence && c.evidence.id, ...((c.choice && c.choice.options) || []).map(o => o.evidence && o.evidence.id)]).filter(Boolean)).size;
+  const storyLook = c => c.npc.npcId ? NPCS[c.npc.npcId].look : c.npc.look === 'xiuyu' ? XIUYU_LOOK : STORY_LOOKS[c.npc.look];
+  function spawnStory(line, stationId, P, pos) {
+    const sc = chapterAt(line, stationId), so = storyOf(line);
+    if (sc.i > so.ch) {   // 前面的章節還沒解開
+      const sp = new T.Sprite(new T.SpriteMaterial({ map: noteTex('…', 'rgba(150,150,170,.6)'), transparent: true, depthWrite: false })); sp.scale.set(.55, .55, 1);
+      addEnt({ type: 'storyLocked', line, station: stationId, ...pos }, sp, 1.3);
+      return;
+    }
+    const c = sc.c;
+    if (!c.npc.look && !c.npc.npcId) {
+      const sp = new T.Sprite(new T.SpriteMaterial({ map: noteTex('秘', 'rgba(160,120,255,.85)'), transparent: true, depthWrite: false })); sp.scale.set(.75, .75, 1);
+      addEnt({ type: 'story', line, station: stationId, i: sc.i, sc: c, ...pos }, sp, 1.3);
+    } else {
+      const e = addPerson({ type: 'story', line, station: stationId, i: sc.i, sc: c, ...pos, face: Math.PI / 2 }, storyLook(c));
+      const ex = iconSprite('📖', .45, true); ex.position.set(0, 2.2, 0); e.rig.root.add(ex);
+    }
+    if (c.kind === 'hidden') { const hp = hiddenSpot(c.hidden.at, P, stationId); if (hp) addEnt({ type: 'storyHidden', line, station: stationId, i: sc.i, sc: c, ...hp }); }
+  }
+  // 追捕的嫌疑人、逃脫時的跟蹤者
+  function spawnStoryTargets(stationId) {
+    for (const line of STORY_LINES) {
+      const so = (S().story || {})[line]; if (!so) continue;
+      const P = platformOf(line);
+      if (so.chase && so.chase.station === stationId && P) {
+        const c = STORY[line].chapters[so.chase.i];
+        const q = [-26, 24, -18, 6].map(dx => ({ x: P.x + dx, y: P.y, z: P.z + 1.4 })).find(ok);
+        if (q) addPerson({ type: 'suspect', line, station: stationId, i: so.chase.i, sc: c, ...q, face: Math.PI }, STORY_LOOKS[c.chase.suspect.look]);
+      }
+      if (so.escape) {
+        const c = STORY[line].chapters[so.escape.i];
+        if (c.escape.targets.includes(stationId)) setTimeout(() => resolveEscape(line, true), 900);
+        else { const L = World.layout, C = L.concourse, q = { x: C.x1 - 3, y: 0, z: C.z0 + 3 }; if (ok(q)) addPerson({ type: 'stalker', line, station: stationId, ...q, face: -Math.PI / 2 }, STORY_LOOKS[c.escape.stalker.look]); }
+      }
+    }
+  }
+  function storyReward(line, so, c, ev) {
+    if (ev && !so.ev[ev.id]) { so.ev[ev.id] = true; toast(`<b>取得證據：${ev.icon} ${ev.name}</b><span>${ev.desc}</span>`, 'level'); }
+  }
+  // 完成一章：記錄證據、下一章，並完成這一站
+  function finishChapter(line, station, i, ev, msg) {
+    const so = storyOf(line);
+    storyReward(line, so, null, ev);
+    so.ch = Math.max(so.ch, i + 1); saveState();
+    solve(line, station, { xp: 40, money: 60 }, msg || `劇情：第 ${i + 1} 章`);
+  }
+  function pages(e, list, k, done) {
+    const c = e.sc, who = { name: c.npc.name, role: c.npc.role };
+    if (k < list.length - 1) return Dialog.show(who, list[k], [{ label: '繼續', primary: true, run: () => pages(e, list, k + 1, done) }, { label: '等一下再來', run: () => Dialog.close() }]);
+    done(who, list[k]);
+  }
+  function storyInteract(e) {
+    const c = e.sc, line = e.line, so = storyOf(line);
+    if (e.type === 'storyLocked') return Dialog.info(`${LINES[line].zh}・${e.station}`, '這裡好像還藏著什麼，但現在還看不出來。<br><small>（先解開這條線前面的劇情）</small>');
+    if (e.type === 'storyHidden') {
+      return Dialog.show({ name: '……', role: e.station }, c.hidden.text, [{ label: '記下來', primary: true, run: () => { Dialog.close(); finishChapter(line, e.station, e.i, c.evidence, '找到隱藏的線索！'); } }]);
+    }
+    if (e.type === 'suspect') {
+      return Dialog.show({ name: c.chase.suspect.name, role: '' }, c.chase.caught, [{ label: '收下', primary: true, run: () => { Dialog.close(); so.chase = null; storyReward(line, so, null, c.evidence); so.ch = Math.max(so.ch, e.i + 1); saveState(); Game.reward({ xp: 50, money: 60 }, '追到了！'); spawn(World.layout.stationId); } }]);
+    }
+    pages(e, c.pages, 0, (who, text) => {
+      if (c.kind === 'evidence') return Dialog.show(who, text, [{ label: '收下', primary: true, run: () => { Dialog.close(); finishChapter(line, e.station, e.i, c.evidence); } }]);
+      if (c.kind === 'hidden') return Dialog.show(who, text, [{ label: '去找找看', primary: true, run: () => Dialog.close() }]);
+      if (c.kind === 'choice' || c.kind === 'rescue' || c.kind === 'deduce') {
+        const opts = (c.choice || c.rescue || c.deduce).options;
+        const prompt = (c.choice || c.rescue || c.deduce).prompt;
+        return Dialog.show(who, `${text}<br><b>${prompt}</b>`, opts.map(o => ({
+          label: o.label, run: () => {
+            let ev = null;
+            if (c.kind === 'choice') { so.choice[c.choice.key] = o.value; ev = o.evidence || null; if (o.friend) for (const [k, v] of Object.entries(o.friend)) S().friends[k] = (S().friends[k] || 0) + v; }
+            if (c.kind === 'rescue') ev = o.ok ? c.evidence : null;
+            if (c.kind === 'deduce') { so.deduce = !!o.correct; so.deduceLabel = o.label; }
+            saveState();
+            const after = c.kind === 'deduce' ? `你說出了你的推理。秀蔅靜靜地聽完，點了點頭。<br><small>（證據 ${Object.keys(so.ev).length} / ${evTotal(line)}。結局會在找到寶物時揭曉。）</small>` : o.text;
+            Dialog.show(who, after, [{ label: '繼續', primary: true, run: () => { Dialog.close(); finishChapter(line, e.station, e.i, ev); } }]);
+          },
+        })));
+      }
+      if (c.kind === 'chase') {
+        const d = MRT.directionsAt(e.station).find(x => x.line === line && x.terminal === c.chase.toward) || MRT.directionsAt(e.station).find(x => x.line === line);
+        const target = d.stops[Math.min(c.chase.n, d.stops.length) - 1];
+        return Dialog.show(who, text, [{ label: `追！（${c.chase.minutes} 分鐘內）`, primary: true, run: () => {
+          so.chase = { i: e.i, station: target, deadline: Date.now() + c.chase.minutes * 60000 }; saveState(); Dialog.close();
+          toast(`<b>追捕開始</b><span>${c.chase.minutes} 分鐘內趕到他下車的那一站</span>`, 'warn');
+          solve(line, e.station, { xp: 20 }, '');
+        } }]);
+      }
+      if (c.kind === 'escape') {
+        return Dialog.show(who, text, [{ label: `出發（${c.escape.minutes} 分鐘內，不能傳送）`, primary: true, run: () => {
+          so.escape = { i: e.i, deadline: Date.now() + c.escape.minutes * 60000 }; saveState(); Dialog.close();
+          toast('<b>有人在跟蹤你</b><span>搭車到終點站甩掉他</span>', 'warn');
+          solve(line, e.station, { xp: 20 }, '');
+        } }]);
+      }
+    });
+  }
+  function resolveEscape(line, safe) {
+    const so = storyOf(line); if (!so.escape) return;
+    const c = STORY[line].chapters[so.escape.i], i = so.escape.i;
+    so.escape = null; so.ch = Math.max(so.ch, i + 1);
+    if (safe) storyReward(line, so, null, c.evidence);
+    saveState();
+    Dialog.show({ name: safe ? '甩掉了' : '……', role: '' }, safe ? c.escape.safe : c.escape.caught, [{ label: '繼續', primary: true, run: () => Dialog.close() }]);
+    if (safe) Game.reward({ xp: 50, money: 60 }, '成功甩掉跟蹤者！');
+    if (World.layout) spawn(World.layout.stationId);
+  }
+  // 每秒檢查：追捕、逃脫的時間
+  function storyTick() {
+    const st = S().story || {}, now = Date.now();
+    for (const line of Object.keys(st)) {
+      const so = st[line];
+      if (so.chase && now > so.chase.deadline) {
+        const c = STORY[line].chapters[so.chase.i]; so.ch = Math.max(so.ch, so.chase.i + 1); so.chase = null; saveState();
+        toast(`<b>${c.chase.suspect.name}不見了</b><span>${c.chase.lost}</span>`, 'warn');
+        if (World.layout) spawn(World.layout.stationId);
+      }
+      if (so.escape && now > so.escape.deadline) resolveEscape(line, false);
+    }
+  }
+  // 任務列表：劇情進度
+  function storyNote(line) {
+    const d = STORY[line]; if (!d) return '';
+    const so = storyOf(line), next = d.chapters[so.ch];
+    const extra = so.chase ? `　⏱ 追捕中：${fmtLeft(so.chase.deadline)}` : so.escape ? `　⏱ 逃脫中：${fmtLeft(so.escape.deadline)}` : '';
+    return `劇情（${d.form}）：${so.ch} / ${d.chapters.length} 章${next ? `，下一章在 ${next.station}` : '，已全部解開'}　證據 ${Object.keys(so.ev).length} / ${evTotal(line)}${extra}`;
+  }
+  // 找到寶物時揭曉結局
+  function ending(line) {
+    const d = STORY[line]; if (!d) return null;
+    const so = storyOf(line), ev = Object.keys(so.ev).length, total = evTotal(line);
+    const kind = so.deduce ? (ev >= total ? 'true' : 'normal') : 'bad';
+    so.ending = kind; saveState();
+    return { kind, ev, total, ...d.endings[kind] };
+  }
+  const storyBusy = () => Object.values(S().story || {}).some(so => so.escape || so.chase);
+
   function spawn(stationId) {
     clear();
     const s = S(), f = s.flags.follow;
+    spawnStoryTargets(stationId);
     // 1) 這一站各線的委託（紙條或委託人）
     for (const l of MRT.linesAt(stationId)) {
       const line = l.line; if (!unsolved(line, stationId)) continue;
       const P = platformOf(line), pos = P && standPos(P); if (!pos) continue;
+      if (chapterAt(line, stationId)) { spawnStory(line, stationId, P, pos); continue; }
       const c = Puzzles.challenge(line, stationId), st = chState(line, stationId);
       if (c.kind === 'quiz' || c.kind === 'passage') {
         const sp = new T.Sprite(new T.SpriteMaterial({ map: noteTex('謎', 'rgba(255,90,90,.85)'), transparent: true, depthWrite: false })); sp.scale.set(.7, .7, 1);
@@ -854,8 +996,8 @@ const Challenges = (() => {
   function near(p) {
     let best = null, bd = 9;
     for (const e of ents) {
-      if (Math.abs(e.y - p.y) > .8) continue;
-      const r = e.type === 'hidden' ? 1.3 : e.type === 'coin' || e.type === 'lost' ? 1.2 : 1.7;
+      if (Math.abs(e.y - p.y) > .8 || e.type === 'stalker') continue;
+      const r = e.type === 'hidden' || e.type === 'storyHidden' ? 1.3 : e.type === 'coin' || e.type === 'lost' ? 1.2 : 1.7;
       const d = Math.hypot(e.x - p.x, e.z - p.z);
       if (d < r && d < bd) { best = e; bd = d; }
     }
@@ -870,6 +1012,10 @@ const Challenges = (() => {
   function label(e) {
     switch (e.type) {
       case 'note': return `解謎：${LINES[e.line].zh}`;
+      case 'story': return e.sc.npc.look || e.sc.npc.npcId ? `說話：${e.sc.npc.name}` : `查看：${e.sc.npc.name}`;
+      case 'storyLocked': return '查看';
+      case 'storyHidden': return '調查：這裡怪怪的';
+      case 'suspect': return `抓住：${e.sc.chase.suspect.name}`;
       case 'giver': return `說話：${e.c.giver.name}`;
       case 'coin': return '撿起：硬幣';
       case 'lost': return `撿起：${ITEMS[e.c.item].name}`;
@@ -893,6 +1039,7 @@ const Challenges = (() => {
   function say(e, text, btns) { Dialog.show({ name: e.name || title(e.line, e.station), role: e.role || '' }, text, btns || [{ label: '好', run: () => Dialog.close() }]); }
 
   function interact(e) {
+    if (/^story|^suspect/.test(e.type)) return storyInteract(e);
     const s = S(), c = e.c;
     if (e.type === 'note' && c.kind === 'quiz') return ask(e);
     if (e.type === 'note' && c.kind === 'passage') return say({ line: e.line, station: e.station, role: '秀蔅留下的紙條' }, c.ask);
@@ -996,10 +1143,10 @@ const Challenges = (() => {
     void L;
   }
   // 帶著人時不能傳送
-  const escorting = () => !!S().flags.follow;
+  const escorting = () => !!S().flags.follow || storyBusy();
   // 某線還沒完成的站（任務列表用）
   function pending(stationId) { return MRT.linesAt(stationId).map(l => l.line).filter(l => unsolved(l, stationId)); }
-  return { spawn, clear, tick, near, label, interact, escorting, pending, get follower() { return follower; }, get ents() { return ents; } };
+  return { spawn, clear, tick, near, label, interact, escorting, pending, storyTick, storyNote, ending, get follower() { return follower; }, get ents() { return ents; } };
 })();
 
 /* ── 車站裡的秘密：紙條、塗鴉、被遺忘的東西（有些只在特定時段出現） ── */
