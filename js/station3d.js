@@ -325,9 +325,13 @@ const Station3D = (() => {
   }
 
   /* ── 建造車站 ── */
+  // 擋路的設施（世界座標，玩家不能穿過）
+  let curL = null;
+  const solid = (cx, cz, w, d, y = 0) => { if (curL) curL.obstacles.push({ x0: cx - w / 2, x1: cx + w / 2, z0: cz - d / 2, z1: cz + d / 2, y }); };
   function build(L, skyName) {
     textures();
     clocks.length = 0;
+    curL = L; L.obstacles = [];
     const g = new T.Group();
     const night = skyName === 'night';
     const frame = M('#4a5259', { r: .5, m: .4 });
@@ -410,6 +414,7 @@ const Station3D = (() => {
       }
       // 柱子（中央）＋滅火器、緊急對講機、路網圖
       for (const x of [-28, 0, 28]) {
+        solid(P.x + x, P.z, .7, .7, P.y);
         box(.7, 3.4, .7, M('#ffffff', { map: tiled(TEX.wall, .6, 3) }), x, 1.7, 0, pg);
         box(.22, .36, .14, red, x + .36, .9, 0, pg);                               // 滅火器箱
         box(.2, .28, .1, M('#f2c200'), x - .36, 1.3, 0, pg);                        // 緊急對講機
@@ -417,11 +422,11 @@ const Station3D = (() => {
       const map = M('#ffffff', { map: routeMapTex() });
       for (const s of [-1, 1]) { const p = plane(.66, .66, map, pg); p.position.set(0, 1.6, s * .36); p.rotation.y = s > 0 ? 0 : Math.PI; }
       // 月台電梯
-      box(1.6, 2.6, 1.4, M('#9aa3aa', { m: .6, r: .3 }), -24, 1.3, 0, pg);
+      box(1.6, 2.6, 1.4, M('#9aa3aa', { m: .6, r: .3 }), -24, 1.3, 0, pg); solid(P.x - 24, P.z, 1.6, 1.4, P.y);
       for (const sz of [-1, 1]) box(1.2, 2.2, .04, M('#c9cfd4', { m: .8, r: .2 }), -24, 1.1, sz * .72, pg);
       sign(plainSign('電梯', 'Elevator', '#23272b', '#fff', { bg: '#2a7de1', fg: '#fff', text: '⇅' }), 1.4, .35, -24, 2.85, .75, pg);
       // 座椅
-      for (const x of [-31, 31]) { box(1.8, .08, .45, M('#8a9097', { m: .5 }), x, .45, 0, pg); box(1.8, .4, .06, M('#8a9097', { m: .5 }), x, .68, -.2, pg); }
+      for (const x of [-31, 31, -21, 23.5]) { box(1.8, .08, .45, M('#8a9097', { m: .5 }), x, .45, 0, pg); box(1.8, .4, .06, M('#8a9097', { m: .5 }), x, .68, -.2, pg); for (const lx of [-.8, .8]) box(.06, .45, .4, M('#5d6368', { m: .5 }), x + lx, .225, 0, pg); solid(P.x + x, P.z, 1.8, .5, P.y); }
       // 站名吊牌
       const stn = stationSignTex(L.stationId, P.line);
       for (const x of [-15, 15]) sign(stn, 2.4, .6, x, 2.95, 0, pg);
@@ -481,11 +486,11 @@ const Station3D = (() => {
     const U = L.unpaid;
     for (let i = 0; i < 4; i++) {
       const x = U.x0 + 2 + i * 1.6;
-      box(1.2, 1.8, .7, M('#e6e8ea', { m: .3 }), x, .9, U.z1 - .6, g);
+      box(1.2, 1.8, .7, M('#e6e8ea', { m: .3 }), x, .9, U.z1 - .6, g); solid(x, U.z1 - .6, 1.2, .7);
       box(.8, .5, .02, M('#1d6fb8', { e: '#1d6fb8', ei: .5 }), x, 1.35, U.z1 - .96, g);
     }
     sign(plainSign('售票機・加值機', 'Ticket & Add-value', '#23272b', '#fff'), 3, .75, U.x0 + 4.5, 3.1, U.z1 - 1.2, g);
-    box(4, 1.1, 1.6, M('#d8d4cc'), U.x1 - 3.5, .55, U.z0 + 3, g);
+    box(4, 1.1, 1.6, M('#d8d4cc'), U.x1 - 3.5, .55, U.z0 + 3, g); solid(U.x1 - 3.5, U.z0 + 3, 4, 1.6);
     box(4, .1, 1.7, M('#f0ede6'), U.x1 - 3.5, 1.12, U.z0 + 3, g);
     sign(plainSign('詢問處', 'Information', '#23272b', '#fff', { bg: '#f2c200', fg: '#23272b', text: '?' }), 2.6, .65, U.x1 - 3.5, 2.9, U.z0 + 3, g);
     sign(plainSign('廁所', 'Restrooms', '#23272b', '#fff', { bg: '#7fb2cf', fg: '#23272b', text: '♿' }), 2, .5, U.x1 - 3.5, 3.2, U.z1 - 1, g);
@@ -523,7 +528,7 @@ const Station3D = (() => {
     // 商店（大站才有）
     const shop = SHOPS[L.stationId];
     if (shop) {
-      box(1.2, 3, 5, M('#e8e4dc'), U.x0 + .6, 1.5, U.z0 + 7, g);
+      box(1.2, 3, 5, M('#e8e4dc'), U.x0 + .6, 1.5, U.z0 + 7, g); solid(U.x0 + .6, U.z0 + 7, 1.2, 5);
       box(.05, 2.2, 4.2, M('#cfe3ec', { t: true, o: .35 }), U.x0 + 1.22, 1.3, U.z0 + 7, g);
       for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) box(.3, .3, .3, M(['#c4162a', '#2a9d8f', '#f2c200'][(i + j) % 3]), U.x0 + .7, .7 + i * .6, U.z0 + 5.6 + j * 1.2, g);
       sign(plainSign(shop.sign, shop.name, shop.color, '#fff'), 3, .75, U.x0 + 1.3, 3.3, U.z0 + 7, g, Math.PI / 2);
@@ -537,13 +542,14 @@ const Station3D = (() => {
     sign(plainSign('廁所', 'Restrooms', '#23272b', '#fff', { bg: '#7fb2cf', fg: '#23272b', text: 'WC' }), 2.4, .55, U.x1 - .3, 3.05, U.z0 + 9.2, g, -Math.PI / 2);
     sign(plainSign('廁所 →', 'Restrooms', '#23272b', '#fff', { bg: '#7fb2cf', fg: '#23272b', text: 'WC' }), 1.8, .42, U.x1 - 6, 3.4, U.z0 + 9, g, Math.PI / 2);
     // 失物招領（詢問處旁）
-    box(3, 1.1, 1.6, M('#d8d4cc'), U.x1 - 8.2, .55, U.z0 + 3, g);
+    box(3, 1.1, 1.6, M('#d8d4cc'), U.x1 - 8.2, .55, U.z0 + 3, g); solid(U.x1 - 8.2, U.z0 + 3, 3, 1.6);
     box(3, .1, 1.7, M('#f0ede6'), U.x1 - 8.2, 1.12, U.z0 + 3, g);
     for (let i = 0; i < 4; i++) box(.4, .3, .3, M(['#c4162a', '#2a7de1', '#f2c200', '#3a3a3a'][i]), U.x1 - 9.2 + i * .65, 1.32, U.z0 + 3.3, g);
     sign(plainSign('失物招領', 'Lost & Found', '#23272b', '#fff', { bg: '#e08a2a', fg: '#fff', text: '?' }), 2.6, .65, U.x1 - 8.2, 2.9, U.z0 + 3, g);
     const mapBig = plane(2.4, 2.4, M('#ffffff', { map: routeMapTex() }), g); mapBig.position.set(U.x0 + .02 + 0, 1.7, U.z0 + 6); mapBig.rotation.y = Math.PI / 2; mapBig.position.x = U.x0 + .02;
 
     furnish(L, g, night);
+    decorate(L, g);
     for (const k of placesOf(L.stationId)) buildPlace(L, g, k);
     g.userData = { psd, layout: L };
     mergeStatic(g);
@@ -551,12 +557,75 @@ const Station3D = (() => {
   }
 
 
+  /* ── 讓車站不要太空：柱子、長椅、盆栽、列車資訊螢幕、地面導引色帶、天花板管線、愛心傘架、
+   *    月台的通風管、電纜槽、號誌燈、月台端的工作門 ── */
+  function decorate(L, g) {
+    const C = L.concourse, U = L.unpaid, hallH = 4.2;
+    const dark = M('#30363c', { r: .5 }), steel = M('#b9c0c6', { m: .6, r: .35 }), colM = M('#f0eee8', { r: .6 });
+    const nearRamp = (x, z, m) => L.platforms.some(P => P.ramps.some(r => Math.abs(z - r.z) < 1.85 + m && x > Math.min(r.xa, r.xb) - m && x < Math.max(r.xa, r.xb) + m));
+    const free = (x, z, m = .6) => !nearRamp(x, z, m) && !L.spots.some(s => s.y === 0 && Math.hypot(s.x - x, s.z - z) < 1.6);
+    // 大廳柱子＋旁邊的長椅
+    for (const x of [-5.5, 5.5]) for (let z = C.z0 + 5; z < L.gateZ - 3; z += 8) {
+      if (!free(x, z, 1)) continue;
+      box(.8, hallH, .8, colM, x, hallH / 2, z, g); solid(x, z, .8, .8);
+      box(.82, .12, .82, M('#c8cdd2', { m: .5 }), x, .06, z, g);
+      const bx = x + Math.sign(x) * 1.0;
+      if (free(bx, z, .4)) { box(.45, .08, 1.6, M('#8a9097', { m: .5 }), bx, .45, z, g); box(.06, .4, 1.6, M('#8a9097', { m: .5 }), bx + Math.sign(x) * .2, .68, z, g); solid(bx, z, .5, 1.6); }
+    }
+    // 盆栽
+    const planter = (x, z) => { if (!free(x, z, .4)) return; box(.7, .55, .7, M('#6a6e72', { r: .7 }), x, .275, z, g); solid(x, z, .7, .7); for (let i = 0; i < 5; i++) { const s = new T.Mesh(new T.SphereGeometry(.32 - i * .03, 10, 8), M(['#3d7a4a', '#4a8a52', '#2f6a3c'][i % 3], { r: .9 })); s.position.set(x + Math.sin(i * 2.3) * .14, .75 + i * .14, z + Math.cos(i * 2.3) * .14); g.add(s); } };
+    for (const x of [-9.2, 9.2]) planter(x, L.gateZ - 1.2);
+    planter(U.x0 + 3.2, U.z0 + 1); planter(U.x1 - 12.5, U.z1 - .8);
+    // 列車資訊螢幕（閘門內側，吊在天花板）
+    const info = canvasTex(512, 256, x => {
+      x.fillStyle = '#0d1b2a'; x.fillRect(0, 0, 512, 256); x.fillStyle = '#f2c200'; x.font = 'bold 26px "Noto Sans TC", sans-serif'; x.fillText('列車資訊 Train Info', 18, 38);
+      L.platforms.slice(0, 3).forEach((P, i) => { const y = 92 + i * 56; x.fillStyle = LINES[P.line].color; x.fillRect(18, y - 30, 70, 40); x.fillStyle = '#fff'; x.font = 'bold 24px sans-serif'; x.fillText(P.line, 30, y - 2); x.font = '24px "Noto Sans TC", sans-serif'; x.fillText(`${LINES[P.line].zh}　約每 3 分鐘一班`, 104, y - 2); });
+    });
+    for (const x of [-3, 3]) { box(.04, .5, .04, dark, x, hallH - .25, L.gateZ - 2.2, g); box(1.5, .8, .08, dark, x, hallH - .9, L.gateZ - 2.2, g); for (const s of [-1, 1]) { const p = plane(1.4, .7, M('#ffffff', { map: info, e: '#ffffff', ei: .5 }), g); p.position.set(x, hallH - .9, L.gateZ - 2.2 + s * .05); p.rotation.y = s > 0 ? 0 : Math.PI; } }
+    // 地面導引色帶：從閘門到各線的電扶梯口
+    L.platforms.forEach((P, i) => {
+      const r = P.ramps.find(r => r.b > 0) || P.ramps[0], col = M(LINES[P.line].color, { r: .6 });
+      const off = (i - (L.platforms.length - 1) / 2) * .4, zEnd = P.z + 2.3 + i * .35;
+      const a = plane(.22, L.gateZ - 1 - zEnd, col, g); a.rotation.x = -Math.PI / 2; a.position.set(off, .012, (L.gateZ - 1 + zEnd) / 2);
+      const bx = r.xb - r.b * .2, b = plane(Math.abs(bx - off), .22, col, g); b.rotation.x = -Math.PI / 2; b.position.set((bx + off) / 2, .012, zEnd);
+    });
+    // 天花板：線槽、通風口
+    box(C.x1 - C.x0 - 1, .12, .4, M('#9aa0a6', { m: .5 }), (C.x0 + C.x1) / 2, hallH - .25, C.z0 + 1.6, g);
+    for (let x = C.x0 + 4; x < C.x1 - 3; x += 7) for (let z = C.z0 + 6; z < L.gateZ - 1; z += 9) box(.9, .03, .9, M('#5d6368'), x, hallH - .02, z, g);
+    // 愛心傘架
+    box(1.2, .9, .35, steel, -11, .45, U.z1 - .45, g); solid(-11, U.z1 - .45, 1.2, .4);
+    for (let i = 0; i < 6; i++) { const u = new T.Mesh(new T.CylinderGeometry(.05, .04, .9, 8), M(['#c4162a', '#2a5fb0', '#f2c200', '#3d7a4a', '#e07a3a', '#6a3a8a'][i])); u.position.set(-11.45 + i * .18, 1.0, U.z1 - .45); g.add(u); }
+    sign(plainSign('愛心傘', 'Umbrella sharing', '#2a9d8f', '#fff'), 1.2, .3, -11, 1.75, U.z1 - .3, g, Math.PI);
+    // ── 月台 ──
+    for (const P of L.platforms) {
+      const pg = new T.Group(); pg.position.set(P.x, P.y, P.z); g.add(pg);
+      if (P.under) {
+        // 天花板通風管、軌道外牆的電纜槽
+        for (const z of [-3.6, 3.6]) { const d = new T.Mesh(new T.CylinderGeometry(.22, .22, LEN, 12), M('#b9c0c6', { m: .6, r: .4 })); d.rotation.z = Math.PI / 2; d.position.set(0, 3.12, z); pg.add(d); }
+        for (const s of [-1, 1]) for (const y of [-.3, .1]) box(LEN + 300, .08, .14, M('#3a3e44', { r: .6 }), 0, y, s * 6.78, pg);
+        // 月台端的工作門
+        for (const ex of [-1, 1]) {
+          const d = plane(1.1, 2.1, M('#7a8590'), pg); d.position.set(ex * (LEN / 2 - .02), 1.05, 1.4); d.rotation.y = ex > 0 ? -Math.PI / 2 : Math.PI / 2;
+          sign(plainSign('非工作人員禁止進入', 'Staff only', '#c4162a', '#fff'), 1.6, .38, ex * (LEN / 2 - .05), 2.45, 1.4, pg, ex > 0 ? -Math.PI / 2 : Math.PI / 2);
+        }
+      }
+      // 隧道口／軌道旁的號誌燈
+      for (const s of [-1, 1]) for (const ex of [-1, 1]) {
+        const x = ex * (LEN / 2 + 4), z = s * (TRACK + 1.35);
+        box(.12, 1.4, .12, dark, x, -.4, z, pg); box(.3, .6, .22, M('#1c2126'), x, .5, z, pg);
+        const lit = new T.Mesh(new T.SphereGeometry(.08, 10, 8), new T.MeshBasicMaterial({ color: ex * s > 0 ? '#3ad06a' : '#e84040' })); lit.position.set(x, .62, z - s * .12); pg.add(lit);
+      }
+      // 軌道旁的設備箱
+      for (const s of [-1, 1]) for (const x of [-LEN / 2 - 10, LEN / 2 + 12]) box(.8, .6, .5, M('#8a9097', { m: .4 }), x, -.85, s * (TRACK + 1.6), pg);
+    }
+  }
+
   /* ── 特別場所 ── */
   function buildPlace(L, g, kind) {
     const p = placeAt(L, kind), wood = M('#8a5a3a', { r: .7 }), dark = M('#30363c', { r: .5 }), cream = M('#efe6d6', { r: .8 });
     if (kind === 'cafe') {
       const x1 = L.concourse.x1;
-      box(1.2, 1.05, 4.2, wood, x1 - 1.6, .525, p.z, g);                     // 吧台
+      box(1.2, 1.05, 4.2, wood, x1 - 1.6, .525, p.z, g); solid(x1 - 1.6, p.z, 1.2, 4.2);   // 吧台
       box(1.3, .06, 4.3, M('#2a2a2a', { r: .3 }), x1 - 1.6, 1.08, p.z, g);
       box(.45, .5, .4, M('#c8cdd2', { m: .8, r: .25 }), x1 - 1.6, 1.36, p.z - 1.2, g);   // 咖啡機
       box(.12, .18, .12, dark, x1 - 1.6, 1.2, p.z - .7, g);
@@ -571,7 +640,7 @@ const Station3D = (() => {
       }
     }
     if (kind === 'stage') {
-      box(2.6, .16, 2.2, M('#3a3a42', { r: .8 }), p.x, .08, p.z, g);          // 舞台
+      box(2.6, .16, 2.2, M('#3a3a42', { r: .8 }), p.x, .08, p.z, g); solid(p.x - .3, p.z, 1.9, 2.2);   // 舞台
       box(.04, 1.4, .04, dark, p.x + .7, .86, p.z, g); box(.1, .14, .1, dark, p.x + .7, 1.6, p.z, g);   // 麥克風架
       box(.5, .6, .35, M('#1d1d20', { r: .6 }), p.x - .8, .46, p.z - .6, g);    // 音箱
       box(1.0, .12, .36, M('#1d1d20', { r: .6 }), p.x + .2, .22, p.z + .8, g);  // 吉他盒
@@ -579,7 +648,7 @@ const Station3D = (() => {
       sign(plainSign('街頭藝人表演區', 'Street performance', '#e07a3a', '#fff'), 2.2, .5, p.x, 2.6, p.z - 1.2, g);
     }
     if (kind === 'stall') {
-      box(1.8, .9, .9, wood, p.x, .45, p.z, g);                               // 攤車
+      box(1.8, .9, .9, wood, p.x, .45, p.z, g); solid(p.x, p.z, 1.8, .9);   // 攤車
       for (const s of [-1, 1]) { const w = new T.Mesh(new T.CylinderGeometry(.18, .18, .08, 14), dark); w.rotation.x = Math.PI / 2; w.position.set(p.x + s * .6, .18, p.z + .48); g.add(w); }
       for (let i = 0; i < 5; i++) box(.28, .06, .2, M(['#e6dcc6', '#c4162a', '#2a5fb0', '#f2c200', '#3d7a4a'][i]), p.x - .7 + i * .35, .93, p.z, g);
       box(.04, 1.6, .04, dark, p.x - .85, 1.7, p.z - .4, g); box(.04, 1.6, .04, dark, p.x + .85, 1.7, p.z - .4, g);
@@ -663,7 +732,7 @@ const Station3D = (() => {
     };
     // ── 大廳（付費區）──
     const fz = C.z0 + .3;
-    fountain(C.x1 - 8, 0, C.z0 + .25, 0);
+    fountain(C.x1 - 8, 0, C.z0 + .25, 0); solid(C.x1 - 8, C.z0 + .3, .5, .45);
     // AED
     box(.5, .6, .18, M('#2f9e5a'), C.x1 - 10.5, 1.4, fz, g);
     sign(plainSign('AED', '自動體外心臟電擊去顫器', '#2f9e5a', '#fff', { bg: '#fff', fg: '#c4162a', text: '♥' }), 1.2, .3, C.x1 - 10.5, 1.95, fz + .05, g);
@@ -687,7 +756,7 @@ const Station3D = (() => {
     sign(plainSign('寬閘門', 'Wide gate', '#2a5fb0', '#fff', { bg: '#fff', fg: '#2a5fb0', text: '♿' }), 1.4, .35, L.gates[L.gates.length - 1] + 1.2, 1.6, L.gateZ + .6, g);
     // ── 非付費區 ──
     // 自動販賣機
-    box(.9, 1.9, .8, M('#e8e8e4'), U.x1 - .5, .95, U.z0 + 6.2, g);
+    box(.9, 1.9, .8, M('#e8e8e4'), U.x1 - .5, .95, U.z0 + 6.2, g); solid(U.x1 - .5, U.z0 + 6.2, .9, .8);
     const vt = canvasTex(128, 256, x => { x.fillStyle = '#1f6f8b'; x.fillRect(0, 0, 128, 256); x.fillStyle = '#fff'; x.font = 'bold 18px sans-serif'; x.fillText('飲料', 40, 26); const cs = ['#e04848', '#f2c200', '#2a9d8f', '#f4f4f2', '#3a6a3a', '#a86a2a']; for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) { x.fillStyle = cs[(r + c) % 6]; x.fillRect(12 + c * 28, 44 + r * 46, 18, 34); } });
     const vp = plane(.8, 1.6, M('#ffffff', { map: vt, e: '#ffffff', ei: .25 }), g); vp.position.set(U.x1 - .94, 1.05, U.z0 + 6.2); vp.rotation.y = -Math.PI / 2;
     // 資源回收桶
@@ -717,15 +786,15 @@ const Station3D = (() => {
     // 大站：置物櫃、ATM
     if (SHOPS[L.stationId]) {
       for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) box(.62, .5, .02, M(['#f2c200', '#e8e8e4'][(i + j) % 2]), U.x0 + .72, .4 + j * .55, U.z0 + 9.45 + i * .66, g).rotation.y = Math.PI / 2;
-      box(.7, 2.3, 2.1, M('#b9c0c6', { m: .5 }), U.x0 + .35, 1.15, U.z0 + 10.1, g);
+      box(.7, 2.3, 2.1, M('#b9c0c6', { m: .5 }), U.x0 + .35, 1.15, U.z0 + 10.1, g); solid(U.x0 + .35, U.z0 + 10.1, .8, 2.1);
       sign(plainSign('置物櫃', 'Lockers', '#23272b', '#fff'), 1.4, .35, U.x0 + .8, 2.6, U.z0 + 10.1, g, Math.PI / 2);
-      box(.8, 1.7, .7, M('#3a4a5a', { m: .4 }), U.x1 - .45, .85, U.z0 + 4.7, g);
+      box(.8, 1.7, .7, M('#3a4a5a', { m: .4 }), U.x1 - .45, .85, U.z0 + 4.7, g); solid(U.x1 - .45, U.z0 + 4.7, .8, .7);
       const atm = plane(.4, .3, M('#2a7de1', { e: '#2a7de1', ei: .6 }), g); atm.position.set(U.x1 - .86, 1.3, U.z0 + 4.7); atm.rotation.y = -Math.PI / 2;
       sign(plainSign('ATM', '提款機', '#23272b', '#fff'), 1, .3, U.x1 - .9, 2.1, U.z0 + 4.7, g, -Math.PI / 2);
     }
     for (const [x, z] of [[U.x0 + 3, U.z0 + 2], [U.x1 - 3, U.z1 - 3], [0, U.z0 + 6]]) cam(x, hallH, z);
     // 更多垃圾桶、廣告、指標
-    const bin = (x, y, z) => { box(.42, .75, .42, M('#5d6b7a', { m: .4, r: .4 }), x, y + .375, z, g); box(.44, .06, .44, darkM, x, y + .78, z, g); box(.16, .02, .2, M('#1c2126'), x, y + .81, z, g); };
+    const bin = (x, y, z) => { solid(x, z, .42, .42, y); box(.42, .75, .42, M('#5d6b7a', { m: .4, r: .4 }), x, y + .375, z, g); box(.44, .06, .44, darkM, x, y + .78, z, g); box(.16, .02, .2, M('#1c2126'), x, y + .81, z, g); };
     for (const x of [-5.2, 5.2]) bin(x, 0, C.z0 + .45);                                   // 大廳站名牆兩側
     bin(U.x0 + .5, 0, U.z0 + 3.4); bin(U.x1 - 5.8, 0, U.z1 - .5);                         // 非付費區
     const adW = (x, z, rot, i) => { const b = box(.12, 1.7, 3.2, M('#e8e8e4'), x, 1.7, z, g); b.rotation.y = rot; const p = plane(3, 1.5, M('#ffffff', { map: adTex(i), e: '#ffffff', ei: .15 }), g); p.position.set(x + Math.sin(rot) * .07, 1.7, z + Math.cos(rot) * .07); p.rotation.y = rot; };
@@ -740,7 +809,7 @@ const Station3D = (() => {
       const pg = new T.Group(); pg.position.set(P.x, P.y, P.z); g.add(pg);
       const top = P.under ? 3.4 : 3.8;
       // 飲水機（靠近端點的柱子）
-      const f = new T.Group(); f.position.set(26.4, 0, .45); pg.add(f);
+      const f = new T.Group(); f.position.set(26.4, 0, .45); pg.add(f); solid(P.x + 26.4, P.z + .45, .5, .4, P.y);
       box(.5, .85, .4, steelM, 0, .425, 0, f); box(.46, .06, .36, M('#e8ecf0', { m: .9, r: .15 }), 0, .88, 0, f);
       // 柱子上的緊急停止按鈕、消防栓
       for (const x of [-28, 0, 28]) {

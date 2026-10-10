@@ -17,6 +17,8 @@ const World = (() => {
   let last = 0, shake = 0, lastGateSide = 0;
   let onZoneChange = null, lastZoneKey = '';
   let gateCheck = null, blocked = null;
+  // 車站裡的固定設施（柱子、椅子、櫃台……）
+  const hitObstacle = (x, z, y) => !!(layout && layout.obstacles && layout.obstacles.some(o => Math.abs(y - o.y) < 1 && x > o.x0 - .28 && x < o.x1 + .28 && z > o.z0 - .28 && z < o.z1 + .28));
   const tickers = [], recenterHooks = [];
 
   const SKY = {
@@ -236,6 +238,11 @@ const World = (() => {
         const sp = v * dt;
         const bx = player.x, bz = player.z;
         tryMove(player.x + mx * sp, player.z + mz * sp);
+        // 撞到柱子、椅子、櫃台等設施：沿著邊滑過去
+        if (hitObstacle(player.x, player.z, player.y) && !hitObstacle(bx, bz, player.y)) {
+          player.x = bx; player.z = bz;
+          tryMove(bx + mx * sp, bz); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; tryMove(bx, bz + mz * sp); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; } }
+        }
         if (blocked && blocked(player.x, player.z, player.y)) { player.x = bx; player.z = bz; }   // 不能穿過 NPC
         player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * 12));
         player.speed = v; moved = true;
