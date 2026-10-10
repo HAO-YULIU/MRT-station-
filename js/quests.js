@@ -456,8 +456,11 @@ const Quests = (() => {
     const q = QUESTS[id];
     if (!q || isActive(id) || isDone(id)) return false;
     if (q.type === 'side' && sideCount() >= SIDE_LIMIT) return false;
+    if (failedToday(id)) return false;
     return true;
   }
+  // 限時任務失敗後，當天不能再接
+  function failedToday(id) { const f = S().quests.failed; return !!(f && f[id] === TaipeiTime.date()); }
   function accept(id) {
     if (!canAccept(id)) return false;
     active()[id] = { step: 0, v: 2 };
@@ -543,7 +546,9 @@ const Quests = (() => {
     for (const id of Object.keys(active())) {
       const st = active()[id];
       if (!st.deadline || now <= st.deadline) continue;
-      delete active()[id]; saveState();
+      delete active()[id];
+      S().quests.failed = S().quests.failed || {}; S().quests.failed[id] = TaipeiTime.date();
+      saveState();
       Game.onQuestChange && Game.onQuestChange('fail', id);
     }
   }
@@ -555,5 +560,5 @@ const Quests = (() => {
     Game.onQuestChange && Game.onQuestChange('secret', id);
     return true;
   }
-  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow, secret, tick };
+  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow, secret, tick, failedToday };
 })();

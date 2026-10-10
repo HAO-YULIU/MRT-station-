@@ -461,7 +461,7 @@ const Xiuyu = (() => {
     const s = Game.state;
     if (!s.flags.xiuyuIntro) return;
     for (const l of MRT.linesAt(stationId)) {
-      if (s.linesMet[l.line]) continue;
+      if (s.linesMet[l.line] || !MAIN_STORY[l.line]) continue;
       s.linesMet[l.line] = { station: stationId, found: false };
       Quests.accept('find_xiuyu_' + l.line);
       toast(`<b>第一次來到${LINES[l.line].zh}</b><span>秀蔅好像就在這一站的某個地方……</span>`);
@@ -521,6 +521,7 @@ const Dialog = (() => {
       const q = QUESTS[qid];
       if (Quests.isActive(qid) || Quests.isDone(qid)) continue;
       if (q.type === 'event' && !Quests.eventsNow().includes(qid)) continue;
+      if (Quests.failedToday(qid)) { btns.push({ label: `限時任務：${q.title}（今天來不及了，請之後或明天再來）`, disabled: true, run: () => {} }); continue; }
       const full = q.type === 'side' && Quests.sideCount() >= SIDE_LIMIT;
       btns.push({ label: full ? `支線已滿（${SIDE_LIMIT}/${SIDE_LIMIT}）` : q.limit ? `限時任務：${q.title}（${q.limit} 分鐘）` : `接任務：${q.title}`, primary: !full, disabled: full, run: () => { Quests.accept(qid); onAccept(qid); menu(npc, q.desc); } });
     }
@@ -609,7 +610,7 @@ const Dialog = (() => {
   function ferryman(npc) {
     const s = Game.state, lines = Object.keys(MAIN_STORY);
     const have = lines.filter(l => s.inv['treasure_' + l] > 0);
-    if (s.flags.mistLine) return show(npc, '霧散開了一點。你看，桃園機場捷運已經出現在路網上了。剩下的路，要你自己去走。', [{ label: '再見', run: close }]);
+    if (s.flags.mistLine) return show(npc, '霧散開了一點。你看，桃園機場捷運已經出現在路網上，從台北車站就能搭。剩下的路，要你自己去走。', [{ label: '再見', run: close }]);
     if (have.length < lines.length) {
       const miss = lines.filter(l => !have.includes(l)).map(l => LINES[l].zh);
       return show(npc, `${pick(npc.lines)}<br><small>（擺渡人看了看你的背包：寶物 ${have.length} / ${lines.length}。還差：${miss.join('、')}的寶物。）</small>`, [{ label: '再見', run: close }]);
@@ -618,6 +619,7 @@ const Dialog = (() => {
       { label: '交出六件寶物', primary: true, run: () => {
         for (const l of lines) s.inv['treasure_' + l]--;
         s.flags.mistLine = true;
+        MRT.openAirport();
         if (!Quests.isActive('final') && !Quests.isDone('final')) Quests.accept('final');
         const done = Quests.emit({ kind: 'handin' });
         saveState(); updateHud();

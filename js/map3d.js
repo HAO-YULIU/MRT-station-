@@ -212,39 +212,6 @@ const Map3D = (() => {
     return g;
   }
 
-  /* ── 桃園機場捷運：交出六件寶物後才出現（目前不能搭） ── */
-  let airportGroup = null;
-  function buildAirportLine() {
-    const g = new T.Group(), A = AIRPORT_LINE;
-    const pts = A.stations.map(([id, , x, y]) => { const p = x == null ? P(id) : new T.Vector3(x / S, 0, y / S); p.y = 2.4; return p; });
-    const curve = new T.CatmullRomCurve3(pts, false, 'centripetal');
-    const mat = new T.MeshStandardMaterial({ color: A.color, emissive: A.color, emissiveIntensity: .35, roughness: .35 });
-    g.add(new T.Mesh(new T.TubeGeometry(curve, 300, .45, 10, false), mat));
-    const pierM = new T.MeshStandardMaterial({ color: '#9a9a96', roughness: .9 });
-    for (let u = 0; u <= 1; u += .012) { const p = curve.getPointAt(u); const pier = new T.Mesh(new T.CylinderGeometry(.12, .16, p.y, 6), pierM); pier.position.set(p.x, p.y / 2, p.z); g.add(pier); }
-    // 光點沿著路線流動
-    const dots = [];
-    for (let i = 0; i < 24; i++) { const d = new T.Mesh(new T.SphereGeometry(.26, 10, 8), new T.MeshBasicMaterial({ color: '#f0e6ff' })); d.userData.t = i / 24; g.add(d); dots.push(d); }
-    g.userData.tick = t => dots.forEach(d => { d.position.copy(curve.getPointAt((d.userData.t + t * .00003) % 1)); });
-    // 車站（前三站是和台北捷運共用的轉乘站，只加標籤）
-    A.stations.forEach(([id, code, x], i) => {
-      const p = pts[i];
-      if (x != null) {
-        const body = new T.Mesh(new T.CylinderGeometry(.62, .62, .5, 20), new T.MeshStandardMaterial({ color: '#ffffff', roughness: .4 }));
-        const ring = new T.Mesh(new T.TorusGeometry(.62, .14, 8, 24), new T.MeshStandardMaterial({ color: A.color })); ring.rotation.x = Math.PI / 2; ring.position.y = .25;
-        const grp = new T.Group(); grp.position.copy(p); grp.add(body, ring); g.add(grp);
-      }
-      const lab = textSprite(`${code} ${id}`, { size: 38, color: '#4a2a6a' });
-      lab.position.set(p.x, p.y + (x == null ? 3.2 : 1.6), p.z); const sc = .95; lab.scale.set(sc * lab.userData.aspect, sc, 1);
-      lab.userData = { ...lab.userData, id: 'A:' + id, base: sc, transfer: true };
-      g.add(lab);
-    });
-    const name = textSprite('桃園機場捷運（尚未開放）', { size: 46, color: '#ffffff', bg: 'rgba(130,70,175,.92)' });
-    const mid = curve.getPointAt(.45); name.position.set(mid.x, mid.y + 4.5, mid.z - 3); name.scale.set(1.6 * name.userData.aspect, 1.6, 1); g.add(name);
-    airportGroup = g;
-    return g;
-  }
-
   /* ── 車站 ── */
   function buildStations() {
     const g = new T.Group();
@@ -412,7 +379,6 @@ const Map3D = (() => {
     if (marker) { marker.position.y += Math.sin(t / 300) * .006; marker.rotation.y = t / 900; }
     if (opts.compass) opts.compass.style.transform = `rotate(${cam.yaw}rad)`;
     if (heroRig) heroRig.update(.016, 0, t / 1000);
-    if (airportGroup) airportGroup.userData.tick(t);
     renderer.render(scene, camera);
   }
 
@@ -441,8 +407,6 @@ const Map3D = (() => {
       scene.add(landmarks());
       scene.add(buildLines());
       scene.add(buildStations());
-      airportGroup = null;
-      if (o.mistLine) scene.add(buildAirportLine());
       hero = heroRig = marker = null;
       placeHero();
       this._solo = null;
@@ -451,7 +415,6 @@ const Map3D = (() => {
     },
     close() { running = false; cancelAnimationFrame(raf); },
     focus(id, dist = 40) { const p = P(id); cam.tx = p.x; cam.tz = p.z; cam.dist = dist; },
-    focusMist() { cam.tx = -8; cam.tz = 43; cam.dist = 85; cam.yaw = 0; },
     overview() { cam.tx = 50; cam.tz = 47; cam.dist = 95; cam.yaw = 0; cam.pitch = .95; },
     rotate(a) { cam.yaw += a; },
     // 只看某一條線（其他變淡）；再按一次恢復

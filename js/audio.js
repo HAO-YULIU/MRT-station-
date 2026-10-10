@@ -103,6 +103,7 @@ const Sound = (() => {
     O: [[N.A5, 0], [N.Cs6, .2], [N.E6, .4], [N.A6, .6], [N.E6, .95], [N.A6, 1.15]],
     BL: [[N.D6, 0], [N.Fs6, .22], [N.A6, .44], [N.D7, .66], [N.A6, 1.0]],
     Y: [[N.E6, 0], [N.G6, .18], [N.E6, .36], [N.C7, .54], [N.B6, .84], [N.A6, 1.04]],
+    A: [[N.G5, 0], [N.C6, .2], [N.E6, .4], [N.G6, .6], [N.E6, .9], [N.C7, 1.15]],
   };
   function synthChime(line) {
     const notes = CHIMES[line] || CHIMES.R;

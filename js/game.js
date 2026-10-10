@@ -13,7 +13,7 @@ const Game = {
 function newState() {
   return {
     char: null, start: null, current: null, items: {}, visited: {}, rides: 0,
-    money: 500, xp: 0, inv: {}, quests: { active: {}, done: {} }, trip: null, friends: {}, linesMet: {}, flags: {},
+    money: 500, xp: 0, inv: {}, quests: { active: {}, done: {}, failed: {} }, trip: null, friends: {}, linesMet: {}, flags: {},
     wardrobe: { own: {}, wear: {} },   // 買過的服裝、身上穿的（沒寫的部位用預設）
   };
 }
@@ -31,6 +31,7 @@ function loadState() {
 }
 function saveState() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.state)); } catch (e) { /* 無法存檔時仍可遊玩 */ } }
 Game.state = loadState();
+if (Game.state.flags.mistLine) MRT.openAirport();   // 已經交出寶物：桃園機場捷運加入路網
 
 /* ── 小工具 ── */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -93,7 +94,7 @@ function updateHud() {
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
   $('#hudWhere').textContent = s.current ? s.current : '尚未出發';
-  $('#hudItems').textContent = `${Object.keys(s.items).length}/6`;
+  $('#hudItems').textContent = `${Object.keys(s.items).length}/${LINE_ORDER.length}`;
   $('#hudQuests').textContent = Object.keys(s.quests.active).length;
 }
 
@@ -145,7 +146,7 @@ Game.reward = (r = {}, label = '') => {
 Game.onQuestChange = (what, id) => {
   const q = QUESTS[id];
   if (what === 'accept') toast(`<b>接下任務</b><span>${q.title}</span>`);
-  if (what === 'fail') { toast(`<b>限時任務失敗</b><span>${q.title}：時間到了。可以再去找${q.giver && NPCS[q.giver] ? NPCS[q.giver].name : '他'}重新接。</span>`, 'warn'); Sound.click(); }
+  if (what === 'fail') { toast(`<b>限時任務失敗</b><span>${q.title}：時間到了。今天來不及了，請之後或明天再來找${q.giver && NPCS[q.giver] ? NPCS[q.giver].name : '他'}。</span>`, 'warn'); Sound.click(); }
   // 六條主線都完成：秀蔅指引去小碧潭
   if (what === 'done' && /^main_/.test(id) && Object.keys(MAIN_STORY).every(l => Quests.isDone('main_' + l)) && !Quests.isActive('final') && !Quests.isDone('final')) {
     setTimeout(() => { Quests.accept('final'); toast('<b>秀蔅：「六樣東西都到齊了。」</b><span>帶著寶物去小碧潭，月台上有人在等你。</span>', 'level'); }, 1500);
@@ -248,7 +249,7 @@ function renderTitle() {
   $('#btnStart') && ($('#btnStart').onclick = go);
   $('#btnNew') && ($('#btnNew').onclick = () => {
     if (!confirm('重新開始會清除目前的進度與收集到的物品，確定嗎？')) return;
-    Game.state = newState(); saveState(); go();
+    Game.state = newState(); MRT.closeAirport(); saveState(); go();
   });
   $('#btnContinue') && ($('#btnContinue').onclick = () => { Sound.unlock(); goFullscreen(); enterGame(s.current); });
 }
@@ -276,6 +277,7 @@ function renderCharSelect() {
   confirmBtn.onclick = () => {
     // 每一位玩家都從南港展覽館出發
     const s = Game.state;
+    MRT.closeAirport();
     Object.assign(s, newState(), { char: pick, start: START_STATION, current: START_STATION, visited: { [START_STATION]: true }, trip: { from: START_STATION } });
     saveState();
     enterGame(START_STATION);
@@ -837,7 +839,7 @@ function showItemGet(line) {
     <div class="item-icon">${itemIcon(it.icon, L.color, 120)}</div>
     <h2 id="itemName">${it.name}</h2>
     <p>${it.desc}</p>
-    <div class="item-count">已收集 ${Object.keys(Game.state.items).length} / 6</div>
+    <div class="item-count">已收集 ${Object.keys(Game.state.items).length} / ${LINE_ORDER.length}</div>
     <button class="btn primary" id="itemOk">收進背包</button>
   </div>`;
   ov.hidden = false;
@@ -852,11 +854,11 @@ Game.unlockMistLine = () => {
     <div class="item-line">小碧潭的渡口</div>
     <div class="item-icon" style="font-size:84px">🌫️</div>
     <h2 id="mistName">新路線出現了</h2>
-    <p>擺渡人把六件寶物放進提燈裡。燈光穿過霧，一路往西照向機場——路網圖上出現了<b>桃園機場捷運</b>。<br>這條線還在霧裡，暫時不能搭乘。</p>
+    <p>擺渡人把六件寶物放進提燈裡。燈光穿過霧，一路往西照向機場——路網圖上出現了<b>桃園機場捷運</b>。<br>從台北車站、三重、新北產業園區都可以轉乘，一路坐到機場和老街溪。</p>
     <button class="btn primary" id="mistOk">打開路網圖看看</button>
   </div>`;
   ov.hidden = false;
-  $('#mistOk').onclick = () => { ov.hidden = true; openMap(); Map3D.focusMist && Map3D.focusMist(); };
+  $('#mistOk').onclick = () => { ov.hidden = true; openMap(); Map3D.focusLine('A'); };
   $('#mistOk').focus();
 };
 
@@ -887,7 +889,7 @@ function openBag() {
     </ul>
     <div class="gate${s.flags.mistLine || tre === 6 ? ' ready' : ''}">
       <b>小碧潭的渡口</b>
-      <p>${s.flags.mistLine ? '六件寶物已經交給擺渡人，路網圖上出現了桃園機場捷運。' : tre === 6 ? '六條主線的寶物都到齊了。去小碧潭的月台，交給擺渡人。' : `完成六條主線、找到各線的寶物（目前 ${tre} / 6），帶到小碧潭交給擺渡人，路網圖上就會出現新路線。`}</p>
+      <p>${s.flags.mistLine ? '六件寶物已經交給擺渡人，路網圖上出現了桃園機場捷運，可以搭了。' : tre === 6 ? '六條主線的寶物都到齊了。去小碧潭的月台，交給擺渡人。' : `完成六條主線、找到各線的寶物（目前 ${tre} / 6），帶到小碧潭交給擺渡人，路網圖上就會出現新路線。`}</p>
     </div>`;
   $('#bag').hidden = false;
   $('#bagBody').onclick = e => {
