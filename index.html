@@ -18,7 +18,7 @@
     <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
     <div class="title-inner">
       <h1 class="logo">迷霧</h1>
-      <p class="tagline">從台北捷運的任何一站出發。<br>每條路線的終點，都留著一件東西。</p>
+      <p class="tagline">從南港展覽館出發，搭遍台北捷運。<br>每條路線的終點，都留著一件東西。</p>
       <div class="title-actions" id="titleActions"></div>
       <p class="title-clock" id="titleClock"></p>
     </div>
@@ -34,34 +34,9 @@
     <div class="step-foot"><button class="btn primary" id="charConfirm" disabled>選一位主角</button></div>
   </section>
 
-  <!-- 選出發站 -->
-  <section class="screen" id="stationSelect">
-    <header class="step-head">
-      <button class="back" id="stationBack" aria-label="返回">‹</button>
-      <h2>從哪一站出發？</h2>
-      <p>第一站就是你的起點。之後從這裡搭到任何地方。</p>
-    </header>
-    <div class="select-body">
-      <div class="map-box">
-        <div class="map" id="selectMap"></div>
-        <div class="zoom"><button id="zoomIn" aria-label="放大">＋</button><button id="zoomOut" aria-label="縮小">－</button></div>
-      </div>
-      <aside class="station-pick">
-        <div class="line-tabs" id="lineTabs"></div>
-        <input class="search" id="stationSearch" type="search" placeholder="搜尋站名，例如 西門、Tamsui" aria-label="搜尋站名">
-        <ul class="station-list" id="stationList"></ul>
-        <div class="start-confirm" id="startConfirm" hidden>
-          <div class="start-name" id="startName"></div>
-          <button class="btn primary" id="startGo">從這裡出發</button>
-        </div>
-      </aside>
-    </div>
-  </section>
-
   <!-- 遊戲 -->
   <section class="screen" id="game">
     <div class="scene" id="scene"></div>
-    <div class="scene-fog" aria-hidden="true"></div>
     <header class="hud">
       <div class="hud-me">
         <div class="hud-avatar" id="hudAvatar"></div>
@@ -80,7 +55,8 @@
     </header>
     <div class="panel" id="panel"></div>
     <button class="action-btn" id="actionBtn" hidden></button>
-    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　E 互動　也可以直接點地板移動</p>
+    <div class="joystick" id="joystick" aria-label="移動搖桿"><span class="knob"></span></div>
+    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　拖曳畫面轉視角　E 互動</p>
   </section>
 
   <!-- 路網圖 -->
@@ -120,12 +96,13 @@
     </div>
   </div>
 
+  <script src="js/vendor/three.min.js"></script>
   <script src="js/data.js"></script>
   <script src="js/characters.js"></script>
   <script src="js/time.js"></script>
   <script src="js/audio.js"></script>
-  <script src="js/scenes.js"></script>
-  <script src="js/player.js"></script>
+  <script src="js/human3d.js"></script>
+  <script src="js/world3d.js"></script>
   <script src="js/map.js"></script>
   <script src="js/game.js"></script>
 </body>

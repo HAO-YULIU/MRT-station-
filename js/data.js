@@ -300,3 +300,6 @@ const MRT = {
   // 兩站之間是否為地下區段（任一端在地下就以隧道呈現）
   isTunnel(a, b, lineId) { return this.undergroundOn(a, lineId) || this.undergroundOn(b, lineId); },
 };
+
+// HTML 跳脫
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
