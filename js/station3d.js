@@ -528,9 +528,14 @@ const Station3D = (() => {
       for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) box(.3, .3, .3, M(['#c4162a', '#2a9d8f', '#f2c200'][(i + j) % 3]), U.x0 + .7, .7 + i * .6, U.z0 + 5.6 + j * 1.2, g);
       sign(plainSign(shop.sign, shop.name, shop.color, '#fff'), 3, .75, U.x0 + 1.3, 3.3, U.z0 + 7, g, Math.PI / 2);
     }
-    // 廁所
-    box(.2, 2.4, 1.4, M('#5d6b7a'), U.x1 - .15, 1.2, U.z0 + 9, g);
-    sign(plainSign('廁所', 'Restrooms', '#23272b', '#fff', { bg: '#7fb2cf', fg: '#23272b', text: 'WC' }), 1.8, .45, U.x1 - .3, 2.9, U.z0 + 9, g, -Math.PI / 2);
+    // 廁所：男廁、女廁、無障礙廁所三個入口
+    box(.18, 3, 3.2, M('#e8e4dc'), U.x1 - .12, 1.5, U.z0 + 9.2, g);
+    for (const [dz, col, icon, zh] of [[-1, '#2a5fb0', '🚹', '男'], [0, '#c4162a', '🚺', '女'], [1, '#2a7de1', '♿', '無障礙']]) {
+      const d = plane(.8, 2.1, M(col === '#c4162a' ? '#d87a84' : '#7a9ac8'), g); d.position.set(U.x1 - .22, 1.05, U.z0 + 9.2 + dz); d.rotation.y = -Math.PI / 2;
+      sign(plainSign(zh, '', col, '#fff', { bg: '#fff', fg: col, text: icon }), .75, .3, U.x1 - .25, 2.3, U.z0 + 9.2 + dz, g, -Math.PI / 2);
+    }
+    sign(plainSign('廁所', 'Restrooms', '#23272b', '#fff', { bg: '#7fb2cf', fg: '#23272b', text: 'WC' }), 2.4, .55, U.x1 - .3, 3.05, U.z0 + 9.2, g, -Math.PI / 2);
+    sign(plainSign('廁所 →', 'Restrooms', '#23272b', '#fff', { bg: '#7fb2cf', fg: '#23272b', text: 'WC' }), 1.8, .42, U.x1 - 6, 3.4, U.z0 + 9, g, Math.PI / 2);
     // 失物招領（詢問處旁）
     box(3, 1.1, 1.6, M('#d8d4cc'), U.x1 - 8.2, .55, U.z0 + 3, g);
     box(3, .1, 1.7, M('#f0ede6'), U.x1 - 8.2, 1.12, U.z0 + 3, g);
@@ -719,7 +724,18 @@ const Station3D = (() => {
       sign(plainSign('ATM', '提款機', '#23272b', '#fff'), 1, .3, U.x1 - .9, 2.1, U.z0 + 4.7, g, -Math.PI / 2);
     }
     for (const [x, z] of [[U.x0 + 3, U.z0 + 2], [U.x1 - 3, U.z1 - 3], [0, U.z0 + 6]]) cam(x, hallH, z);
+    // 更多垃圾桶、廣告、指標
+    const bin = (x, y, z) => { box(.42, .75, .42, M('#5d6b7a', { m: .4, r: .4 }), x, y + .375, z, g); box(.44, .06, .44, darkM, x, y + .78, z, g); box(.16, .02, .2, M('#1c2126'), x, y + .81, z, g); };
+    for (const x of [-5.2, 5.2]) bin(x, 0, C.z0 + .45);                                   // 大廳站名牆兩側
+    bin(U.x0 + .5, 0, U.z0 + 3.4); bin(U.x1 - 5.8, 0, U.z1 - .5);                         // 非付費區
+    const adW = (x, z, rot, i) => { const b = box(.12, 1.7, 3.2, M('#e8e8e4'), x, 1.7, z, g); b.rotation.y = rot; const p = plane(3, 1.5, M('#ffffff', { map: adTex(i), e: '#ffffff', ei: .15 }), g); p.position.set(x + Math.sin(rot) * .07, 1.7, z + Math.cos(rot) * .07); p.rotation.y = rot; };
+    for (const [k, z] of [C.z0 + 12, C.z0 + 20].entries()) if (z < L.gateZ - 2.5) { adW(C.x0 + .08, z, Math.PI / 2, k + 1); if (!placesOf(L.stationId).includes('cafe')) adW(C.x1 - .08, z, -Math.PI / 2, k + 4); }
+    { const p = plane(3, 1.5, M('#ffffff', { map: adTex(5), e: '#ffffff', ei: .15 }), g); p.position.set(8.5, 1.7, U.z1 - .16); p.rotation.y = Math.PI; box(3.2, 1.7, .1, M('#e8e8e4'), 8.5, 1.7, U.z1 - .08, g); }
+    // 吊掛的出口指標（付費區往閘門）
+    const exitSign = plainSign('出口 Exit ↓', '往閘門 To fare gates', '#f2c200', '#1c2126');
+    for (const x of [-8, 8]) { box(.04, .5, .04, darkM, x, hallH - .25, L.gateZ - 4, g); sign(exitSign, 2.4, .55, x, hallH - .8, L.gateZ - 4, g); }
     // ── 月台 ──
+    const gapM = M('#ffffff', { t: true, map: canvasTex(256, 74, x => { x.fillStyle = '#f2c200'; x.fillRect(0, 0, 256, 74); x.fillStyle = '#1c2126'; x.font = 'bold 28px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('小心月台間隙', 128, 34); x.font = '18px "Barlow Semi Condensed", sans-serif'; x.fillText('Mind the gap', 128, 62); }) });
     for (const P of L.platforms) {
       const pg = new T.Group(); pg.position.set(P.x, P.y, P.z); g.add(pg);
       const top = P.under ? 3.4 : 3.8;
@@ -732,6 +748,12 @@ const Station3D = (() => {
         box(.22, .2, .08, M('#f2c200'), x, 1.5, -.39, pg); box(.1, .1, .04, red, x, 1.5, -.44, pg);
       }
       if (P.under) for (const ex of [-1, 1]) { const h = box(.2, 1.2, .7, red, ex * (LEN / 2 - .05), .9, -1.6, pg); void h; }
+      // 垃圾桶、地上的「小心月台間隙」貼紙
+      for (const ex of [-1, 1]) bin(P.x + ex * 29.4, P.y, P.z - .9);
+      for (const s of [-1, 1]) for (const d of DOORS) { const st = plane(1.1, .32, gapM, pg); st.rotation.x = -Math.PI / 2; st.rotation.z = s > 0 ? 0 : Math.PI; st.position.set(d, .006, s * 2.45); }
+      if (!P.under) for (const s of [-1, 1]) for (const [k, x] of [-15, 15].entries()) {   // 高架月台：屋簷下的廣告看板
+        const p = plane(2.4, 1.2, M('#ffffff', { map: adTex(k + s + 3), e: '#ffffff', ei: .2 }), pg); p.position.set(x, 2.9, s * 2.75); p.rotation.y = s > 0 ? Math.PI : 0;
+      }
       // 時鐘
       const pct = M('#ffffff', { map: clockTex() });
       for (const x of [-10, 10]) { box(.04, .35, .04, darkM, x, top - .17, 0, pg); for (const s of [-1, 1]) { const c = plane(.6, .6, pct, pg); c.position.set(x, top - .65, s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
