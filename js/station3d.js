@@ -184,6 +184,9 @@ const Station3D = (() => {
     });
   }
 
+  // 有「霧」塗鴉的車站
+  const GRAFFITI = ['龍山寺', '西門', '南港', '古亭', '中山', '頂埔', '淡水', '大直'];
+
   /* ── 方向與版面 ── */
   // 某站某線的兩側：+1 側為順向（站碼遞增方向），-1 側為逆向；終點站兩側都開往同一方向
   function sides(stationId, lineId) {
@@ -222,7 +225,10 @@ const Station3D = (() => {
     const gateZ = cz1;
     const unpaid = { x0: -16, x1: 16, z0: gateZ + 1.2, z1: gateZ + 14 };
     const gates = [-6, -3.6, -1.2, 1.2, 3.6, 6];
-    return { stationId, platforms, concourse, gateZ, unpaid, gates, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
+    const spots = [{ kind: 'notice', x: concourse.x0 + 8, y: 0, z: concourse.z0 + .9 }];
+    if (GRAFFITI.includes(stationId)) spots.push({ kind: 'graffiti', x: concourse.x1 - 4, y: 0, z: concourse.z0 + .9 });
+    for (const P of platforms) for (const s of [-1, 1]) spots.push({ kind: 'map', x: P.x, y: P.y, z: P.z + s * .9, line: P.line });
+    return { stationId, platforms, concourse, gateZ, unpaid, gates, spots, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
   }
 
   /* ── 建造車站 ── */
@@ -393,6 +399,36 @@ const Station3D = (() => {
       sign(plainSign(zh, en, '#f2c200', '#1c2126'), 2.2, .55, x, 3.1, U.z1 - .2, g);
     }
     sign(plainSign('付費區 → 月台', 'To platforms', '#23272b', '#fff'), 3, .75, 0, 3.3, L.gateZ + 1.6, g, Math.PI);
+    // 告示牌
+    const nb = L.spots.find(sp => sp.kind === 'notice');
+    box(2.2, 1.4, .08, M('#3a4148'), nb.x, 1.5, C.z0 + .05, g);
+    const noticeTex = canvasTex(512, 320, (x) => {
+      x.fillStyle = '#f6f3ea'; x.fillRect(0, 0, 512, 320);
+      x.fillStyle = '#1f3a6b'; x.fillRect(0, 0, 512, 52);
+      x.fillStyle = '#fff'; x.font = '700 32px "Noto Sans TC", sans-serif'; x.fillText('車站公告 Notice', 18, 38);
+      x.fillStyle = '#3a3a3a'; for (let i = 0; i < 6; i++) x.fillRect(24, 80 + i * 36, 300 + (i * 53) % 160, 12);
+      x.fillStyle = '#c4162a'; x.fillRect(380, 90, 100, 130);
+    });
+    const np = plane(2, 1.25, M('#ffffff', { map: noticeTex }), g); np.position.set(nb.x, 1.5, C.z0 + .1);
+    // 塗鴉
+    const gf = L.spots.find(sp => sp.kind === 'graffiti');
+    if (gf) {
+      const gt = canvasTex(512, 512, (x) => {
+        x.clearRect(0, 0, 512, 512);
+        x.strokeStyle = 'rgba(40,40,60,.85)'; x.lineWidth = 10; x.lineCap = 'round';
+        x.beginPath(); x.ellipse(256, 200, 120, 40, -.15, 0, 7); x.stroke();                    // 貝雷帽
+        x.fillStyle = 'rgba(196,22,42,.85)'; x.beginPath(); x.ellipse(256, 190, 110, 32, -.15, 0, 7); x.fill();
+        x.strokeStyle = 'rgba(60,60,80,.8)'; x.lineWidth = 6;
+        for (let i = 0; i < 9; i++) { x.beginPath(); x.moveTo(170 + i * 20, 240); x.quadraticCurveTo(160 + i * 22, 330, 180 + i * 18, 420); x.stroke(); }
+        x.fillStyle = 'rgba(40,40,60,.9)'; x.font = '900 72px "Noto Serif TC", serif'; x.fillText('霧', 380, 470);
+      });
+      const gp = plane(2.2, 2.2, new T.MeshBasicMaterial({ map: gt, transparent: true }), g); gp.position.set(gf.x, 1.8, C.z0 + .02);
+    }
+    // 失物招領（詢問處旁）
+    box(3, 1.1, 1.6, M('#d8d4cc'), U.x1 - 8.2, .55, U.z0 + 3, g);
+    box(3, .1, 1.7, M('#f0ede6'), U.x1 - 8.2, 1.12, U.z0 + 3, g);
+    for (let i = 0; i < 4; i++) box(.4, .3, .3, M(['#c4162a', '#2a7de1', '#f2c200', '#3a3a3a'][i]), U.x1 - 9.2 + i * .65, 1.32, U.z0 + 3.3, g);
+    sign(plainSign('失物招領', 'Lost & Found', '#23272b', '#fff', { bg: '#e08a2a', fg: '#fff', text: '?' }), 2.6, .65, U.x1 - 8.2, 2.9, U.z0 + 3, g);
     const mapBig = plane(2.4, 2.4, M('#ffffff', { map: routeMapTex() }), g); mapBig.position.set(U.x0 + .02 + 0, 1.7, U.z0 + 6); mapBig.rotation.y = Math.PI / 2; mapBig.position.x = U.x0 + .02;
 
     g.userData = { psd, layout: L };

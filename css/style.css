@@ -354,6 +354,16 @@ button:disabled { cursor: not-allowed; }
 .item-count { font: 700 15px var(--latin); color: #5a646d; margin-bottom: 14px; }
 .item-card .btn.primary { background: var(--ink); color: var(--paper); min-width: 200px; }
 
+/* ── 對話 ── */
+.dialog { position: fixed; z-index: 18; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(560px, calc(100% - 24px)); }
+.dlg { padding: 14px 16px; border-radius: 14px; background: rgba(14,19,24,.95); box-shadow: 0 16px 40px rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.12); }
+.dlg-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dlg-head b { font-size: 18px; }
+.dlg-head span { color: var(--fog); font-size: 13px; }
+.dlg-head .hearts { margin-left: auto; color: #ff7a93; letter-spacing: 2px; }
+.dlg-text { margin: 8px 0 12px; font-size: 16px; line-height: 1.7; }
+.dlg-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ── 傳送 ── */
 .tp-fx {
   position: fixed; inset: 0; z-index: 25; pointer-events: none;

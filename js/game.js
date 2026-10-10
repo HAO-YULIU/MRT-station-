@@ -247,6 +247,8 @@ function ensureWorld() {
   World.init(sceneEl());
   World.bindJoystick($('#joystick'));
   World.onGate = onGate;
+  World.blocker = (x, z, y) => NPCManager.blocks(x, z, y);
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Pickups.tick(now); });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -262,6 +264,11 @@ function enterGame(stationId) {
   World.spawnInConcourse();
   Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
   startStation(stationId);
+  // 開場：秀蔅出現在旁邊，一定要選板南線或文湖線
+  if (!Game.state.flags.xiuyuIntro) {
+    const xy = NPCManager.list.find(n => n.id === 'xiuyu');
+    if (xy) { const p = World.player; xy.x = p.x - 1.6; xy.z = p.z; xy.y = p.y; setTimeout(() => Dialog.open(xy), 900); }
+  }
 }
 
 // 手機：開始遊戲時進入全螢幕（直式、橫式都可以玩）
@@ -303,6 +310,9 @@ function startStation(stationId, carry) {
   ctl = { id, stationId, busy: new Set(), chimed: new Set(), doors: new Map() };
   if (carry) ctl.busy.add(carry.key);
   World.onZone = () => tickStation();
+  Xiuyu.arrive(stationId);
+  NPCManager.enter(stationId, World.layout);
+  Pickups.spawn(stationId);
   Sound.ambience(World.layout.allUnder ? 'underground' : 'elevated');
   Game.ctlTimer = setInterval(tickStation, 400);
   doorInteractions();
@@ -397,7 +407,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction());
+  list.push(exitInteraction(), npcInteraction, spotInteraction, pickupInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -505,6 +515,55 @@ async function doRide(tr, ride) {
   await dwell(tr, dir, id, ride);
   if (!World.isInside(tr)) { Game.ride = null; if (TaipeiTime.state() !== 'open') showClosed(); }
 }
+
+// 和附近的人說話
+const npcInteraction = {
+  get id() { const n = NPCManager.nearest(World.player, 2.4); return n ? 'npc:' + n.id : 'npc'; },
+  get label() { const n = NPCManager.nearest(World.player, 2.4); return n ? `說話：${n.named ? n.name : n.name}` : '說話'; },
+  when: p => !Dialog.with && !!NPCManager.nearest(p, 2.4) && (p.zone.kind !== 'train' || !Game.ride || !Game.ride.moving),
+  run: () => { const n = NPCManager.nearest(World.player, 2.4); if (n) Dialog.open(n); },
+};
+// 查看告示牌、塗鴉、路線圖
+const SPOT_NAME = { notice: '告示牌', graffiti: '塗鴉', map: '路線圖' };
+function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
+const spotInteraction = {
+  get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
+  get label() { const sp = nearSpot(World.player); return '查看' + (sp ? SPOT_NAME[sp.kind] : ''); },
+  when: p => !Dialog.with && !!nearSpot(p) && !NPCManager.nearest(p, 1.2),
+  run: () => {
+    const sp = nearSpot(World.player), st = ctl.stationId;
+    const done = Quests.emit({ kind: 'inspect', spot: sp.kind, station: st });
+    Dialog.info(SPOT_NAME[sp.kind], spotText(sp, st, done.length > 0));
+    for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
+  },
+};
+function spotText(sp, st, questHit) {
+  const h = TaipeiTime.now().hour;
+  if (sp.kind === 'map') {
+    const L = LINES[sp.line], i = MRT.linesAt(st).find(l => l.line === sp.line);
+    return `${L.zh}路線圖。你在 ${i ? i.code : ''} ${esc(st)}。${questHit ? '<br>路線圖上有一站被人用鉛筆圈起來，旁邊寫著「這裡以前有一站」。' : ''}`;
+  }
+  if (sp.kind === 'graffiti') return `牆角用噴漆畫著一頂紅色的貝雷帽和一個長髮女孩，右下角寫著一個字：「霧」。${questHit ? '<br>你把它記了下來。' : ''}`;
+  // 告示牌：依時段變化
+  const special = {
+    市政府: '遺失物公告：一把刻著「第七節車廂」的鑰匙，請失主至服務台領取。（日期欄是空白的。）',
+    松山機場: '本站銜接松山機場。夜間最後一班飛機起飛後，月台廣播偶爾會報出不存在的站名，請旅客勿驚慌。',
+    北投: '溫泉季開跑！另：近日有旅客反映新北投支線末班車後仍聽見列車聲，本公司正在調查中。',
+    古亭: '本站時鐘校正公告：大廳時鐘於每日 00:30 會停止三十秒，屬正常現象。',
+    景安: '環狀線指南針造型裝置藝術募集中。作品主題：「沒有方向的時候，你往哪走？」',
+    圓山: '懷舊展：「圓山站的老站牌」——五十年前的站牌照片展示中。',
+  }[st];
+  const timely = h < 9 ? '早上 07:00–09:00 為尖峰時段，請多利用列車中段車廂。' : h >= 22 ? '末班車將於 00:30 前開出，請留意時間。' : '本站設有詢問處、失物招領與電梯。';
+  return `<b>車站公告</b><br>${special ? esc(special) + '<br>' : ''}${timely}`;
+}
+// 撿起任務物品
+function nearPickup(p) { return Pickups.near(p); }
+const pickupInteraction = {
+  get id() { const it = nearPickup(World.player); return it ? 'pick:' + it.item : 'pick'; },
+  get label() { const it = nearPickup(World.player); return it ? `撿起：${ITEMS[it.item].name}` : '撿起'; },
+  when: p => !!nearPickup(p),
+  run: () => { const it = nearPickup(World.player); if (it) Pickups.take(it); },
+};
 
 // 出口（地面世界之後開放）
 function exitInteraction() {

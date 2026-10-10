@@ -17,6 +17,7 @@ const World = (() => {
   let last = 0, shake = 0, lastGateSide = 0;
   let onZoneChange = null, lastZoneKey = '';
   let gateCheck = null, blocked = null;
+  const tickers = [];
 
   const SKY = {
     day: { bg: '#a9c6dc', fog: '#c7d6df', hemi: 1.25, sun: 1.6 },
@@ -63,7 +64,7 @@ const World = (() => {
       // 閘門通道
       if (z >= layout.gateZ - .05 && z <= layout.gateZ + 1.25 && layout.gates.some(g => Math.abs(x - g) < .32)) consider(0);
       // 非付費區（扣掉售票機、詢問處）
-      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4)) consider(0);
+      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4)) consider(0);
       for (const P of layout.platforms) {
         // 月台（扣掉電扶梯、柱子、座椅）
         if (Math.abs(z - P.z) < S.PLAT_HALF && Math.abs(x - P.x) < S.LEN / 2 - .4) {
@@ -267,15 +268,19 @@ const World = (() => {
       px = Math.min(ctx + 30, Math.max(ctx - 30, px)); pz = Math.min(ctz + 1.3, Math.max(ctz - 1.3, pz)); py = Math.min(player.y + 2.15, py);
     } else if (z.kind === 'platform') {
       pz = Math.min(z.P.z + 6.5, Math.max(z.P.z - 6.5, pz)); py = Math.min(player.y + (z.P.under ? 3.2 : 3.6), py);
-    } else if (z.kind === 'concourse' || z.kind === 'unpaid') {
+    } else if (z.kind === 'unpaid') {
+      const U = layout.unpaid;
+      px = Math.min(U.x1 - .5, Math.max(U.x0 + .5, px)); pz = Math.min(U.z1 - .5, Math.max(layout.gateZ + .6, pz)); py = Math.min(3.9, py);
+    } else if (z.kind === 'concourse') {
       const C = layout.concourse;
-      px = Math.min(C.x1 - .5, Math.max(C.x0 + .5, px)); pz = Math.min(layout.unpaid.z1 - .5, Math.max(C.z0 + .5, pz)); py = Math.min(3.9, py);
+      px = Math.min(C.x1 - .5, Math.max(C.x0 + .5, px)); pz = Math.min(layout.gateZ - .3, Math.max(C.z0 + .5, pz)); py = Math.min(3.9, py);
     } else py = Math.min(player.y + 3, py);
     const k = Math.min(1, dt * 7);
     cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * k; cam.pos.z += (pz - cam.pos.z) * k;
     camera.position.copy(cam.pos);
     if (shake) camera.position.y += Math.sin(now / 45) * .006 * shake + Math.sin(now / 97) * .008 * shake;
     camera.lookAt(tx, ty, tz);
+    for (const fn of tickers) fn(dt, now);
     updateActionBtn();
     renderer.render(scene, camera);
   }
@@ -342,6 +347,7 @@ const World = (() => {
     get env() { return env; },
     get camera() { return camera; },
     setRun(on) { runToggle = on; },
+    addTicker(fn) { tickers.push(fn); },
     get running() { return runToggle; },
     groundAt: (x, z, y) => groundAt(x, z, y),
     setCharacter(id) {

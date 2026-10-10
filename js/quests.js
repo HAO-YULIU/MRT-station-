@@ -104,7 +104,7 @@ const QUESTS = {
     type: 'side', title: '遺失的皮夾', giver: 'lin',
     desc: '上班族林先生早上趕車時，皮夾掉在車上了。',
     steps: [
-      { text: '到台北車站的失物招領處問問', goal: { kind: 'talk', npc: 'meiling' } },
+      { text: '到台北車站的失物招領處問問', goal: { kind: 'talk', npc: 'meiling' }, gain: { wallet: 1 } },
       { text: '把皮夾還給林先生', goal: { kind: 'give', npc: 'lin', item: 'wallet' } },
     ],
     reward: { money: 200, xp: 60, friend: { lin: 15 } },
@@ -132,7 +132,7 @@ const QUESTS = {
     desc: '玉蘭阿嬤每天坐在中山站的同一張椅子上，等一個五十年前約好的人。',
     steps: [
       { text: '到圓山站的大廳，查看那面老告示牌', goal: { kind: 'inspect', spot: 'notice', station: '圓山' } },
-      { text: '到北投找一位叫建國的老先生', goal: { kind: 'talk', npc: 'jianguo' } },
+      { text: '到北投找一位叫建國的老先生', goal: { kind: 'talk', npc: 'jianguo' }, gain: { photo: 1 } },
       { text: '把舊照片交給玉蘭阿嬤', goal: { kind: 'give', npc: 'yulan', item: 'photo' } },
     ],
     reward: { money: 100, xp: 150, friend: { yulan: 30, jianguo: 20 } },
@@ -275,6 +275,7 @@ const Quests = (() => {
       else if (g.kind === 'buy') ok = g.item === ev.item;
       if (!ok) continue;
       st.step++;
+      if (step.gain) for (const [it, n] of Object.entries(step.gain)) S().inv[it] = (S().inv[it] || 0) + n;
       done.push({ id, text: step.text });
       if (st.step >= q.steps.length) finish(id);
     }
