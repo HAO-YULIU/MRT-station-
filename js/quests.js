@@ -7,6 +7,10 @@
  *   find    在某站撿到物品（item, station）
  *   give    把物品交給 NPC（npc, item）
  *   buy     在商店買某樣東西（item）
+ *   puzzles 解開某條線每一站的謎題（line）——主線用
+ *   anomaly 在隧道裡看見霧的月台
+ *   sit     在車上坐下
+ * find 的 station 寫 '@treasure' 表示寶物所在的車站（解完謎題時隨機決定）
  * 獎勵：money（新台幣）、xp、items（物品 id → 數量）、friend（NPC id → 好感）、wear（服裝 id，見 outfits.js）
  * 物品：eat 表示可以吃／喝（捷運裡可以飲食），event 表示只在該活動期間販售
  */
@@ -42,72 +46,25 @@ const ITEMS = {
   flower: { name: '一小束花', desc: '車站花店的滿天星。', icon: '💐', price: 180, shop: true },
   flag: { name: '小國旗', desc: '雙十節活動的旗子。', icon: '🇹🇼' },
   photo: { name: '舊照片', desc: '兩個年輕人站在圓山的老站牌前。', icon: '🖼️' },
+  treasure_BL: { name: '藍色車廂鑰匙', desc: '鑰匙上刻著「7」。板南線的寶物。', icon: '🗝️' },
+  treasure_BR: { name: '錄音帶', desc: '標籤寫著「BR00」。文湖線的寶物。', icon: '📼' },
+  treasure_R: { name: '褪色的票卡', desc: '日期停在某一天的傍晚。淡水信義線的寶物。', icon: '🎫' },
+  treasure_G: { name: '壓花書籤', desc: '一片永遠綠著的葉子。松山新店線的寶物。', icon: '🍃' },
+  treasure_O: { name: '懷錶的發條', desc: '轉一下，會聽見末班車的廣播。中和新蘆線的寶物。', icon: '⌚' },
+  treasure_Y: { name: '指南針的指針', desc: '放上去之後會指向霧最濃的地方。環狀線的寶物。', icon: '🧭' },
+  ch_glasses: { name: '老花眼鏡', desc: '鏡腳用膠帶纏過。', icon: '👓' },
+  ch_scarf: { name: '格子圍巾', desc: '還帶著一點香水味。', icon: '🧣' },
+  ch_card: { name: '學生證', desc: '照片上的人笑得很僵硬。', icon: '🪪' },
+  ch_book: { name: '藍色筆記本', desc: '裡面抄滿了捷運站名。', icon: '📘' },
+  ch_toy: { name: '小熊玩偶', desc: '左耳縫過好幾次。', icon: '🧸' },
+  ch_phone: { name: '手機', desc: '鎖定畫面是一隻柴犬。', icon: '📱' },
+  ch_keys: { name: '鑰匙圈', desc: '上面掛著一個迷你月台吊飾。', icon: '🔑' },
+  ch_hat: { name: '毛線帽', desc: '手織的，針腳有點歪。', icon: '🧶' },
+  ghostticket: { name: '霧的車票', desc: '站名欄寫著「霧」，票價欄是空白的。', icon: '🎟️' },
 };
 
 const QUESTS = {
-  /* ── 主線（秀蔅給的） ── */
-  main_BL: {
-    type: 'main', line: 'BL', title: '第七節車廂', giver: 'xiuyu',
-    desc: '秀蔅說板南線有一節不存在的車廂，只在霧裡停靠。',
-    steps: [
-      { text: '搭板南線到市政府，查看月台上的遺失物公告', goal: { kind: 'inspect', spot: 'notice', station: '市政府' } },
-      { text: '到台北車站找站務員老陳問問', goal: { kind: 'talk', npc: 'chen' } },
-      { text: '到龍山寺，找出大廳角落的奇怪塗鴉', goal: { kind: 'inspect', spot: 'graffiti', station: '龍山寺' } },
-      { text: '搭板南線坐到終點站頂埔', goal: { kind: 'ride', line: 'BL', station: '頂埔' } },
-    ],
-    reward: { money: 300, xp: 220, friend: { xiuyu: 20 } },
-  },
-  main_BR: {
-    type: 'main', line: 'BR', title: '無人駕駛的聲音', giver: 'xiuyu',
-    desc: '文湖線的列車沒有司機，可是有人說在大直聽見有人在駕駛室說話。',
-    steps: [
-      { text: '搭文湖線到大直（地下段），在月台聽聽看', goal: { kind: 'ride', line: 'BR', station: '大直' } },
-      { text: '到松山機場站大廳，查看機場告示牌', goal: { kind: 'inspect', spot: 'notice', station: '松山機場' } },
-      { text: '到科技大樓找維修工阿凱', goal: { kind: 'talk', npc: 'kai' } },
-      { text: '搭文湖線坐到終點站動物園', goal: { kind: 'ride', line: 'BR', station: '動物園' } },
-    ],
-    reward: { money: 300, xp: 220, friend: { xiuyu: 20 } },
-  },
-  main_R: {
-    type: 'main', line: 'R', title: '淡水夕照', giver: 'xiuyu',
-    desc: '有一張被夕陽染紅的舊票卡，日期停在某一天。',
-    steps: [
-      { text: '到中正紀念堂，查看月台的路線圖', goal: { kind: 'inspect', spot: 'map', station: '中正紀念堂' } },
-      { text: '到北投，查看大廳的告示牌', goal: { kind: 'inspect', spot: 'notice', station: '北投' } },
-      { text: '搭淡水信義線坐到淡水', goal: { kind: 'ride', line: 'R', station: '淡水' } },
-    ],
-    reward: { money: 350, xp: 240, friend: { xiuyu: 20 } },
-  },
-  main_G: {
-    type: 'main', line: 'G', title: '碧潭綠葉', giver: 'xiuyu',
-    desc: '一片永遠不會枯黃的葉子，葉脈像縮小的路線圖。',
-    steps: [
-      { text: '到西門，查看大廳角落的塗鴉', goal: { kind: 'inspect', spot: 'graffiti', station: '西門' } },
-      { text: '到公館，查看月台路線圖', goal: { kind: 'inspect', spot: 'map', station: '公館' } },
-      { text: '搭松山新店線坐到新店', goal: { kind: 'ride', line: 'G', station: '新店' } },
-    ],
-    reward: { money: 300, xp: 220, friend: { xiuyu: 20 } },
-  },
-  main_O: {
-    type: 'main', line: 'O', title: '停在 00:30 的懷錶', giver: 'xiuyu',
-    desc: '一只懷錶的指針停在末班車的時間。',
-    steps: [
-      { text: '到古亭，查看大廳的告示牌', goal: { kind: 'inspect', spot: 'notice', station: '古亭' } },
-      { text: '到民權西路，找出角落的紙條', goal: { kind: 'find', item: 'note2', station: '民權西路' } },
-      { text: '搭中和新蘆線坐到蘆洲或迴龍', goal: { kind: 'ride', line: 'O', station: ['蘆洲', '迴龍'] } },
-    ],
-    reward: { money: 300, xp: 220, friend: { xiuyu: 20 } },
-  },
-  main_Y: {
-    type: 'main', line: 'Y', title: '沒有指針的指南針', giver: 'xiuyu',
-    desc: '指南針沒有指針，外圈卻會慢慢朝某個方向發光。',
-    steps: [
-      { text: '到板橋，查看月台的路線圖', goal: { kind: 'inspect', spot: 'map', station: '板橋' } },
-      { text: '到景安，查看大廳的告示牌', goal: { kind: 'inspect', spot: 'notice', station: '景安' } },
-      { text: '搭環狀線坐到大坪林或新北產業園區', goal: { kind: 'ride', line: 'Y', station: ['大坪林', '新北產業園區'] } },
-    ],
-    reward: { money: 300, xp: 220, friend: { xiuyu: 20 } },
-  },
+  /* ── 主線（秀蔅給的）：由 MAIN_STORY 產生，見檔案後段 ── */
   find_xiuyu: {
     type: 'main', title: '找到秀蔅', giver: null,
     desc: '你第一次來到這條線。秀蔅好像也在附近，找到她就能接下這條線的主線。',
@@ -301,6 +258,93 @@ const QUESTS = {
     reward: { money: 300, xp: 200, items: { chocolate: 1 }, friend: { xiuyu: 15 } },
   },
 };
+
+/* ── 主線：每條線的每一站都有一題（只能在該線月台作答），全部解開後，寶物會出現在該線隨機一站 ── */
+const MAIN_STORY = {
+  BL: { title: '第七節車廂', desc: '秀蔅說板南線有一節不存在的車廂，只在霧裡停靠。她在板南線每一站的月台都留了一張紙條。' },
+  BR: { title: '無人駕駛的聲音', desc: '文湖線的列車沒有司機，可是有人在駕駛室聽見報站的聲音。秀蔅把線索藏在文湖線每一站的月台。' },
+  R: { title: '淡水夕照', desc: '一張被夕陽染紅的舊票卡，日期停在某一天。淡水信義線每一站的月台都有秀蔅的紙條。' },
+  G: { title: '碧潭綠葉', desc: '一片永遠不會枯黃的葉子，葉脈像縮小的路線圖。線索在松山新店線每一站的月台。' },
+  O: { title: '停在 00:30 的懷錶', desc: '一只懷錶的指針停在末班車的時間。線索在中和新蘆線每一站的月台，兩條支線都要走。' },
+  Y: { title: '沒有指針的指南針', desc: '指南針沒有指針，外圈卻會慢慢朝某個方向發光。線索在環狀線每一站的月台。' },
+};
+for (const [line, m] of Object.entries(MAIN_STORY)) {
+  QUESTS['main_' + line] = {
+    type: 'main', line, title: m.title, giver: 'xiuyu', desc: m.desc,
+    steps: [
+      { text: `完成${LINES[line].zh}每一站月台上的委託（紙條上的謎題，或需要幫忙的人）`, goal: { kind: 'puzzles', line } },
+      { text: `寶物出現在${LINES[line].zh}的某一站，搭${LINES[line].zh}去找出來`, goal: { kind: 'find', item: 'treasure_' + line, station: '@treasure' } },
+    ],
+    reward: { money: 800, xp: 600, friend: { xiuyu: 25 } },
+  };
+}
+
+/* ── 秘密任務：遊戲裡不給任何提示，玩家碰巧達成隱藏條件時才會出現（不佔支線名額）
+ * 觸發條件寫在 game.js（checkSecrets、arriveChecks、doRide、onGate、seatInteraction） ── */
+const SECRET_QUESTS = {
+  sec_ghost: {
+    title: '不存在的月台',
+    desc: '剛剛窗外那座綠色的月台……站名寫著「霧」。也許有人也看過。',
+    steps: [
+      { text: '到科技大樓找文湖線維修工阿凱問問', goal: { kind: 'talk', npc: 'kai' } },
+      { text: '搭車穿過隧道，再看見一次霧的月台', goal: { kind: 'anomaly' } },
+    ],
+    reward: { money: 300, xp: 250, items: { ghostticket: 1 } },
+  },
+  sec_lasttrain: {
+    title: '末班車',
+    desc: '已經過了午夜，車廂裡只剩幾個人。趕在 00:30 收班前坐到終點吧。',
+    steps: [{ text: '00:30 以前坐到任一條線的終點站', goal: { kind: 'terminal' } }],
+    reward: { money: 200, xp: 200 },
+  },
+  sec_firsttrain: {
+    title: '第一班車',
+    desc: '霧剛散，第一班車就要進站了。整座城市好像只有你醒著。',
+    steps: [{ text: '搭上任何一班車，坐到下一站', goal: { kind: 'ride' } }],
+    reward: { money: 200, xp: 200 },
+  },
+  sec_branch: {
+    title: '支線旅人',
+    desc: '台北捷運有兩條很短的支線：新北投支線和小碧潭支線。你已經走了其中一條。',
+    steps: [
+      { text: '到另一條支線的盡頭', goal: { kind: 'reach', station: '@target' } },
+    ],
+    reward: { money: 250, xp: 220 },
+  },
+  sec_circle: {
+    title: '環狀線的兩端',
+    desc: '環狀線現在還不是一個圈。兩端都走過，才知道它想繞到哪裡。',
+    steps: [
+      { text: '搭環狀線坐到另一端的終點', goal: { kind: 'ride', line: 'Y', station: '@target' } },
+    ],
+    reward: { money: 250, xp: 220 },
+  },
+  sec_maxfare: {
+    title: '最遠的旅程',
+    desc: '65 元，是台北捷運最貴的一張票。坐了那麼遠，也該回到起點了。',
+    steps: [{ text: '回到南港展覽館', goal: { kind: 'reach', station: '南港展覽館' } }],
+    reward: { money: 130, xp: 200 },
+  },
+  sec_seat: {
+    title: '老位子',
+    desc: '你好像也有了自己習慣坐的位置。台北車站的玉蘭阿姨每天都坐同一張長椅，她一定懂。',
+    steps: [{ text: '去找每天坐在長椅上的玉蘭阿姨', goal: { kind: 'talk', npc: 'yulan' } }],
+    reward: { money: 150, xp: 180, friend: { yulan: 20 } },
+  },
+  sec_midnight: {
+    title: '零點',
+    desc: '日期換了。秀蔅說過，霧最濃的地方在河的出海口。',
+    steps: [{ text: '00:30 以前搭到淡水', goal: { kind: 'reach', station: '淡水' } }],
+    reward: { money: 200, xp: 260 },
+  },
+  sec_friend: {
+    title: '知心',
+    desc: '有人把你當成真正的朋友了。秀蔅好像有話想跟你說。',
+    steps: [{ text: '去找秀蔅', goal: { kind: 'talk', npc: 'xiuyu' } }],
+    reward: { money: 200, xp: 300, friend: { xiuyu: 20 } },
+  },
+};
+for (const [id, q] of Object.entries(SECRET_QUESTS)) QUESTS[id] = { type: 'secret', giver: null, ...q };
 const SIDE_LIMIT = 5;
 
 /* ── 任務進度 ── */
@@ -318,13 +362,13 @@ const Quests = (() => {
   }
   function accept(id) {
     if (!canAccept(id)) return false;
-    active()[id] = { step: 0 };
+    active()[id] = { step: 0, v: 2 };
     saveState();
     Game.onQuestChange && Game.onQuestChange('accept', id);
     return true;
   }
   function abandon(id) {
-    if (QUESTS[id].type === 'main') return false;
+    if (QUESTS[id].type === 'main' || QUESTS[id].type === 'secret') return false;
     delete active()[id]; saveState();
     Game.onQuestChange && Game.onQuestChange('abandon', id);
     return true;
@@ -338,14 +382,29 @@ const Quests = (() => {
       if (!step) continue;
       const g = step.goal;
       let ok = false;
+      if (g.kind === 'puzzles') {   // 主線謎題：每一站各一題
+        if (ev.kind !== 'puzzle' || ev.line !== g.line) continue;
+        st.solved = st.solved || {};
+        if (st.solved[ev.station]) continue;
+        st.solved[ev.station] = true;
+        const all = Puzzles.stations(g.line), n = all.filter(x => st.solved[x]).length;
+        done.push({ id, text: `${ev.station}的委託（${n}/${all.length}）` });
+        if (n < all.length) continue;
+        st.treasure = all[(Math.random() * all.length) | 0];
+        st.step++;
+        done.push({ id, text: `${LINES[g.line].zh}每一站的委託都完成了！寶物出現在${LINES[g.line].zh}的某一站` });
+        continue;
+      }
+      const where = x => (typeof x === 'string' && x[0] === '@' ? st[x.slice(1)] : x);
       if (g.kind !== ev.kind) {
         // 搭到某站也算「到達」
-        if (g.kind === 'reach' && ev.kind === 'ride') ok = match(g.station, ev.station);
-      } else if (g.kind === 'reach') ok = match(g.station, ev.station);
-      else if (g.kind === 'ride') ok = g.line === ev.line && match(g.station, ev.station);
+        if (g.kind === 'reach' && ev.kind === 'ride') ok = match(where(g.station), ev.station);
+      } else if (g.kind === 'reach') ok = match(where(g.station), ev.station);
+      else if (g.kind === 'ride') ok = (g.line == null || g.line === ev.line) && (g.station == null || match(where(g.station), ev.station));
+      else if (g.kind === 'terminal' || g.kind === 'anomaly' || g.kind === 'sit') ok = true;
       else if (g.kind === 'talk') ok = g.npc === ev.npc;
       else if (g.kind === 'inspect') ok = g.spot === ev.spot && match(g.station, ev.station);
-      else if (g.kind === 'find') ok = g.item === ev.item && (g.station == null || match(g.station, ev.station));
+      else if (g.kind === 'find') ok = g.item === ev.item && (g.station == null || match(where(g.station), ev.station));
       else if (g.kind === 'give') ok = g.npc === ev.npc && g.item === ev.item;
       else if (g.kind === 'buy') ok = g.item === ev.item;
       if (!ok) continue;
@@ -379,5 +438,13 @@ const Quests = (() => {
       || (q.dates || []).some(([y, m, d0, d1]) => (!y || y === t.year) && m === t.month && t.day >= d0 && t.day <= d1);
     return Object.keys(QUESTS).filter(id => QUESTS[id].type === 'event' && on(QUESTS[id]));
   }
-  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow };
+  // 秘密任務：達成隱藏條件時觸發（extra 會存進任務進度，例如 target）
+  function secret(id, extra) {
+    if (!QUESTS[id] || QUESTS[id].type !== 'secret' || !canAccept(id)) return false;
+    active()[id] = { step: 0, v: 2, ...(extra || {}) };
+    saveState();
+    Game.onQuestChange && Game.onQuestChange('secret', id);
+    return true;
+  }
+  return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow, secret };
 })();

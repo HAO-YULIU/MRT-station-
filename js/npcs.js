@@ -504,7 +504,7 @@ const Pickups = (() => {
     for (const id of Object.keys(s.quests.active)) {
       const step = QUESTS[id].steps[s.quests.active[id].step];
       if (!step || step.goal.kind !== 'find' || step.goal.station == null) continue;
-      const st = step.goal.station;
+      const st = step.goal.station === '@treasure' ? s.quests.active[id].treasure : step.goal.station;
       if ((Array.isArray(st) ? st.includes(stationId) : st === stationId) && !out.includes(step.goal.item)) out.push(step.goal.item);
     }
     // 第一張紙條：沒人給，自己會在南港展覽館發現
@@ -547,6 +547,305 @@ const Pickups = (() => {
     spawn(it.station);   // 下一步可能要在同一站找別的東西
   }
   return { spawn, clear, tick, near, take };
+})();
+
+/* ── 主線站點委託：該線主線進行中、這一站還沒完成時，月台上會有紙條或委託人
+ * 種類見 puzzles.js（問答、找東西、帶路、找人、買東西、神秘通道、撿零錢、迷路）
+ * 進度存在主線進度的 ch[站名]；帶著走的人存在 flags.follow
+ */
+const Challenges = (() => {
+  const T = THREE;
+  let ents = [], follower = null;
+  const S = () => Game.state;
+  const mainOf = line => S().quests.active['main_' + line];
+  const chState = (line, st) => { const m = mainOf(line); if (!m) return null; m.ch = m.ch || {}; return m.ch[st] || null; };
+  const setCh = (line, st, v) => { const m = mainOf(line); if (!m) return; m.ch = m.ch || {}; if (v) m.ch[st] = v; else delete m.ch[st]; saveState(); };
+  const unsolved = (line, st) => { const m = mainOf(line); return m && m.step === 0 && !(m.solved && m.solved[st]); };
+  const title = (line, st) => `${LINES[line].zh}・${st}`;
+
+  function noteTex(glyph, col) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(64, 64, 8, 64, 64, 64); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#fffaf0'; g.fillRect(36, 30, 56, 68);
+    g.fillStyle = '#c4162a'; g.font = 'bold 44px "Noto Serif TC", serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(glyph, 64, 66);
+    return new T.CanvasTexture(c);
+  }
+  function iconSprite(icon, size, glow) {
+    const c = document.createElement('canvas'); c.width = c.height = 96;
+    const g = c.getContext('2d');
+    if (glow) { const gr = g.createRadialGradient(48, 48, 6, 48, 48, 48); gr.addColorStop(0, 'rgba(255,240,190,.6)'); gr.addColorStop(1, 'rgba(255,240,190,0)'); g.fillStyle = gr; g.fillRect(0, 0, 96, 96); }
+    g.font = '56px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(icon, 48, 52);
+    const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), transparent: true, depthWrite: false }));
+    sp.scale.set(size, size, 1);
+    return sp;
+  }
+  const ok = p => p && World.groundAt(p.x, p.z, p.y) != null;
+  const platformOf = line => World.layout.platforms.find(p => p.line === line);
+  function standPos(P) { for (const dx of [8, -8, 14, -14, 3]) { const q = { x: P.x + dx, y: P.y, z: P.z }; if (ok(q)) return q; } return null; }
+  // 角落：大廳四角、各月台兩端
+  function corners(onlyLine) {
+    const L = World.layout, C = L.concourse, out = [];
+    if (!onlyLine) for (const [x, z] of [[C.x0 + 1.2, C.z0 + 1.2], [C.x1 - 1.2, C.z0 + 1.2], [C.x0 + 1.2, L.gateZ - 1.2], [C.x1 - 1.2, L.gateZ - 1.2]]) out.push({ x, y: 0, z });
+    for (const P of L.platforms) if (!onlyLine || P.line === onlyLine) for (const ex of [-1, 1]) for (const sz of [-1.6, 1.6]) out.push({ x: P.x + ex * 30.2, y: P.y, z: P.z + sz });
+    return out.filter(ok);
+  }
+  const hsh = str => [...str].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 9973, 7);
+
+  function addEnt(e, mesh, yOff = 0) { if (mesh) { mesh.position.set(e.x, e.y + yOff, e.z); World.scene.add(mesh); e.mesh = mesh; e.yOff = yOff; } ents.push(e); return e; }
+  function addPerson(e, look) {
+    const rig = Human3D.buildPerson(look);
+    rig.root.position.set(e.x, e.y, e.z); rig.root.rotation.y = e.face || 0;
+    World.scene.add(rig.root); e.rig = rig; ents.push(e); return e;
+  }
+
+  function spawn(stationId) {
+    clear();
+    const s = S(), f = s.flags.follow;
+    // 1) 這一站各線的委託（紙條或委託人）
+    for (const l of MRT.linesAt(stationId)) {
+      const line = l.line; if (!unsolved(line, stationId)) continue;
+      const P = platformOf(line), pos = P && standPos(P); if (!pos) continue;
+      const c = Puzzles.challenge(line, stationId), st = chState(line, stationId);
+      if (c.kind === 'quiz' || c.kind === 'passage') {
+        const sp = new T.Sprite(new T.SpriteMaterial({ map: noteTex('謎', 'rgba(255,90,90,.85)'), transparent: true, depthWrite: false })); sp.scale.set(.7, .7, 1);
+        addEnt({ type: 'note', line, station: stationId, c, ...pos }, sp, 1.3);
+        if (c.kind === 'passage') { const hp = hiddenSpot(c.at, P, stationId); if (hp) addEnt({ type: 'hidden', line, station: stationId, c, ...hp }); }
+      } else if (!(f && f.line === line && f.station === stationId)) {
+        const e = addPerson({ type: 'giver', line, station: stationId, c, ...pos, face: Math.PI / 2 }, c.giver.look);
+        // 頭上的「！」：還沒接下時顯示
+        if (!st) { const ex = iconSprite('❗', .45, true); ex.position.set(0, 2.15, 0); e.rig.root.add(ex); }
+        if (c.kind === 'coins' && st) {
+          const spots = corners();
+          const own = corners(line);
+          const pick = [own[hsh(stationId + 'a') % own.length], spots[hsh(stationId + 'b') % spots.length], spots[hsh(stationId + 'c') % spots.length]];
+          if (pick[2] === pick[1]) pick[2] = spots[(hsh(stationId + 'c') + 1) % spots.length];
+          pick.forEach((q, i) => { if (q && !st.coins[i]) addEnt({ type: 'coin', line, station: stationId, i, ...q }, iconSprite('🪙', .2, false), .08); });
+        }
+      }
+    }
+    // 2) 其他站接下的委託，目標在這一站
+    for (const [qid, m] of Object.entries(s.quests.active)) {
+      const q = QUESTS[qid]; if (q.type !== 'main' || m.step !== 0 || !m.ch) continue;
+      for (const [from, st] of Object.entries(m.ch)) {
+        const c = Puzzles.challenge(q.line, from);
+        if (c.target !== stationId) continue;
+        if (c.kind === 'lost' && !(s.inv[c.item] > 0)) {
+          const list = corners(q.line); const q2 = list[hsh(from + c.item) % list.length];
+          if (q2) addEnt({ type: 'lost', line: q.line, station: from, c, ...q2 }, iconSprite(ITEMS[c.item].icon, .32, false), .15);
+        }
+        if (c.kind === 'person' && !st.told) {
+          const P = platformOf(q.line); if (!P) continue;
+          const side = hsh(from) % 2 ? 1 : -1;
+          const q2 = { x: P.x - 12 + (hsh(from + 'x') % 20), y: P.y, z: P.z + side * 1.7 };
+          if (ok(q2)) addPerson({ type: 'friend', line: q.line, station: from, c, ...q2, face: side > 0 ? Math.PI : 0 }, c.friend.look);
+        }
+      }
+    }
+    // 3) 帶著的人
+    if (f) {
+      const c = Puzzles.challenge(f.line, f.station);
+      if (!mainOf(f.line) || !c.giver) { s.flags.follow = null; saveState(); }
+      else {
+        ensureFollower(c);
+        if (c.kind === 'escort' && c.target === stationId) setTimeout(() => arrived(f, c), 900);
+        if (c.kind === 'way' && f.station !== stationId) {   // 迷路的人只在原本那一站
+          toast(`<b>${esc(c.giver.name)}</b><span>「我還是自己在${esc(f.station)}問問別人好了，謝謝你。」</span>`);
+          setCh(f.line, f.station, null); s.flags.follow = null; saveState(); dropFollower();
+        }
+      }
+    } else dropFollower();
+  }
+  function hiddenSpot(at, P, stationId) {
+    const L = World.layout, sp = k => L.spots.find(x => x.kind === k && (k !== 'elevator' || x.level === (at === 'elevator' ? P.k : 'hall')));
+    let q = null;
+    if (at === 'elevator' || at === 'hallElevator') { const e = sp('elevator'); if (e) q = { x: e.x + 1.4, y: e.y, z: e.z }; }
+    if (at === 'ticket') { const e = sp('ticket'); if (e) q = { x: e.x, y: e.y, z: e.z }; }
+    if (at === 'toilet') { const e = sp('toilet'); if (e) q = { x: e.x - .6, y: e.y, z: e.z + 1.2 }; }
+    if (!ok(q)) { const ex = hsh(stationId) % 2 ? 1 : -1; q = { x: P.x + ex * 30.4, y: P.y, z: P.z }; }
+    return ok(q) ? q : null;
+  }
+  function clear() { for (const e of ents) { if (e.mesh) World.scene.remove(e.mesh); if (e.rig) World.scene.remove(e.rig.root); } ents = []; }
+
+  // 跟在主角後面的人
+  function ensureFollower(c) {
+    if (follower && follower.key === c.giver.name + c.kind) return;
+    dropFollower();
+    const rig = Human3D.buildPerson(c.giver.look);
+    const p = World.player;
+    rig.root.position.set(p.x - 1, p.y, p.z);
+    World.scene.add(rig.root);
+    follower = { rig, x: p.x - 1, y: p.y, z: p.z, key: c.giver.name + c.kind, name: c.giver.name };
+  }
+  function dropFollower() { if (follower) { World.scene.remove(follower.rig.root); follower = null; } }
+
+  function tick(dt, now) {
+    for (const e of ents) {
+      if (e.mesh) { e.mesh.visible = !World.riding || e.type === 'note'; if (e.type === 'note') e.mesh.position.y = e.y + e.yOff + Math.sin(now / 500) * .07; }
+      if (e.rig) e.rig.update(dt, 0, now / 1000);
+    }
+    if (follower) {
+      const p = World.player, fx = Math.sin(p.face), fz = Math.cos(p.face);
+      const tx = p.x - fx * 1.1 + fz * .4, tz = p.z - fz * 1.1 - fx * .4;
+      const dx = tx - follower.x, dz = tz - follower.z, d = Math.hypot(dx, dz);
+      let sp = 0;
+      if (d > 6 || Math.abs(follower.y - p.y) > 2.5) { follower.x = tx; follower.z = tz; follower.y = p.y; }
+      else if (d > .15) { sp = Math.min(d * 3, 5.5); const k = Math.min(1, sp * dt / d); follower.x += dx * k; follower.z += dz * k; follower.rig.root.rotation.y = Math.atan2(dx, dz); }
+      follower.y += (p.y - follower.y) * Math.min(1, dt * 8);
+      follower.rig.root.position.set(follower.x, follower.y, follower.z);
+      follower.rig.update(dt, sp, now / 1000);
+    }
+  }
+  function near(p) {
+    let best = null, bd = 9;
+    for (const e of ents) {
+      if (Math.abs(e.y - p.y) > .8) continue;
+      const r = e.type === 'hidden' ? 1.3 : e.type === 'coin' || e.type === 'lost' ? 1.2 : 1.7;
+      const d = Math.hypot(e.x - p.x, e.z - p.z);
+      if (d < r && d < bd) { best = e; bd = d; }
+    }
+    // 迷路的人：帶到月台某一側
+    const f = S().flags.follow;
+    if (!best && f && follower) {
+      const c = Puzzles.challenge(f.line, f.station), z = World.zone();
+      if (c.kind === 'way' && z.kind === 'platform' && z.P.line === f.line && World.layout.stationId === f.station && Math.abs(p.z - z.P.z) > 1.2) return { type: 'wayHere', f, c, P: z.P };
+    }
+    return best;
+  }
+  function label(e) {
+    switch (e.type) {
+      case 'note': return `解謎：${LINES[e.line].zh}`;
+      case 'giver': return `說話：${e.c.giver.name}`;
+      case 'coin': return '撿起：硬幣';
+      case 'lost': return `撿起：${ITEMS[e.c.item].name}`;
+      case 'friend': return `說話：${e.c.friend.name}`;
+      case 'hidden': return '調查：這面牆怪怪的';
+      case 'wayHere': return '「在這一邊等車」';
+    }
+    return '查看';
+  }
+  function solve(line, station, rw, msg) {
+    setCh(line, station, null);
+    const f = S().flags.follow;
+    if (f && f.line === line && f.station === station) { S().flags.follow = null; dropFollower(); }
+    saveState();
+    Sound.itemGet();
+    Game.reward(rw, msg || '委託完成！');
+    questEvent({ kind: 'puzzle', line, station });
+    spawn(World.layout.stationId);
+    Pickups.spawn(World.layout.stationId);   // 完成最後一站時，寶物可能就在這裡
+  }
+  function say(e, text, btns) { Dialog.show({ name: e.name || title(e.line, e.station), role: e.role || '' }, text, btns || [{ label: '好', run: () => Dialog.close() }]); }
+
+  function interact(e) {
+    const s = S(), c = e.c;
+    if (e.type === 'note' && c.kind === 'quiz') return ask(e);
+    if (e.type === 'note' && c.kind === 'passage') return say({ line: e.line, station: e.station, role: '秀蔅留下的紙條' }, c.ask);
+    if (e.type === 'hidden') {
+      return say({ name: '……', role: title(e.line, e.station) }, '你把手貼上牆面。磁磚像霧一樣慢慢散開，後面是一條很窄的通道，盡頭的牆上用粉筆寫著：「你找到了。下一站見。——S」', [
+        { label: '走進去看看', primary: true, run: () => { Dialog.close(); solve(e.line, e.station, { xp: 40, money: 50 }, '找到神秘通道！'); } },
+      ]);
+    }
+    if (e.type === 'coin') {
+      const st = chState(e.line, e.station); if (!st) return;
+      st.coins[e.i] = true; setCh(e.line, e.station, st);
+      World.scene.remove(e.mesh); ents = ents.filter(x => x !== e);
+      Sound.gate(); toast(`<b>撿到一枚硬幣</b><span>${st.coins.filter(Boolean).length} / 3</span>`);
+      return;
+    }
+    if (e.type === 'lost') {
+      s.inv[c.item] = (s.inv[c.item] || 0) + 1; saveState(); updateHud();
+      World.scene.remove(e.mesh); ents = ents.filter(x => x !== e);
+      Sound.itemGet(); toast(`<b>找到 ${ITEMS[c.item].icon} ${ITEMS[c.item].name}</b><span>拿回${esc(e.station)}還給${esc(c.giver.name)}</span>`);
+      return;
+    }
+    if (e.type === 'friend') {
+      const st = chState(e.line, e.station);
+      return say({ name: c.friend.name, role: '' }, `咦？${esc(c.giver.name)}在${esc(e.station)}等我？我搞錯月台了！謝謝你特地跑來告訴我，我現在就過去。`, [
+        { label: '不客氣', primary: true, run: () => { Dialog.close(); if (st) { st.told = true; setCh(e.line, e.station, st); } solve(e.line, e.station, { xp: 35, money: 40 }, '幫忙找到人了！'); } },
+      ]);
+    }
+    if (e.type === 'wayHere') {
+      const side = Math.sign(World.player.z - e.P.z);
+      const good = (e.P.sides[side] || []).some(d => d.stops.includes(c.dest));
+      if (good) return say({ name: c.giver.name }, `「往${esc(MRT.label((e.P.sides[side][0] || {}).terminal || c.dest, e.f.line).zh)}……對，有經過${esc(c.dest)}！謝謝你，我在這裡等車就好。」`, [
+        { label: '路上小心', primary: true, run: () => { Dialog.close(); solve(e.f.line, e.f.station, { xp: 35, money: 30 }, '幫迷路的人找到路了！'); } },
+      ]);
+      const wrong = (e.P.sides[side] || [])[0];
+      return say({ name: c.giver.name }, `他看了看月台上的 LED 看板：「這邊是往${esc(wrong ? MRT.label(wrong.terminal, e.f.line).zh : '……')}的……好像不會到${esc(c.dest)}耶？」`);
+    }
+    if (e.type === 'giver') return giver(e);
+  }
+  function giver(e) {
+    const s = S(), c = e.c, st = chState(e.line, e.station);
+    const who = { name: c.giver.name, role: '需要幫忙' };
+    const busy = s.flags.follow && (c.kind === 'escort' || c.kind === 'way');
+    if (!st) {
+      return Dialog.show(who, c.ask, [
+        { label: busy ? '（你已經在幫別人帶路了）' : '好，交給我', primary: true, disabled: busy, run: () => {
+          const v = { acc: true };
+          if (c.kind === 'coins') v.coins = [false, false, false];
+          setCh(e.line, e.station, v);
+          if (c.kind === 'escort' || c.kind === 'way') { s.flags.follow = { line: e.line, station: e.station }; saveState(); }
+          Dialog.close();
+          toast(`<b>接下委託</b><span>${esc(c.giver.name)}（${esc(title(e.line, e.station))}）</span>`);
+          spawn(World.layout.stationId);
+        } },
+        { label: '等一下', run: () => Dialog.close() },
+      ]);
+    }
+    if (c.kind === 'coins') {
+      const n = st.coins.filter(Boolean).length;
+      if (n < 3) return Dialog.show(who, `找到 ${n} 枚了……還差 ${3 - n} 枚。有的可能滾到別的樓層去了。`, [{ label: '再找找', run: () => Dialog.close() }]);
+      return Dialog.show(who, '三枚都找到了！真的太感謝你了，這是一點心意。', [{ label: '收下', primary: true, run: () => { Dialog.close(); solve(e.line, e.station, { xp: 35, money: 80 }, '幫忙找回零錢了！'); } }]);
+    }
+    if (c.kind === 'lost') {
+      if (s.inv[c.item] > 0) return Dialog.show(who, `啊！這就是我的${ITEMS[c.item].name}！你在哪裡找到的？太謝謝你了。`, [{ label: '還給他', primary: true, run: () => { s.inv[c.item]--; Dialog.close(); solve(e.line, e.station, { xp: 40, money: 100 }, '幫忙找回失物了！'); } }]);
+      return Dialog.show(who, c.ask, [{ label: '我再去找找', run: () => Dialog.close() }]);
+    }
+    if (c.kind === 'buy') {
+      const it = ITEMS[c.item];
+      if (s.inv[c.item] > 0) return Dialog.show(who, `是${it.name}！謝謝你跑這一趟，錢還你，多的是跑腿費。`, [{ label: `交給他（拿回 NT$ ${it.price + 60}）`, primary: true, run: () => { s.inv[c.item]--; Dialog.close(); solve(e.line, e.station, { xp: 30, money: it.price + 60 }, '幫忙買到東西了！'); } }]);
+      return Dialog.show(who, c.ask, [{ label: '我這就去買', run: () => Dialog.close() }]);
+    }
+    if (c.kind === 'person') {
+      if (st.told) return solve(e.line, e.station, { xp: 10 }, '');
+      return Dialog.show(who, c.ask, [{ label: '我去找找', run: () => Dialog.close() }]);
+    }
+    return Dialog.show(who, c.ask, [{ label: '好', run: () => Dialog.close() }]);
+  }
+  // 帶路的人到站了
+  function arrived(f, c) {
+    if (S().flags.follow !== f) return;
+    Dialog.show({ name: c.giver.name, role: '' }, `到了！這裡就是${esc(c.target)}。謝謝你一路陪我，第一次搭捷運就遇到你，真好。`, [
+      { label: '不客氣', primary: true, run: () => { Dialog.close(); solve(f.line, f.station, { xp: 45, money: 60 }, '帶路完成！'); } },
+    ]);
+  }
+  // 問答
+  function ask(e) {
+    const L = LINES[e.line], Q = Puzzles.question(e.line, e.station);
+    const who = { name: title(e.line, e.station), role: '秀蔅留下的紙條' };
+    Dialog.show(who, esc(Q.q), Q.options.map((o, i) => ({
+      label: esc(o),
+      run: () => {
+        if (i !== Q.answer) {
+          Sound.click();
+          return Dialog.show(who, '紙條上的字慢慢淡掉了……答案好像不是這個。看看四周的站名牌、路線圖、LED 看板，再想一想。', [
+            { label: '再試一次', primary: true, run: () => ask(e) }, { label: '等一下再來', run: () => Dialog.close() },
+          ]);
+        }
+        Dialog.close();
+        solve(e.line, e.station, { xp: 20 }, '答對了！');
+      },
+    })).concat([{ label: '等一下再來', run: () => Dialog.close() }]));
+    void L;
+  }
+  // 帶著人時不能傳送
+  const escorting = () => !!S().flags.follow;
+  // 某線還沒完成的站（任務列表用）
+  function pending(stationId) { return MRT.linesAt(stationId).map(l => l.line).filter(l => unsolved(l, stationId)); }
+  return { spawn, clear, tick, near, label, interact, escorting, pending, get follower() { return follower; }, get ents() { return ents; } };
 })();
 
 /* ── 車站裡的秘密：紙條、塗鴉、被遺忘的東西（有些只在特定時段出現） ── */

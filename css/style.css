@@ -218,6 +218,7 @@ button:disabled { cursor: not-allowed; }
 .quest { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.05); border-left: 5px solid #8d9aa5; }
 .quest.q-main { border-left-color: #ffd36b; }
 .quest.q-event { border-left-color: #ff4b6e; }
+.quest.q-secret { border-left-color: #a98bff; }
 .q-head { display: flex; align-items: center; gap: 8px; }
 .q-head b { font-size: 17px; }
 .q-tag { padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--c, #4b555e); color: #fff; }
@@ -424,3 +425,6 @@ button:disabled { cursor: not-allowed; }
 .wd-hint { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 .inv .eat { margin-left: 6px; padding: 2px 10px; font-size: 12px; }
 @media (max-width: 480px) { .wardrobe { grid-template-columns: 1fr; } .wd-look { width: 110px; justify-self: center; } }
+
+/* 任務：謎題進度、寶物感應、秘密任務 */
+.q-note { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.5; }

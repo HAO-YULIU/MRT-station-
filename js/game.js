@@ -20,7 +20,12 @@ function newState() {
 function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && typeof s === 'object') { const d = newState(), m = { ...d, ...s }; m.quests = { ...d.quests, ...(s.quests || {}) }; return m; }
+    if (s && typeof s === 'object') {
+      const d = newState(), m = { ...d, ...s }; m.quests = { ...d.quests, ...(s.quests || {}) };
+      // 舊版主線（跨線的步驟）改成新版：從頭解該線每一站的謎題
+      for (const id of Object.keys(m.quests.active)) if (/^main_/.test(id) && !m.quests.active[id].v) m.quests.active[id] = { step: 0, v: 2 };
+      return m;
+    }
   } catch (e) { /* 無存檔 */ }
   return newState();
 }
@@ -139,6 +144,8 @@ Game.reward = (r = {}, label = '') => {
 Game.onQuestChange = (what, id) => {
   const q = QUESTS[id];
   if (what === 'accept') toast(`<b>接下任務</b><span>${q.title}</span>`);
+  if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); }
+  if ((what === 'accept' || what === 'done') && ctl) Challenges.spawn(ctl.stationId);
   updateHud();
 };
 // 任務事件：完成某步驟時提示
@@ -150,17 +157,17 @@ function openQuests() {
   const s = Game.state, act = s.quests.active;
   const card = id => {
     const q = QUESTS[id], st = act[id];
-    const tag = { main: '主線', side: '支線', event: '活動' }[q.type];
+    const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密' }[q.type];
     return `<li class="quest q-${q.type}">
       <div class="q-head"><span class="q-tag"${q.line ? ` style="--c:${LINES[q.line].color}"` : ''}>${q.line ? q.line + ' ' : ''}${tag}</span><b>${q.title}</b></div>
       <p>${q.desc}</p>
-      <ol>${q.steps.map((p, i) => `<li class="${i < st.step ? 'ok' : i === st.step ? 'now' : ''}">${p.text}</li>`).join('')}</ol>
+      <ol>${q.steps.map((p, i) => `<li class="${i < st.step ? 'ok' : i === st.step ? 'now' : ''}">${p.text}${i === st.step ? stepNote(q, st, p) : ''}</li>`).join('')}</ol>
       <div class="q-reward">報酬：${[q.reward.money && `NT$ ${q.reward.money}`, q.reward.xp && `經驗 ${q.reward.xp}`, ...Object.keys(q.reward.items || {}).map(i => ITEMS[i].name)].filter(Boolean).join('、')}</div>
       ${q.type === 'side' ? `<button class="btn ghost small" data-abandon="${id}">放棄</button>` : ''}
     </li>`;
   };
   const ids = Object.keys(act);
-  const order = ['main', 'event', 'side'];
+  const order = ['main', 'secret', 'event', 'side'];
   ids.sort((a, b) => order.indexOf(QUESTS[a].type) - order.indexOf(QUESTS[b].type));
   const done = Object.keys(s.quests.done).filter(id => QUESTS[id]);
   $('#questCount').textContent = `支線 ${Quests.sideCount()} / ${SIDE_LIMIT}`;
@@ -169,6 +176,36 @@ function openQuests() {
     ${done.length ? `<h4 class="q-done-h">已完成</h4><ul class="q-done">${done.map(id => `<li>${QUESTS[id].title}</li>`).join('')}</ul>` : ''}`;
   $('#questBody').onclick = e => { const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
   $('#questLog').hidden = false;
+}
+
+// 任務目前這一步的補充說明：謎題進度、寶物感應
+function stepNote(q, st, step) {
+  const g = step.goal;
+  if (g.kind === 'puzzles') {
+    const all = Puzzles.stations(g.line), left = all.filter(x => !(st.solved && st.solved[x]));
+    const doing = Object.keys(st.ch || {}).map(x => `${esc(x)}（${esc((Puzzles.challenge(g.line, x).giver || {}).name || '')}）`);
+    return `<small class="q-note">已完成 ${all.length - left.length} / ${all.length} 站　還沒完成：${left.slice(0, 8).map(esc).join('、')}${left.length > 8 ? `…等 ${left.length} 站` : ''}${doing.length ? `<br>進行中的委託：${doing.join('、')}` : ''}</small>`;
+  }
+  if (g.station === '@treasure' && st.treasure) return `<small class="q-note">${treasureSense(q.line, Game.state.current, st.treasure)}</small>`;
+  return '';
+}
+// 寶物感應：只說遠近，不說是哪一站
+function treasureSense(line, here, at) {
+  if (!here || !MRT.linesAt(here).some(l => l.line === line)) return `寶物感應：你不在${LINES[line].zh}上，感應不到。`;
+  const n = Puzzles.hops(line, here, at);
+  if (n === 0) return '寶物感應：就在這一站！找找大廳和月台的角落。';
+  if (n <= 2) return '寶物感應：非常近，就在附近一兩站。';
+  if (n <= 5) return '寶物感應：有點近了。';
+  if (n <= 10) return '寶物感應：還有一段距離。';
+  return '寶物感應：很遠很遠。';
+}
+// 秘密任務的時間、好感條件（每秒檢查一次）
+function checkSecrets() {
+  if (document.body.dataset.screen !== 'game' || !Game.state.char) return;
+  const s = Game.state, t = TaipeiTime.now();
+  if (t.hour === 6 && t.minute < 15) Quests.secret('sec_firsttrain');
+  if (t.hour === 0 && t.minute === 0 && TaipeiTime.state(t) === 'open') Quests.secret('sec_midnight');
+  if (Object.values(s.friends).some(f => f >= 100)) Quests.secret('sec_friend');
 }
 
 /* ── 進出站扣款 ── */
@@ -184,6 +221,7 @@ function onGate(side) {
   const from = s.trip ? s.trip.from : here;
   const fare = Economy.fare(from, here);
   s.money -= fare; s.trip = null; saveState(); updateHud();
+  if (fare >= 65) Quests.secret('sec_maxfare');
   toast(`<b>出站扣款 NT$ ${fare}</b><span>${esc(from)} → ${esc(here)}　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
   return true;
 }
@@ -252,7 +290,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Secrets.tick(); });
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -317,11 +355,25 @@ function startStation(stationId, carry) {
   Xiuyu.arrive(stationId);
   NPCManager.enter(stationId, World.layout);
   Pickups.spawn(stationId);
+  Challenges.spawn(stationId);
   Secrets.spawn(stationId);
+  arriveChecks(stationId);
   Sound.ambience(World.layout.allUnder ? 'underground' : 'elevated');
   Game.ctlTimer = setInterval(tickStation, 400);
   doorInteractions();
   tickStation();
+}
+// 到站時：支線秘密任務、寶物感應
+function arriveChecks(stationId) {
+  const other = { 新北投: '小碧潭', 小碧潭: '新北投' }[stationId];
+  if (other) Quests.secret('sec_branch', { target: other });
+  const act = Game.state.quests.active;
+  for (const id of Object.keys(act)) {
+    const q = QUESTS[id], st = act[id];
+    if (q.type === 'main' && st.step === 1 && st.treasure && MRT.linesAt(stationId).some(l => l.line === q.line)) {
+      toast(`<b>${LINES[q.line].zh}的寶物</b><span>${treasureSense(q.line, stationId, st.treasure)}</span>`);
+    }
+  }
 }
 const trackKey = (k, side) => `${k}:${side}`;
 function sideDirs(P, side) {
@@ -412,7 +464,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), npcInteraction, spotInteraction, pickupInteraction, secretInteraction, seatInteraction, dropInteraction);
+  list.push(exitInteraction(), puzzleInteraction, npcInteraction, spotInteraction, pickupInteraction, secretInteraction, seatInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -494,10 +546,15 @@ async function doRide(tr, ride) {
   World.setInteractions([npcInteraction, seatInteraction, dropInteraction]);   // 行駛中：可以和乘客聊天、坐下、撿東西
   setTimeout(() => Passengers.maybeDrop(tr), 3000);
   const anomaly = Math.random() < .2;   // 偶爾在隧道裡看到不該存在的月台
+  if (TaipeiTime.now().hour === 0) Quests.secret('sec_lasttrain');
   Sound.ambience(null);
   Sound.startRumble();
   await World.ride(tr, { toId: to, duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip, anomaly });
-  if (anomaly && MRT.undergroundOn(to, line)) toast('<b>剛剛窗外……</b><span>好像有一座綠色的月台，站名寫著「霧」。</span>');
+  if (anomaly && MRT.undergroundOn(to, line)) {
+    toast('<b>剛剛窗外……</b><span>好像有一座綠色的月台，站名寫著「霧」。</span>');
+    questEvent({ kind: 'anomaly' });
+    Quests.secret('sec_ghost');
+  }
   Sound.stopRumble();
   setPart('pBtns', '');
   ride.moving = false;
@@ -507,6 +564,10 @@ async function doRide(tr, ride) {
   s.visited[to] = true; s.current = to; s.rides++;
   saveState(); updateHud();
   questEvent({ kind: 'ride', line, station: to });
+  if (MRT.terminals(line).has(to)) {
+    questEvent({ kind: 'terminal', line, station: to });
+    if (line === 'Y') Quests.secret('sec_circle', { target: to === '大坪林' ? '新北產業園區' : '大坪林' });
+  }
   startStation(to, { key: trackKey(tr.P.k, tr.side) });
   const id = ctl.id;
   World.setStrip(line, fullList, ride.idx);
@@ -541,7 +602,14 @@ const seatInteraction = {
   get id() { return World.sitting ? 'stand' : 'sit'; },
   get label() { return World.sitting ? '起身' : '坐下'; },
   when: p => !Dialog.with && p.zone.kind === 'train' && (World.sitting || !!Passengers.freeSeat(p)),
-  run: () => { if (World.sitting) World.sit(null); else { const seat = Passengers.freeSeat(World.player); if (seat) World.sit(seat); } },
+  run: () => {
+    if (World.sitting) return World.sit(null);
+    const seat = Passengers.freeSeat(World.player); if (!seat) return;
+    World.sit(seat);
+    const f = Game.state.flags; f.sits = (f.sits || 0) + 1; saveState();
+    questEvent({ kind: 'sit' });
+    if (f.sits >= 5) Quests.secret('sec_seat');
+  },
 };
 // 撿起乘客遺落的東西
 const dropInteraction = {
@@ -688,6 +756,13 @@ const secretInteraction = {
   run: () => { const s = Secrets.near(World.player); if (s) Secrets.look(s); },
 };
 
+// 主線謎題
+const puzzleInteraction = {
+  get id() { const e = Challenges.near(World.player); return e ? 'ch:' + e.type + (e.line || '') + (e.i ?? '') : 'ch'; },
+  get label() { const e = Challenges.near(World.player); return e ? Challenges.label(e) : '查看'; },
+  when: p => !Dialog.with && !World.sitting && !!Challenges.near(p),
+  run: () => { const e = Challenges.near(World.player); if (e) Challenges.interact(e); },
+};
 // 撿起任務物品
 function nearPickup(p) { return Pickups.near(p); }
 const pickupInteraction = {
@@ -805,7 +880,7 @@ function openMap() {
       card.hidden = false;
       Sound.click();
       const tp = $('#tpBtn');
-      if (tp) { tp.disabled = !!Game.ride; tp.onclick = () => teleport(id); }
+      if (tp) { tp.disabled = !!Game.ride || Challenges.escorting(); tp.onclick = () => teleport(id); }
     },
   });
 }
@@ -815,6 +890,7 @@ function closeMap() { $('#mapModal').hidden = true; Map3D.close(); }
 async function teleport(id) {
   const s = Game.state;
   if (Game.ride || !s.visited[id] || id === s.current) return;
+  if (Challenges.escorting()) { toast('<b>帶著人不能傳送</b><span>先陪他把路走完吧</span>', 'warn'); return; }
   closeMap();
   newSession(); clearInterval(Game.ctlTimer);
   const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
@@ -837,6 +913,7 @@ function init() {
   Game.service = TaipeiTime.state();
   setInterval(() => {
     updateHud();
+    checkSecrets();
     const st = TaipeiTime.state();
     if (st !== Game.service) onServiceChange(st);
     if (!$('#closedOverlay').hidden && st !== 'open') showClosed();
