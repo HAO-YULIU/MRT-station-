@@ -45,10 +45,11 @@
       <div class="hud-time">
         <b id="hudTime">--:--</b>
         <small id="hudDate"></small>
-        <span class="status" id="hudStatus"></span>
+        <span class="hud-stats" id="hudStats"></span>
       </div>
       <nav class="hud-btns">
         <button id="btnMap">路網圖</button>
+        <button id="btnQuest">任務 <span id="hudQuests">0</span></button>
         <button id="btnBag">背包 <span id="hudItems">0/6</span></button>
         <button id="btnSound" aria-pressed="true">音效 開</button>
       </nav>
@@ -56,7 +57,9 @@
     <div class="panel" id="panel"></div>
     <button class="action-btn" id="actionBtn" hidden></button>
     <div class="joystick" id="joystick" aria-label="移動搖桿"><span class="knob"></span></div>
-    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　拖曳畫面轉視角　E 上下車</p>
+    <button class="run-btn" id="runBtn" aria-pressed="false">跑</button>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　Shift 跑步　拖曳畫面轉視角　E 互動</p>
   </section>
 
   <!-- 路網圖 -->
@@ -75,6 +78,14 @@
         <div class="map-lines" id="mapLines" aria-label="只看某條路線"></div>
       </div>
       <p class="map-legend"><span class="lg-me"></span>你在這裡　<span class="lg-fog"></span>還沒去過的車站藏在霧裡　高架在地面上、地下段在地面下　拖曳移動、滾輪或雙指縮放、右鍵拖曳或雙指旋轉</p>
+    </div>
+  </div>
+
+  <!-- 任務 -->
+  <div class="modal" id="questLog" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="questTitle">
+      <header><h3 id="questTitle">任務</h3><span id="questCount"></span><button class="x" data-close="questLog" aria-label="關閉">×</button></header>
+      <div id="questBody"></div>
     </div>
   </div>
 
@@ -111,6 +122,8 @@
   <script src="js/characters.js"></script>
   <script src="js/time.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/economy.js"></script>
+  <script src="js/quests.js"></script>
   <script src="js/human3d.js"></script>
   <script src="js/station3d.js"></script>
   <script src="js/world3d.js"></script>

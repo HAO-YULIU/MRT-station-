@@ -137,7 +137,7 @@ button:disabled { cursor: not-allowed; }
 .hud-time { margin-left: auto; text-align: right; line-height: 1.15; }
 .hud-time b { font: 700 26px var(--latin); letter-spacing: .04em; display: block; }
 .hud-time small { font: 500 13px var(--latin); color: var(--fog); }
-.status { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 99px; font-size: 12px; background: #2f6b4b; }
+.status-old { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 99px; font-size: 12px; background: #2f6b4b; }
 .status[data-s="warn"] { background: #8a5a12; }
 .status[data-s="mist"] { background: #4b5f78; }
 .status[data-s="closed"] { background: #5a3a3a; }
@@ -190,6 +190,55 @@ button:disabled { cursor: not-allowed; }
 .tag.warn { background: var(--warn); }
 .arrive-btns { display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* ── HUD：等級、經驗、新台幣 ── */
+.hud-stats { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 3px; font: 700 13px var(--latin); }
+.hud-stats .lv { padding: 1px 7px; border-radius: 6px; background: #2f6b4b; }
+.hud-stats .xpbar { width: 60px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
+.hud-stats .xpbar i { display: block; height: 100%; background: #7ee2a8; }
+.hud-stats .money { color: #ffd36b; }
+.hud-stats .last { color: var(--warn); font-family: var(--sans); }
+
+/* ── 提示框 ── */
+.toasts { position: absolute; z-index: 8; left: 50%; top: calc(var(--hud-h, 64px) + 10px); transform: translateX(-50%); display: grid; gap: 6px; pointer-events: none; width: min(420px, calc(100% - 24px)); }
+.toast { padding: 8px 14px; border-radius: 10px; background: rgba(12,16,20,.9); font-size: 14px; text-align: center; animation: toastIn .25s ease-out; transition: opacity .5s, transform .5s; }
+.toast b { display: block; font-size: 15px; }
+.toast span { color: var(--fog); font-size: 13px; }
+.toast.reward { box-shadow: inset 0 0 0 2px #ffd36b; }
+.toast.level { box-shadow: inset 0 0 0 2px #7ee2a8; }
+.toast.warn { box-shadow: inset 0 0 0 2px var(--warn); }
+.toast.out { opacity: 0; transform: translateY(-8px); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } }
+
+/* ── 跑步鍵（手機） ── */
+.run-btn { display: none; position: absolute; z-index: 6; left: 172px; bottom: calc(40px + env(safe-area-inset-bottom)); width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); background: rgba(20,26,32,.7); font-size: 20px; font-weight: 900; }
+.run-btn[aria-pressed="true"] { background: #f2c200; color: #1c2126; border-color: #fff; }
+
+/* ── 任務日誌 ── */
+.quests { list-style: none; margin: 0; padding: 0 18px; display: grid; gap: 10px; }
+.quest { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.05); border-left: 5px solid #8d9aa5; }
+.quest.q-main { border-left-color: #ffd36b; }
+.quest.q-event { border-left-color: #ff4b6e; }
+.q-head { display: flex; align-items: center; gap: 8px; }
+.q-head b { font-size: 17px; }
+.q-tag { padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--c, #4b555e); color: #fff; }
+.quest p { margin: 4px 0; color: var(--fog); font-size: 14px; }
+.quest ol { margin: 6px 0; padding-left: 22px; font-size: 14px; }
+.quest ol li { color: var(--muted); }
+.quest ol li.ok { text-decoration: line-through; }
+.quest ol li.now { color: var(--paper); font-weight: 700; }
+.q-reward { font-size: 13px; color: #ffd36b; margin-bottom: 6px; }
+.empty-q { padding: 0 18px; color: var(--muted); }
+.q-done-h, .bag-h { margin: 16px 18px 6px; font-size: 15px; color: var(--fog); }
+.q-done { margin: 0; padding: 0 18px 0 38px; color: var(--muted); font-size: 14px; }
+
+/* ── 背包：錢包與物品 ── */
+.wallet { margin: 0 18px; padding: 12px 16px; border-radius: 12px; background: linear-gradient(120deg, #1d6fb8, #2a9d8f); display: flex; justify-content: space-between; align-items: center; }
+.wallet b { font: 700 24px var(--latin); }
+.inv { list-style: none; margin: 0; padding: 0 18px; display: grid; gap: 6px; }
+.inv li { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; column-gap: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); }
+.inv .ic { font-size: 24px; grid-row: span 2; }
+.inv p { grid-column: 2 / 4; margin: 0; font-size: 12px; color: var(--muted); }
+
 /* ── 小資訊框（左下角） ── */
 #game .panel {
   left: 12px; right: auto; bottom: calc(12px + env(safe-area-inset-bottom)); padding: 0; background: none;
@@ -240,6 +289,7 @@ button:disabled { cursor: not-allowed; }
 /* 手機：顯示搖桿，資訊面板移到上方，下方留給搖桿與互動按鈕 */
 @media (pointer: coarse) {
   .joystick { display: block; }
+  .run-btn { display: grid; place-items: center; }
   .controls-hint { display: none; }
   #game .panel { top: calc(var(--hud-h, 64px) + 8px); bottom: auto; width: min(300px, calc(100% - 24px)); }
   .mini { padding: 8px 10px; font-size: 13px; }

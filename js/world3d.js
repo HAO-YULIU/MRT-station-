@@ -16,6 +16,7 @@ const World = (() => {
   let interactions = [];
   let last = 0, shake = 0, lastGateSide = 0;
   let onZoneChange = null, lastZoneKey = '';
+  let gateCheck = null, blocked = null;
 
   const SKY = {
     day: { bg: '#a9c6dc', fog: '#c7d6df', hemi: 1.25, sun: 1.6 },
@@ -131,7 +132,8 @@ const World = (() => {
 
   /* ── 輸入 ── */
   const keys = {};
-  const KEYMAP = { ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd' };
+  const KEYMAP = { ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ShiftLeft: 'run', ShiftRight: 'run' };
+  let runToggle = false;
   const joy = { x: 0, y: 0 };
   function bindInput() {
     window.addEventListener('keydown', e => {
@@ -222,10 +224,13 @@ const World = (() => {
         const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
         let mx = rx * ix + fx * iy, mz = rz * ix + fz * iy;
         const n = Math.hypot(mx, mz); mx /= n; mz /= n;
-        const sp = 2.6 * mag * dt;
+        const v = (keys.run || runToggle ? 5.2 : 2.6) * mag;   // 跑步 5.2 m/s、走路 2.6 m/s
+        const sp = v * dt;
+        const bx = player.x, bz = player.z;
         tryMove(player.x + mx * sp, player.z + mz * sp);
+        if (blocked && blocked(player.x, player.z, player.y)) { player.x = bx; player.z = bz; }   // 不能穿過 NPC
         player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * 12));
-        player.speed = 2.6 * mag; moved = true;
+        player.speed = v; moved = true;
       } else player.speed = 0;
       // 電扶梯會自己把人往上／往下帶
       const cv = conveyorAt(player.x, player.z);
@@ -234,8 +239,11 @@ const World = (() => {
     // 閘門「嗶」
     if (layout && Math.abs(player.y) < .3) {
       const side = player.z > layout.gateZ + .6 ? 1 : -1;
-      if (lastGateSide && side !== lastGateSide && layout.gates.some(g => Math.abs(player.x - g) < .4)) Sound.gate();
-      lastGateSide = side;
+      if (lastGateSide && side !== lastGateSide && layout.gates.some(g => Math.abs(player.x - g) < .4)) {
+        // side = 1 出站、-1 進站；遊戲可以拒絕（例如餘額不足）
+        if (gateCheck && !gateCheck(side)) { player.z = layout.gateZ + (side > 0 ? .2 : 1.1); player.auto = null; }
+        else { Sound.gate(); lastGateSide = side; }
+      } else lastGateSide = side;
     }
     if (rig) {
       rig.root.position.set(player.x, player.y, player.z);
@@ -328,6 +336,14 @@ const World = (() => {
     },
     bindJoystick,
     set onZone(fn) { onZoneChange = fn; lastZoneKey = ''; },
+    set onGate(fn) { gateCheck = fn; },
+    set blocker(fn) { blocked = fn; },
+    get scene() { return scene; },
+    get env() { return env; },
+    get camera() { return camera; },
+    setRun(on) { runToggle = on; },
+    get running() { return runToggle; },
+    groundAt: (x, z, y) => groundAt(x, z, y),
     setCharacter(id) {
       if (rig && charId === id) return;
       if (rig) scene.remove(rig.root);
