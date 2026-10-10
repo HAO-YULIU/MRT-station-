@@ -7,7 +7,8 @@
  *   find    在某站撿到物品（item, station）
  *   give    把物品交給 NPC（npc, item）
  *   buy     在商店買某樣東西（item）
- * 獎勵：money（新台幣）、xp、items（物品 id → 數量）、friend（NPC id → 好感）
+ * 獎勵：money（新台幣）、xp、items（物品 id → 數量）、friend（NPC id → 好感）、wear（服裝 id，見 outfits.js）
+ * 物品：eat 表示可以吃／喝（捷運裡可以飲食），event 表示只在該活動期間販售
  */
 const ITEMS = {
   wallet: { name: '黑色皮夾', desc: '裡面有一張悠遊卡和一張舊照片。', icon: '👛' },
@@ -18,9 +19,24 @@ const ITEMS = {
   note1: { name: '紙條（一）', desc: '「第七節車廂，只在霧裡停靠。」', icon: '📝' },
   note2: { name: '紙條（二）', desc: '「00:30 以後，時鐘不會走。」', icon: '📝' },
   note3: { name: '紙條（三）', desc: '「找到她，她記得所有路線。」', icon: '📝' },
-  bubbletea: { name: '珍珠奶茶', desc: '半糖少冰。可以送人，也可以自己喝。', icon: '🧋', price: 60, shop: true },
-  coffee: { name: '美式咖啡', desc: '上班族最需要的東西。', icon: '☕', price: 55, shop: true },
-  onigiri: { name: '御飯糰', desc: '鮪魚口味。', icon: '🍙', price: 35, shop: true },
+  bubbletea: { name: '珍珠奶茶', desc: '半糖少冰。可以送人，也可以自己喝。', icon: '🧋', price: 60, shop: true, eat: '喝' },
+  coffee: { name: '美式咖啡', desc: '上班族最需要的東西。', icon: '☕', price: 55, shop: true, eat: '喝' },
+  onigiri: { name: '御飯糰', desc: '鮪魚口味。', icon: '🍙', price: 35, shop: true, eat: '吃' },
+  soymilk: { name: '冰豆漿', desc: '早餐店的味道。', icon: '🥛', price: 25, shop: true, eat: '喝' },
+  bread: { name: '菠蘿麵包', desc: '外皮酥酥的，還是溫的。', icon: '🍞', price: 35, shop: true, eat: '吃' },
+  chicken: { name: '炸雞排', desc: '比臉還大，要切不要辣。', icon: '🍗', price: 80, shop: true, eat: '吃' },
+  sausage: { name: '大腸包小腸', desc: '夜市經典，加蒜頭。', icon: '🌭', price: 70, shop: true, eat: '吃' },
+  sunnycake: { name: '太陽餅', desc: '台中來的伴手禮，一咬就掉屑。', icon: '🥮', price: 150, shop: true },
+  nougat: { name: '牛軋糖', desc: '奶香很濃，送長輩剛好。', icon: '🍬', price: 130, shop: true },
+  postcard: { name: '捷運明信片', desc: '畫著六條路線的明信片。', icon: '🖼️', price: 40, shop: true },
+  easycard: { name: '造型悠遊卡', desc: '列車造型的限定悠遊卡，收藏用。', icon: '💳', price: 250, shop: true },
+  pumpkinlatte: { name: '南瓜拿鐵', desc: '萬聖節限定，上面撒了肉桂粉。', icon: '🎃', price: 75, shop: true, eat: '喝', event: 'event_halloween' },
+  xmascookie: { name: '薑餅人', desc: '聖誕節限定，笑得有點詭異。', icon: '🍪', price: 60, shop: true, eat: '吃', event: 'event_xmas' },
+  mooncake: { name: '月餅', desc: '中秋節限定，蛋黃酥。', icon: '🥮', price: 90, shop: true, eat: '吃', event: 'event_midautumn' },
+  chocolate: { name: '巧克力', desc: '情人節限定，愛心形狀。', icon: '🍫', price: 120, shop: true, event: 'event_valentine' },
+  pumpkin: { name: '小南瓜', desc: '萬聖節活動藏起來的南瓜。', icon: '🎃' },
+  giftbox: { name: '聖誕禮物盒', desc: '綁著紅色緞帶，搖起來有聲音。', icon: '🎁' },
+  redenvelope: { name: '紅包', desc: '新年快樂！裡面有一點零錢。', icon: '🧧' },
   pineapplecake: { name: '鳳梨酥', desc: '送禮最安全的選擇。', icon: '🍍', price: 120, shop: true },
   keychain: { name: '捷運吊飾', desc: '迷你車廂造型，掛在包包上很可愛。', icon: '🚇', price: 150, shop: true },
   flower: { name: '一小束花', desc: '車站花店的滿天星。', icon: '💐', price: 180, shop: true },
@@ -225,6 +241,65 @@ const QUESTS = {
     ],
     reward: { money: 1010, xp: 250 },
   },
+  event_halloween: {
+    type: 'event', title: '萬聖節：搗蛋南瓜', giver: 'eventstaff', month: 10, days: [24, 25, 26, 27, 28, 29, 30, 31],
+    desc: '有人把南瓜藏在車站裡，找齊了有限定的南瓜髮箍。',
+    steps: [
+      { text: '在西門找到小南瓜', goal: { kind: 'find', item: 'pumpkin', station: '西門' } },
+      { text: '在中山找到小南瓜', goal: { kind: 'find', item: 'pumpkin', station: '中山' } },
+      { text: '在公館找到小南瓜', goal: { kind: 'find', item: 'pumpkin', station: '公館' } },
+    ],
+    reward: { money: 500, xp: 200, wear: 'acc_pumpkin' },
+  },
+  event_xmas: {
+    type: 'event', title: '聖誕節：送不出去的禮物', giver: 'eventstaff', month: 12, days: [18, 19, 20, 21, 22, 23, 24, 25],
+    desc: '聖誕老人把禮物盒掉在三個車站，幫忙撿回來。',
+    steps: [
+      { text: '在板橋找到禮物盒', goal: { kind: 'find', item: 'giftbox', station: '板橋' } },
+      { text: '在市政府找到禮物盒', goal: { kind: 'find', item: 'giftbox', station: '市政府' } },
+      { text: '在台北101/世貿找到禮物盒', goal: { kind: 'find', item: 'giftbox', station: '台北101/世貿' } },
+    ],
+    reward: { money: 600, xp: 250, wear: 'acc_santa' },
+  },
+  event_newyear: {
+    type: 'event', title: '跨年：倒數之前', giver: 'eventstaff', dates: [[0, 12, 30, 31], [0, 1, 1, 1]],
+    desc: '跨年夜，大家都往信義區去。搭淡水信義線到台北101/世貿，再去象山看看。',
+    steps: [
+      { text: '搭淡水信義線到台北101/世貿', goal: { kind: 'ride', line: 'R', station: '台北101/世貿' } },
+      { text: '到象山', goal: { kind: 'reach', station: '象山' } },
+    ],
+    reward: { money: 600, xp: 260 },
+  },
+  event_lunar: {
+    type: 'event', title: '春節：走春拿紅包', giver: 'eventstaff',
+    dates: [[2026, 2, 16, 22], [2027, 2, 5, 11], [2028, 1, 25, 31], [2029, 2, 12, 18], [2030, 2, 2, 8]],
+    desc: '過年走春，三間廟附近的車站都藏了紅包。',
+    steps: [
+      { text: '在龍山寺找到紅包', goal: { kind: 'find', item: 'redenvelope', station: '龍山寺' } },
+      { text: '在行天宮找到紅包', goal: { kind: 'find', item: 'redenvelope', station: '行天宮' } },
+      { text: '在台北車站找到紅包', goal: { kind: 'find', item: 'redenvelope', station: '台北車站' } },
+    ],
+    reward: { money: 888, xp: 260, wear: 'acc_lantern' },
+  },
+  event_midautumn: {
+    type: 'event', title: '中秋節：一起烤肉', giver: 'eventstaff',
+    dates: [[2026, 9, 23, 27], [2027, 9, 13, 17], [2028, 10, 1, 5], [2029, 9, 20, 24], [2030, 9, 10, 14]],
+    desc: '活動志工要準備中秋烤肉，幫忙買月餅帶到中正紀念堂。',
+    steps: [
+      { text: '在商店買一個月餅', goal: { kind: 'buy', item: 'mooncake' } },
+      { text: '到中正紀念堂', goal: { kind: 'reach', station: '中正紀念堂' } },
+    ],
+    reward: { money: 300, xp: 200, items: { mooncake: 2 } },
+  },
+  event_valentine: {
+    type: 'event', title: '情人節：說不出口的話', giver: 'eventstaff', month: 2, days: [13, 14],
+    desc: '有人想送花給在捷運上遇見的人，卻不敢開口。幫他把花送到秀蔅手上——她說她認得那個人。',
+    steps: [
+      { text: '在中山花店買一小束花', goal: { kind: 'buy', item: 'flower' } },
+      { text: '把花交給秀蔅', goal: { kind: 'give', npc: 'xiuyu', item: 'flower' } },
+    ],
+    reward: { money: 300, xp: 200, items: { chocolate: 1 }, friend: { xiuyu: 15 } },
+  },
 };
 const SIDE_LIMIT = 5;
 
@@ -300,7 +375,9 @@ const Quests = (() => {
   // 限時活動：依真實日期
   function eventsNow() {
     const t = TaipeiTime.now();
-    return Object.keys(QUESTS).filter(id => QUESTS[id].type === 'event' && QUESTS[id].month === t.month && QUESTS[id].days.includes(t.day));
+    const on = q => (q.month ? q.month === t.month && q.days.includes(t.day) : false)
+      || (q.dates || []).some(([y, m, d0, d1]) => (!y || y === t.year) && m === t.month && t.day >= d0 && t.day <= d1);
+    return Object.keys(QUESTS).filter(id => QUESTS[id].type === 'event' && on(QUESTS[id]));
   }
   return { accept, abandon, canAccept, isActive, isDone, emit, wants, sideCount, eventsNow };
 })();

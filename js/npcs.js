@@ -129,10 +129,22 @@ const NPCS = {
     questTalk: { main_BR: '駕駛室有人說話？……我們的紀錄器確實錄到一段聲音，在報站名，報的是一個不存在的站。' },
   },
   eventstaff: {
-    name: '活動志工', role: '雙十節活動', station: '台北車站', spot: 'concourse', hours: [[9, 21]], speed: 0, event: 'event_double10',
+    name: '活動志工', role: '節慶活動', station: '台北車站', spot: 'concourse', hours: [[9, 21]], speed: 0, event: '*',
     look: { girl: true, skin: '#efc4ae', hair: 'bun', hairColor: '#1a1a1a', top: '#c4162a', pattern: 'plain', bottom: '#f4f4f2', hat: 'cap', hatColor: '#1f3a8a' },
-    gives: ['event_double10'], likes: [],
-    lines: ['國慶日快樂！中正紀念堂、台北車站、市政府都藏了小國旗喔！'],
+    gives: ['event_double10', 'event_halloween', 'event_xmas', 'event_newyear', 'event_lunar', 'event_midautumn', 'event_valentine'], likes: ['bubbletea', 'coffee'],
+    get lines() {
+      const T = {
+        event_double10: '國慶日快樂！中正紀念堂、台北車站、市政府都藏了小國旗喔！',
+        event_halloween: 'Trick or treat！西門、中山、公館都藏了南瓜，找齊有南瓜髮箍可以拿。',
+        event_xmas: '聖誕快樂！板橋車站前面的聖誕城你去過了嗎？',
+        event_newyear: '今天晚上捷運會延長營運……開玩笑的，這裡還是 00:30 收班。',
+        event_lunar: '新年快樂！走春記得去廟裡拜拜，紅包就藏在附近。',
+        event_midautumn: '中秋節要烤肉！可是我忘了買月餅……',
+        event_valentine: '情人節快樂。有人託我一件事，可以幫忙嗎？',
+      };
+      const now = Quests.eventsNow();
+      return now.length ? now.map(id => T[id]).filter(Boolean) : ['最近沒有活動，下次節日再來找我。'];
+    },
   },
 };
 // 任務需要時，NPC 會出現在另一個地方
@@ -228,7 +240,7 @@ const NPCManager = (() => {
       const qp = NPC_QUEST_PLACES[nid];
       const forced = qp && Quests.isActive(qp.quest) && qp.station === id;
       if (!forced && (def.station !== id || !inHours(def))) continue;
-      if (def.event && !Quests.eventsNow().includes(def.event)) continue;
+      if (def.event && !(def.event === '*' ? Quests.eventsNow().length : Quests.eventsNow().includes(def.event))) continue;
       const pos = placeFor(def); if (!pos) continue;
       addNpc({ id: nid, ...def, pos, named: true, area: areaOf(def.spot), speed: forced ? .9 : def.speed });
     }
@@ -443,6 +455,7 @@ const Dialog = (() => {
     show(npc, text, [
       ...offers.map(id => ({ label: `接主線：${LINES[QUESTS[id].line].zh}・${QUESTS[id].title}`, primary: true, run: () => { Quests.accept(id); close(); } })),
       { label: '聊天', run: () => { s.friends.xiuyu = (s.friends.xiuyu || 0) + 2; saveState(); xiuyuChat(npc); } },
+      { label: '送禮', run: () => gift(npc) },
       { label: '再見', run: close },
     ]);
   }

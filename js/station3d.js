@@ -232,13 +232,13 @@ const Station3D = (() => {
 
   // 大站的商店（只在大站出現，賣該站對應的東西）
   const SHOPS = {
-    台北車站: { name: '捷運便利商店', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'bubbletea', 'pineapplecake', 'keychain'] },
-    西門: { name: '西門手搖飲', sign: '手搖飲', color: '#e07a3a', items: ['bubbletea', 'coffee'] },
-    南港: { name: '南港伴手禮', sign: '伴手禮', color: '#8a5a3a', items: ['pineapplecake', 'keychain'] },
-    中山: { name: '中山花店', sign: '花店', color: '#d06a8a', items: ['flower'] },
-    市政府: { name: '信義咖啡', sign: '咖啡', color: '#5a4030', items: ['coffee', 'onigiri'] },
-    板橋: { name: '板橋便利商店', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'bubbletea'] },
-    忠孝復興: { name: '東區麵包坊', sign: '麵包', color: '#c08a3a', items: ['onigiri', 'coffee', 'pineapplecake'] },
+    台北車站: { name: '捷運便利商店・地下街', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'soymilk', 'bread', 'bubbletea', 'pineapplecake', 'keychain', 'postcard', 'easycard'] },
+    西門: { name: '西門町服飾＆小吃', sign: '服飾', color: '#e07a3a', items: ['bubbletea', 'coffee', 'chicken', 'sausage'] },
+    南港: { name: '南港伴手禮', sign: '伴手禮', color: '#8a5a3a', items: ['pineapplecake', 'sunnycake', 'nougat', 'keychain', 'postcard', 'easycard'] },
+    中山: { name: '中山花店＆選物', sign: '花店', color: '#d06a8a', items: ['flower', 'postcard'] },
+    市政府: { name: '信義百貨', sign: '百貨', color: '#5a4030', items: ['coffee', 'onigiri', 'nougat'] },
+    板橋: { name: '板橋便利商店', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'soymilk', 'bubbletea', 'chicken'] },
+    忠孝復興: { name: '東區選物＆麵包坊', sign: '選物', color: '#c08a3a', items: ['bread', 'onigiri', 'coffee', 'pineapplecake'] },
   };
 
   // 有「霧」塗鴉的車站

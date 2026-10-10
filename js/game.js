@@ -14,6 +14,7 @@ function newState() {
   return {
     char: null, start: null, current: null, items: {}, visited: {}, rides: 0,
     money: 500, xp: 0, inv: {}, quests: { active: {}, done: {} }, trip: null, friends: {}, linesMet: {}, flags: {},
+    wardrobe: { own: {}, wear: {} },   // 買過的服裝、身上穿的（沒寫的部位用預設）
   };
 }
 function loadState() {
@@ -82,7 +83,8 @@ function updateHud() {
   $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
     $('#hudName').textContent = CHARACTERS[s.char].name;
-    if ($('#hudAvatar').dataset.c !== s.char) { $('#hudAvatar').dataset.c = s.char; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head')}" alt="">`; }
+    const ak = s.char + JSON.stringify(s.wardrobe.wear);
+    if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
   $('#hudWhere').textContent = s.current ? s.current : '尚未出發';
   $('#hudItems').textContent = `${Object.keys(s.items).length}/6`;
@@ -128,6 +130,7 @@ Game.reward = (r = {}, label = '') => {
   if (r.xp) { s.xp += r.xp; parts.push(`經驗 +${r.xp}`); }
   for (const [id, n] of Object.entries(r.items || {})) { s.inv[id] = (s.inv[id] || 0) + n; parts.push(`${ITEMS[id].icon} ${ITEMS[id].name}`); }
   for (const [id, n] of Object.entries(r.friend || {})) s.friends[id] = (s.friends[id] || 0) + n;
+  if (r.wear && OUTFITS[r.wear]) { s.wardrobe.own[r.wear] = true; parts.push(`限定服裝：${OUTFITS[r.wear].name}（背包 → 換裝）`); }
   saveState(); updateHud();
   if (label || parts.length) { toast(`<b>${label}</b>${parts.length ? `<span>${parts.join('　')}</span>` : ''}`, 'reward'); Sound.itemGet(); }
   const after = Economy.levelInfo(s.xp).lv;
@@ -257,7 +260,7 @@ function enterGame(stationId) {
   showScreen('game');
   layoutScene();
   ensureWorld();
-  World.setCharacter(Game.state.char);
+  World.setCharacter(Game.state.char, Game.state.wardrobe.wear);
   buildPanel();
   updateHud();
   if (TaipeiTime.state() !== 'open') showClosed();
@@ -619,17 +622,63 @@ async function restroom() {
 // 商店
 function shopMenu(st) {
   const shop = Station3D.SHOPS[st]; if (!shop) return;
+  const wear = (OUTFIT_SHOPS[st] || []).filter(id => Outfits.fits(id, Game.state.char));
+  if (!wear.length) return foodMenu(st);
+  Dialog.show({ name: shop.name, role: '歡迎光臨' }, '想看什麼？', [
+    { label: '飲食、伴手禮', primary: true, run: () => foodMenu(st) },
+    { label: st === '台北車站' ? '地下街髮廊（髮型、染髮）' : '服飾、配件', primary: true, run: () => wearMenu(st) },
+    { label: '離開', run: () => Dialog.close() },
+  ]);
+}
+// 依時節：活動限定的商品只在活動期間賣
+function shopItems(shop) {
+  const ev = Quests.eventsNow();
+  const extra = Object.keys(ITEMS).filter(id => ITEMS[id].event && ev.includes(ITEMS[id].event) && !shop.items.includes(id));
+  return shop.items.concat(extra).filter(id => !ITEMS[id].event || ev.includes(ITEMS[id].event));
+}
+function foodMenu(st) {
+  const shop = Station3D.SHOPS[st];
   const s = Game.state;
-  Dialog.show({ name: shop.name, role: '歡迎光臨' }, `悠遊卡餘額 NT$ ${s.money}。要買什麼？`, shop.items.map(id => ({
-    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}`, disabled: s.money < ITEMS[id].price,
+  Dialog.show({ name: shop.name, role: '歡迎光臨' }, `悠遊卡餘額 NT$ ${s.money}。要買什麼？`, shopItems(shop).map(id => ({
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}${ITEMS[id].event ? '（限定）' : ''}`, disabled: s.money < ITEMS[id].price,
     run: () => {
       s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud();
       Sound.gate();
       toast(`<b>買了 ${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`);
       questEvent({ kind: 'buy', item: id });
-      shopMenu(st);
+      foodMenu(st);
     },
   })).concat([{ label: '離開', run: () => Dialog.close() }]));
+}
+function wearMenu(st) {
+  const shop = Station3D.SHOPS[st], s = Game.state;
+  const ids = (OUTFIT_SHOPS[st] || []).filter(id => Outfits.fits(id, s.char));
+  const slotName = Object.fromEntries(OUTFIT_SLOTS);
+  Dialog.show({ name: shop.name, role: '服飾、配件' }, `悠遊卡餘額 NT$ ${s.money}。買了可以在「背包 → 換裝」隨時換。`, ids.map(id => {
+    const o = OUTFITS[id], own = !!s.wardrobe.own[id];
+    return {
+      label: own ? `${slotName[o.slot]}｜${o.name}　已擁有` : `${slotName[o.slot]}｜${o.name}　NT$ ${o.price}`,
+      disabled: own || s.money < o.price,
+      run: () => {
+        s.money -= o.price; s.wardrobe.own[id] = true; saveState(); updateHud();
+        Sound.gate();
+        questEvent({ kind: 'buy', item: id });
+        Dialog.show({ name: shop.name, role: '服飾、配件' }, `買了「${esc(o.name)}」。要現在換上嗎？`, [
+          { label: '現在換上', primary: true, run: () => { putOn(id); wearMenu(st); } },
+          { label: '先不用', run: () => wearMenu(st) },
+        ]);
+      },
+    };
+  }).concat([{ label: '離開', run: () => Dialog.close() }]));
+}
+// 換上某件服裝
+function putOn(id) {
+  const s = Game.state, o = OUTFITS[id]; if (!o) return;
+  s.wardrobe.wear = { ...Outfits.wear(s.char, s.wardrobe.wear), [o.slot]: id };
+  saveState();
+  World.setCharacter(s.char, s.wardrobe.wear);
+  updateHud();
+  toast(`<b>換上了 ${o.name}</b>`);
 }
 // 角落的秘密
 const secretInteraction = {
@@ -681,7 +730,9 @@ function openBag() {
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
     <h4 class="bag-h">物品</h4>
-    ${inv.length ? `<ul class="inv">${inv.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : '<p class="empty-q">背包是空的。</p>'}
+    ${inv.length ? `<ul class="inv">${inv.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : '<p class="empty-q">背包是空的。</p>'}
+    <h4 class="bag-h">換裝</h4>
+    ${wardrobeHtml()}
     <h4 class="bag-h">路線收藏</h4>
     <ul class="slots">
       ${LINE_ORDER.map(l => {
@@ -701,6 +752,32 @@ function openBag() {
       <p>${n === 6 ? '六件物品都到齊了。指定地點即將開放，放入物品就能打開新的地圖。' : `集齊六條路線的物品，放到指定地點，就能打開新的地圖（尚未開放）。還差 ${6 - n} 件。`}</p>
     </div>`;
   $('#bag').hidden = false;
+  $('#bagBody').onclick = e => {
+    const w = e.target.closest('[data-wear]'), f = e.target.closest('[data-eat]');
+    if (w) { Sound.click(); putOn(w.dataset.wear); openBag(); }
+    if (f) { Sound.click(); eat(f.dataset.eat); openBag(); }
+  };
+}
+// 捷運裡可以吃東西：吃喝一點點經驗
+const EAT_TEXT = { 喝: ['好喝。', '整個人醒過來了。', '冰冰涼涼的。'], 吃: ['好吃！', '吃飽了，可以再走一站。', '肚子不餓了。'] };
+function eat(id) {
+  const s = Game.state, it = ITEMS[id];
+  if (!it || !it.eat || !(s.inv[id] > 0)) return;
+  s.inv[id]--;
+  const pool = EAT_TEXT[it.eat];
+  Game.reward({ xp: 5 }, `${it.eat}掉了 ${it.icon} ${it.name}　${pool[(Math.random() * pool.length) | 0]}`);
+}
+function wardrobeHtml() {
+  const s = Game.state, wear = Outfits.wear(s.char, s.wardrobe.wear), own = Outfits.owned(s.char, s.wardrobe.own);
+  return `<div class="wardrobe">
+    <img class="wd-look" src="${Human3D.snapshot(s.char, 'full', s.wardrobe.wear)}" alt="目前的造型">
+    <div class="wd-slots">${OUTFIT_SLOTS.map(([slot, name]) => {
+      const list = own.filter(id => OUTFITS[id].slot === slot);
+      return `<div class="wd-row"><span>${name}</span><div>${list.map(id => `<button class="wd-chip" data-wear="${id}" aria-pressed="${wear[slot] === id}">${esc(OUTFITS[id].name)}</button>`).join('')}</div></div>`;
+    }).join('')}
+      <p class="wd-hint">衣服可以在西門、忠孝復興、市政府、中山、板橋的商店買；髮型和染髮在台北車站。節慶活動有限定配件。</p>
+    </div>
+  </div>`;
 }
 
 function openMap() {

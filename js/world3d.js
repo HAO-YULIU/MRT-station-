@@ -366,10 +366,12 @@ const World = (() => {
     onRecenter(fn) { recenterHooks.push(fn); },
     get running() { return runToggle; },
     groundAt: (x, z, y) => groundAt(x, z, y),
-    setCharacter(id) {
-      if (rig && charId === id) return;
-      if (rig) scene.remove(rig.root);
-      charId = id; rig = Human3D.build(id); scene.add(rig.root);
+    setCharacter(id, wear) {
+      const key = id + JSON.stringify(wear ? Outfits.wear(id, wear) : Outfits.wear(id));
+      if (rig && rig.key === key) return;
+      const sit = rig ? rig.sit : 0;
+      if (rig) { scene.remove(rig.root); dispose(rig.root); }
+      charId = id; rig = Human3D.build(id, wear); rig.key = key; rig.sit = sit; scene.add(rig.root);
     },
     // 載入車站（整座：大廳＋各線月台）
     loadStation(stationId) {

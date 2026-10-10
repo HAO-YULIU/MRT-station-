@@ -411,3 +411,16 @@ button:disabled { cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) {
   .fog i, .blink, .action-btn { animation: none; }
 }
+
+/* 換裝 */
+.wardrobe { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 0 18px 8px; align-items: start; }
+.wd-look { width: 120px; aspect-ratio: 3 / 5; object-fit: contain; border-radius: 12px; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,.12), rgba(255,255,255,.03)); }
+.wd-slots { display: grid; gap: 8px; min-width: 0; }
+.wd-row { display: grid; grid-template-columns: 40px 1fr; gap: 6px; align-items: start; }
+.wd-row > span { font-size: 12px; color: var(--muted); padding-top: 6px; }
+.wd-row > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.wd-chip { font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.05); color: inherit; cursor: pointer; }
+.wd-chip[aria-pressed="true"] { background: #f2c200; color: #1a1a1a; border-color: #f2c200; font-weight: 700; }
+.wd-hint { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.inv .eat { margin-left: 6px; padding: 2px 10px; font-size: 12px; }
+@media (max-width: 480px) { .wardrobe { grid-template-columns: 1fr; } .wd-look { width: 110px; justify-self: center; } }
