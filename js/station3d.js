@@ -351,6 +351,8 @@ const Station3D = (() => {
     ];
     // 新北投：溫泉站，非付費區旁邊有一座可以泡湯的「湯之庭」
     if (stationId === '新北投') { rooms.push({ kind: 'onsen', x0: U.x0 - 14, x1: U.x0, z0: U.z0 + 1, z1: U.z1 - 1.5, door: { wx: U.x0, z: U.z0 + 9.5, w: 2.2 } }); spots.push({ kind: 'onsen', x: U.x0 - 9, y: 0, z: U.z0 + 4.2 }); }
+    // 小碧潭：大廳側牆後面藏著「時空研究室」，主線的時空傳送裝置在裡面
+    if (stationId === '小碧潭') rooms.push({ kind: 'lab', x0: C.x0 - 9, x1: C.x0, z0: C.z0 + 9, z1: C.z0 + 17, door: { wx: C.x0, z: C.z0 + 13, w: 1.6 } });
     if (big) rooms.push({ kind: 'store', x0: U.x0 - 6, x1: U.x0, z0: U.z0 + 4.4, z1: U.z0 + 11.6, door: { wx: U.x0, z: U.z0 + 8, w: 1.5 } });
     return { stationId, platforms, concourse, gateZ, unpaid, gates, spots, rooms, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
   }
@@ -362,10 +364,10 @@ const Station3D = (() => {
   // 房間內部：地板、天花板、牆、燈與擺設（家具會擋路）
   function buildRooms(L, g) {
     for (const r of L.rooms || []) {
-      const H = r.kind === 'onsen' ? 3.8 : 2.9;
+      const H = r.kind === 'onsen' ? 3.8 : r.kind === 'lab' ? 3.6 : 2.9;
       const w = r.x1 - r.x0, d = r.z1 - r.z0, cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
-      const tone = { onsen: '#cdb48e', toilet_m: '#dfe8ef', toilet_f: '#f1e3e6', toilet_a: '#e2ecf2', nursing: '#f6e4ea', office: '#e4e6e2', store: '#f4f4f0' }[r.kind];
-      const wallM = M(tone, { r: .6 }), floorM = M(r.kind === 'onsen' ? '#8a6a4a' : r.kind === 'store' ? '#d9d6cf' : r.kind === 'office' ? '#9aa3a8' : '#c9d2d6', { r: .5 });
+      const tone = { onsen: '#cdb48e', toilet_m: '#dfe8ef', toilet_f: '#f1e3e6', toilet_a: '#e2ecf2', nursing: '#f6e4ea', office: '#e4e6e2', store: '#f4f4f0', lab: '#2a3442' }[r.kind];
+      const wallM = M(tone, { r: .6 }), floorM = M(r.kind === 'lab' ? '#1c232c' : r.kind === 'onsen' ? '#8a6a4a' : r.kind === 'store' ? '#d9d6cf' : r.kind === 'office' ? '#9aa3a8' : '#c9d2d6', { r: .5 });
       box(w, .1, d, floorM, cx, -.05, cz, g);
       box(w, .1, d, M('#efefec', { r: .9 }), cx, H, cz, g);
       box(Math.min(1.6, w - .6), .04, .4, M('#ffffff', { e: '#ffffff', ei: 1 }), cx, H - .06, cz, g);   // 天花板燈
@@ -407,6 +409,19 @@ const Station3D = (() => {
         box(.5, 1.9, 1.2, M('#9aa3aa', { m: .5 }), far - dir * .3, .95, r.z1 - .7, g); solid(far - dir * .3, r.z1 - .7, .5, 1.2);   // 置物櫃
       }
       if (r.kind === 'onsen') buildOnsen(r, dir, far, fx, cx, cz, w, d, H);
+      if (r.kind === 'lab') {   // 時空研究室：牆上的儀表板、電纜、藍色燈條
+        L.lab = { x: cx - dir * .6, z: cz };
+        for (const z of [r.z0 + .2, r.z1 - .2]) {
+          box(w - .6, .05, .05, M('#4ab0ff', { e: '#4ab0ff', ei: 1.4 }), cx, .12, z, g);
+          box(w - .6, .05, .05, M('#4ab0ff', { e: '#4ab0ff', ei: 1.4 }), cx, H - .2, z, g);
+        }
+        const panel = canvasTex(512, 256, x => { x.fillStyle = '#0a1420'; x.fillRect(0, 0, 512, 256); x.strokeStyle = '#2a6a9a'; x.lineWidth = 2; for (let i = 0; i < 6; i++) { x.strokeRect(14 + i * 82, 20, 70, 50); x.fillStyle = ['#4ab0ff', '#9fe0c8', '#ffd36b'][i % 3]; x.fillRect(20 + i * 82, 40, 20 + (i * 13) % 40, 6); } x.fillStyle = '#4ab0ff'; x.font = '700 26px monospace'; x.fillText('TEMPORAL LAB  2087', 20, 120); x.fillStyle = '#9fe0c8'; x.font = '18px monospace'; for (let i = 0; i < 5; i++) x.fillText('> sync part ' + (i + 1) + ' ........ ' + ['OK', '--', 'OK', '--', '--'][i], 20, 152 + i * 20); });
+        const pz = r.z0 + .12;
+        const pp = plane(w - 1.2, 1.6, M('#ffffff', { map: panel, e: '#ffffff', ei: .5 }), g); pp.position.set(cx, 1.6, pz + .02);
+        box(w - 1.2, .9, .5, M('#30363c', { m: .5, r: .4 }), cx, .45, r.z0 + .4, g); solid(cx, r.z0 + .4, w - 1.2, .5);
+        for (let i = 0; i < 5; i++) box(.06, .06, d - .6, M('#111'), far - dir * (.15 + i * .1), H - .25 - i * .08, cz, g);   // 天花板電纜
+        sign(plainSign('時空研究室', 'Temporal Lab · 關係者以外立入禁止', '#0a1420', '#9fe0ff', { bg: '#4ab0ff', fg: '#0a1420', text: '⌛' }), 2.4, .6, fx(.3), 2.75, r.door.z, g, dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+      }
       if (r.kind === 'store') {
         // 冰箱（後牆）、貨架（中間）、櫃台（門口旁）
         box(.7, 2.1, d - 1.4, M('#dfe7ea', { m: .3 }), far - dir * .35, 1.05, cz, g); solid(far - dir * .35, cz, .7, d - 1.4);
@@ -975,7 +990,13 @@ const Station3D = (() => {
     for (const x of [-5.2, 5.2]) bin(x, 0, C.z0 + .45);                                   // 大廳站名牆兩側
     bin(U.x0 + .5, 0, U.z0 + 3.4); bin(U.x1 - 5.8, 0, U.z1 - .5);                         // 非付費區
     const adW = (x, z, rot, i) => { L.ads.push({ x: x + Math.sin(rot) * 1.1, y: 0, z: z + Math.cos(rot) * 1.1, ad: ((i % ADS.length) + ADS.length) % ADS.length }); const b = box(.12, 1.7, 3.2, M('#e8e8e4'), x, 1.7, z, g); b.rotation.y = rot; const p = plane(3, 1.5, M('#ffffff', { map: adTex(i), e: '#ffffff', ei: .15 }), g); p.position.set(x + Math.sin(rot) * .07, 1.7, z + Math.cos(rot) * .07); p.rotation.y = rot; };
-    for (const [k, z] of [C.z0 + 12, C.z0 + 20].entries()) if (z < L.gateZ - 2.5) { adW(C.x0 + .08, z, Math.PI / 2, k + 1); if (!placesOf(L.stationId).includes('cafe')) adW(C.x1 - .08, z, -Math.PI / 2, k + 4); }
+    // 牆上的廣告：不要擋到房間的門口
+    const freeWall = (wx, z) => !(L.rooms || []).some(r => Math.abs(r.door.wx - wx) < .5 && Math.abs(r.door.z - z) < r.door.w / 2 + 1.9);
+    for (const [k, z0] of [C.z0 + 12, C.z0 + 20].entries()) for (const [wx, rot, i] of [[C.x0, Math.PI / 2, k + 1], [C.x1, -Math.PI / 2, k + 4]]) {
+      if (wx === C.x1 && placesOf(L.stationId).includes('cafe')) continue;
+      const z = [z0, z0 + 4, z0 - 4].find(zz => zz < L.gateZ - 2.5 && zz > C.z0 + 1.8 && freeWall(wx, zz));
+      if (z != null) adW(wx + (wx === C.x0 ? .08 : -.08), z, rot, i);
+    }
     { const p = plane(3, 1.5, M('#ffffff', { map: adTex(5), e: '#ffffff', ei: .15 }), g); p.position.set(8.5, 1.7, U.z1 - .16); p.rotation.y = Math.PI; box(3.2, 1.7, .1, M('#e8e8e4'), 8.5, 1.7, U.z1 - .08, g); }
     // 路線指南看板（閘門內側）
     { const gx = -10.5, gz = L.gateZ - 1.4;

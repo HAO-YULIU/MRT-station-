@@ -304,9 +304,14 @@ const World = (() => {
       px = Math.min(ctx + 30, Math.max(ctx - 30, px)); pz = Math.min(ctz + 1.3, Math.max(ctz - 1.3, pz)); py = Math.min(player.y + 2.15, py);
     } else if (z.kind === 'platform') {
       pz = Math.min(z.P.z + 6.5, Math.max(z.P.z - 6.5, pz)); py = Math.min(player.y + (z.P.under ? 3.2 : 3.6), py);
-    } else if (z.room) {   // 在房間裡：鏡頭拉近、不穿牆
-      const r = z.room;
-      px = Math.min(r.x1 - .4, Math.max(r.x0 + .4, px)); pz = Math.min(r.z1 - .3, Math.max(r.z0 + .3, pz)); py = Math.min(2.55, py);
+    } else if (z.room) {   // 在房間裡：鏡頭拉近、不穿牆；靠近門口時鏡頭可以退到門外（沿著門洞），太擠就改從上面往下看
+      const r = z.room, out = r.door.wx === r.x0 ? -1 : 1;
+      const halfDoor = r.door.w / 2 - .12, nearDoor = Math.abs(player.z - r.door.z) < halfDoor + .5 && Math.abs(player.x - r.door.wx) < 3.5;
+      if (nearDoor && (px - r.door.wx) * out > -.4) {
+        px = out > 0 ? Math.min(r.door.wx + 2.6, px) : Math.max(r.door.wx - 2.6, px);
+        pz = Math.min(r.door.z + halfDoor, Math.max(r.door.z - halfDoor, pz)); py = Math.min(2.1, py);
+      } else { px = Math.min(r.x1 - .4, Math.max(r.x0 + .4, px)); pz = Math.min(r.z1 - .3, Math.max(r.z0 + .3, pz)); py = Math.min(2.55, py); }
+      if (Math.hypot(px - player.x, pz - player.z) < 1.1) py = Math.max(py, player.y + 2.4);   // 太近：從頭頂往下看，不會卡進角色裡
     } else if (z.kind === 'unpaid') {
       const U = layout.unpaid;
       px = Math.min(U.x1 - .5, Math.max(U.x0 + .5, px)); pz = Math.min(U.z1 - .5, Math.max(layout.gateZ + .6, pz)); py = Math.min(3.9, py);

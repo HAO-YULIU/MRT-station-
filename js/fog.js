@@ -220,9 +220,9 @@ const FogCity = (() => {
 
   /* ── 生命值 ── */
   function hurt(n, why) {
-    const r = rec(); if (!r || r.dead || r.escaped || hurtCD > 0) return false;
-    if (S().inv.fog_charm > 0) { S().inv.fog_charm--; hurtCD = 1.2; saveState(); toast('<b>🧧 平安符替你擋下了</b><span>符紙變成灰，飄走了。</span>'); hud(); return false; }
-    r.hp = Math.max(0, r.hp - n); r.dmg += n; hurtCD = .9; lastHurt = performance.now();
+    const r = rec(); if (!r || r.dead || r.escaped || performance.now() < hurtCD) return false;
+    if (S().inv.fog_charm > 0) { S().inv.fog_charm--; hurtCD = performance.now() + 1200; saveState(); toast('<b>🧧 平安符替你擋下了</b><span>符紙變成灰，飄走了。</span>'); hud(); return false; }
+    r.hp = Math.max(0, r.hp - n); r.dmg += n; hurtCD = performance.now() + 900; lastHurt = performance.now();
     if (K && K.onHurt) K.onHurt(n, why);
     saveState(); Sound.fog('hit');
     flash('#c00', .45);
@@ -277,7 +277,7 @@ const FogCity = (() => {
     closeOverlay(); World.setInput(true);
     if (K && K.onRevive) K.onRevive(); else respawnSafe();
     for (const c of chasers) { c.sleep = 4; c.x = c.home.x; c.y = c.home.y; c.z = c.home.z; }
-    hurtCD = 3; hud();
+    hurtCD = performance.now() + 3000; hud();
   }
   function respawnSafe() {
     const L = World.layout; if (!L || L.alias) return;
@@ -610,7 +610,6 @@ const FogCity = (() => {
     tickStyle(now);
     const r = rec(); if (!r) return;
     const p = World.player;
-    hurtCD = Math.max(0, hurtCD - dt);
     for (const n of npcs) tickNpc(n, dt, p);
     for (const c of [...chasers]) tickChaser(c, dt, p);
     for (const o of props) {

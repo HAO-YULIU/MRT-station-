@@ -20,9 +20,22 @@ const Teleporter = (() => {
   function spawn(stationId) {
     clear();
     if (stationId !== TELE_STATION || !World.layout) return;
-    const L = World.layout, P = L.platforms[0];
+    const L = World.layout, C = L.concourse;
     group = new T.Group(); World.scene.add(group);
-    const cx = P.x - 20, cz = P.z, y = P.y;
+    // 放在小碧潭大廳後面的「時空研究室」裡（讓玩家自己找；大廳與月台有指標）
+    const cx = L.lab ? L.lab.x : C.x0 + 4, cz = L.lab ? L.lab.z : C.z0 + 13;
+    const y = 0;
+    // 指標：大廳中央、月台、閘門內側
+    const arrow = (text, sub, x, yy, z, rot) => {
+      const c2 = document.createElement('canvas'); c2.width = 1024; c2.height = 256; const g2 = c2.getContext('2d');
+      g2.fillStyle = '#0a1420'; g2.fillRect(0, 0, 1024, 256); g2.fillStyle = '#4ab0ff'; g2.fillRect(0, 0, 1024, 14);
+      g2.fillStyle = '#9fe0ff'; g2.font = '900 84px "Noto Sans TC", sans-serif'; g2.fillText(text, 40, 130); g2.font = '600 40px sans-serif'; g2.fillStyle = '#6a8aa8'; g2.fillText(sub, 44, 200);
+      const t2 = new T.CanvasTexture(c2); t2.colorSpace = T.SRGBColorSpace;
+      const m = new T.Mesh(new T.PlaneGeometry(2.6, .65), new T.MeshBasicMaterial({ map: t2, side: T.DoubleSide })); m.position.set(x, yy, z); m.rotation.y = rot || 0; group.add(m);
+    };
+    arrow('⌛ 時空研究室 ←', 'Temporal Lab', C.x0 + 6, 3.2, cz, Math.PI / 2);
+    arrow('⌛ 時空研究室 ↑', '往大廳 · To concourse', L.platforms[0].x + 4, L.platforms[0].y + 2.9, L.platforms[0].z + .05, 0);
+    arrow('⌛ 時空研究室', '進閘門後往左 · Inside fare gates, turn left', -6, 3.2, L.gateZ - 2, 0);
     dev = { x: cx, y, z: cz };
     // 底座
     const baseM = new T.MeshStandardMaterial({ color: '#2c3440', roughness: .35, metalness: .7 });
@@ -30,9 +43,9 @@ const Teleporter = (() => {
     const top = new T.Mesh(new T.CylinderGeometry(1.35, 1.35, .04, 36), new T.MeshStandardMaterial({ color: '#9fe0ff', emissive: '#4ab0ff', emissiveIntensity: .35, roughness: .2 })); top.position.set(cx, y + .27, cz); group.add(top);
     // 拱環
     ring = new T.Mesh(new T.TorusGeometry(1.25, .08, 12, 64), new T.MeshStandardMaterial({ color: '#c8d0dc', metalness: .9, roughness: .2, emissive: '#6ac8ff', emissiveIntensity: .2 }));
-    ring.position.set(cx, y + 1.65, cz); group.add(ring);
+    ring.position.set(cx, y + 1.65, cz); ring.rotation.y = Math.PI / 2; group.add(ring);   // 正面朝門口
     const inner = new T.Mesh(new T.CircleGeometry(1.15, 48), new T.MeshBasicMaterial({ color: '#8fd8ff', transparent: true, opacity: .0, side: T.DoubleSide, depthWrite: false }));
-    inner.position.copy(ring.position); group.add(inner); ring.userData.inner = inner;
+    inner.position.copy(ring.position); inner.rotation.y = Math.PI / 2; group.add(inner); ring.userData.inner = inner;
     // 六個槽，繞著底座
     const lines = Object.keys(MAIN_STORY);
     lines.forEach((l, i) => {
@@ -49,7 +62,7 @@ const Teleporter = (() => {
     const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
     g.fillStyle = '#10161c'; g.fillRect(0, 0, 512, 128); g.fillStyle = '#9fe0ff'; g.font = '900 52px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillText('時空傳送裝置', 256, 66); g.font = '600 26px sans-serif'; g.fillStyle = '#7a8a9a'; g.fillText('TEMPORAL GATE · 2087', 256, 106);
     const tx = new T.CanvasTexture(c); tx.colorSpace = T.SRGBColorSpace;
-    const sign = new T.Mesh(new T.PlaneGeometry(2, .5), new T.MeshBasicMaterial({ map: tx, side: T.DoubleSide })); sign.position.set(cx, y + 3.05, cz); sign.rotation.y = Math.PI / 2; group.add(sign);
+    const sign = new T.Mesh(new T.PlaneGeometry(2, .5), new T.MeshBasicMaterial({ map: tx, side: T.DoubleSide })); sign.position.set(cx, y + 3.05, cz); group.add(sign);
     (L.obstacles = L.obstacles || []).push({ x0: cx - 1.5, x1: cx + 1.5, z0: cz - 1.5, z1: cz + 1.5, y });
     refresh();
   }
