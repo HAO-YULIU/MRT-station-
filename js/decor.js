@@ -1,4 +1,4 @@
-/* 車站額外裝飾（由 Station3D.build 呼叫）：花槽、盆栽、吊籃、綠牆、大站的花朵雕塑
+/* 車站額外裝飾（由 Station3D.build 呼叫）：花槽、盆栽、吊籃、綠牆、大廳中央的階梯花台
  * 所有植物、花盆都先在這裡合併成少數幾個「頂點著色」的網格（每站約 4 個 draw call），
  * 不交給 mergeStatic（它會丟掉頂點顏色）。依站名雜湊決定花色、盆器風格與擺放，每站看起來不一樣；
  * 花色也會跟著季節換（春：杜鵑、夏：扶桑、秋：菊花、冬：聖誕紅）。
@@ -38,7 +38,7 @@ const Decor = (() => {
     mats = {
       plant: mk({ roughness: .82 }),
       pot: mk({ roughness: .55 }),
-      metal: mk({ roughness: .3, metalness: .65 }),
+      metal: mk({ roughness: .35, metalness: .6 }),
       bowl: mk({ roughness: .9, side: T.DoubleSide }),
     };
   }
@@ -230,21 +230,35 @@ const Decor = (() => {
       for (let i = 0; i < 7; i++) { const a = R() * 6.28, r = R() * .14; b.add('plant', 'ico', x + Math.cos(a) * r, y + .05 + R() * .05, z + Math.sin(a) * r, .2, .14, .2, 0, R() * 6, 0, pick(GREENS), .4); }
       for (let k = 0; k < 6; k++) {   // 垂下來的藤蔓
         const a = k / 6 * 6.28 + R() * .4; let px = x + Math.cos(a) * .2, pz = z + Math.sin(a) * .2, py = y;
-        const n = 3 + ((R() * 3) | 0);
+        const n = 2 + ((R() * 2) | 0);
         for (let j = 0; j < n; j++) { px += Math.cos(a) * .03; pz += Math.sin(a) * .03; py -= .1; b.add('plant', 'ico', px, py, pz, .1, .08, .1, R(), R() * 6, 0, pick(GREENS), .3); if (j % 2) b.add('plant', 'ico', px + .02, py - .03, pz, .07, .05, .07, 0, 0, 0, cols[(j + k) % cols.length], .2); }
       }
       for (let i = 0; i < 14; i++) { const a = R() * 6.28, r = .06 + R() * .16; b.add('plant', 'ico', x + Math.cos(a) * r, y + .1 + R() * .08, z + Math.sin(a) * r, .09, .06, .09, R(), R() * 6, 0, cols[i % cols.length], .2); }
     }
-    // 不鏽鋼花朵雕塑（大站）
-    function sculpture(x, z) {
-      island(x, z, 1.15, { cols: twoColors() });
-      const y0 = .48, top = 2.15, lean = .12;
-      b.rod('metal', x, y0, z, x + lean, top, z - .05, .05, '#c9cfd4');
-      for (const [hy, yaw] of [[1.05, .4], [1.5, 3.6]]) b.blade('metal', 'leaf', x + lean * (hy - y0) / (top - y0), hy, z, .7, .26, .04, yaw, .45, '#8fa79a', .2);
-      const n = 7, cx = x + lean, cy = top + .05;
-      for (let i = 0; i < n; i++) b.blade('metal', 'leaf', cx, cy, z - .05, .7, .4, .06, i / n * 6.28, .35, i % 2 ? lineC : '#e9edf0', .1);
-      for (let i = 0; i < n; i++) b.blade('metal', 'leaf', cx, cy + .02, z - .05, .4, .24, .05, (i + .5) / n * 6.28, .8, '#f6d24a', .1);
-      b.add('metal', 'ico', cx, cy + .12, z - .05, .22, .18, .22, 0, 0, 0, '#f2c200');
+    // 階梯式花台（像車站裡的菊花展）
+    function tiers(x, z, r, n) {
+      const cols = [...flowers].sort(() => R() - .5);
+      for (let t = 0; t < n; t++) {
+        const rt = r * (1 - t * .3), h = .42 + t * .3, y0 = t ? .42 + (t - 1) * .3 : 0, hh = h - y0;
+        if (!t) b.add('pot', 'disk', x, .03, z, rt * 2 - .1, .06, rt * 2 - .1, 0, 0, 0, style.base);
+        b.add('pot', 'disk', x, y0 + hh / 2, z, rt * 2, hh, rt * 2, 0, 0, 0, style.body, .2);
+        b.add('pot', 'disk', x, h + .01, z, rt * 2 + .08, .04, rt * 2 + .08, 0, 0, 0, style.rim);
+        // 只在露出來的環上種花（上一層蓋住的部分不種）
+        const rin = t < n - 1 ? r * (1 - (t + 1) * .3) : 0, col = [cols[t % cols.length], cols[(t + 1) % cols.length]];
+        const nf = Math.round(Math.PI * (rt * rt - rin * rin) * 40), nl = Math.round(Math.PI * (rt * rt - rin * rin) * 12);
+        for (let i = 0; i < nl + nf; i++) {
+          const a = R() * 6.28, rr = Math.sqrt(rin * rin + R() * (Math.max(0, (rt - .1) ** 2 - rin * rin))), px = x + Math.cos(a) * rr, pz = z + Math.sin(a) * rr;
+          if (i < nl) { const q = .1 + R() * .06; b.add('plant', 'ico', px, h + q * .5, pz, q * 2.2, q * 1.5, q * 2.2, 0, R() * 6, 0, pick(GREENS), .5); continue; }
+          const q = .055 + R() * .03; b.add('plant', 'oct', px, h + .1 + R() * .12, pz, q * 2.3, q * 1.2, q * 2.3, (R() - .5) * .5, R() * 6, 0, col[i % 2], .3);
+          if (i % 3 === 0) b.add('plant', 'oct', px, h + .2, pz, q * .7, q * .5, q * .7, 0, 0, 0, '#f5d04a');
+        }
+      }
+      if (n >= 3) palmTop(x, .42 + (n - 1) * .3, z);
+      solid(x, z, r * 2, r * 2);
+    }
+    // 頂層中央的一叢綠葉
+    function palmTop(x, y, z) {
+      for (let k = 0; k < 9; k++) { const yaw = k / 9 * 6.28 + R() * .3; b.blade('plant', 'leaf', x, y + .05, z, .45 + R() * .15, .2, .025, yaw, .7 + R() * .4, pick(GREENS), .35); }
     }
     // 綠牆（掛在牆上；nx,nz：牆面朝向）
     let gwMat = null;
@@ -292,7 +306,9 @@ const Decor = (() => {
     rsv(U.x0 - 1, U.x0 + 1.4, U.z0 + 4.6, U.z0 + 7.4);                                        // 路網圖
     if (big) rsv(U.x0 - 1, U.x0 + 1.6, U.z0 + 5.3, U.z0 + 11.4);                              // 商店櫥窗、置物櫃
     rsv(U.x1 - 1.6, U.x1 + 1, U.z0 + 3.9, U.z0 + 7);                                          // ATM、販賣機
-    for (const x of [-4, 4]) rsv(x - .8, x + .8, U.z1 - 1.3, U.z1);                           // 資源回收桶
+    rsv(U.x1 - 6, U.x1 + 1, U.z0 + 1.6, U.z0 + 4.4); rsv(U.x1 - 10.2, U.x1 - 6.2, U.z0 + 1.6, U.z0 + 4.4);   // 詢問處、失物招領
+    for (const x of [-4, 4]) rsv(x - .8, x + .8, U.z1 - 1.3, U.z1);
+    for (const x of [U.x0 + 1.5, 0, U.x1 - 1.5]) rsv(x - 2.4, x + 2.4, U.z1 - 4, U.z1);       // 出口前的走道                           // 資源回收桶
     rsv(8.5 - 1.8, 8.5 + 1.8, U.z1 - 1.4, U.z1);                                               // 牆上廣告
     rsv(9.5 - 1, 9.5 + 1, L.gateZ + .6, L.gateZ + 3.2);                                        // 時刻表
     rsv(-8.8, 8.8, L.gateZ - 3.4, L.gateZ + 3.4);                                              // 閘門前後
@@ -333,9 +349,9 @@ const Decor = (() => {
       const cands = [[0, C.z0 + 5.6], [0, C.z0 + 7], [0, (C.z0 + L.gateZ) / 2 - 4.5]];
       const r = big ? 1.15 : .95;
       const at = cands.find(([x, z]) => hallFree(x, z, r, r));
-      if (at && !(art && art.level !== 'platform' && false)) {
-        if (big && !art) sculpture(at[0], at[1]);
-        else island(at[0], at[1], r, { tree: hash(L.stationId) % 3 ? .85 + R() * .2 : 0 });
+      if (at) {
+        if (big || hash(L.stationId) % 3 === 0) tiers(at[0], at[1], r, big ? 3 : 2);
+        else island(at[0], at[1], r, { tree: .85 + R() * .2 });
         take(at[0], at[1], r, r);
       }
     }
@@ -347,6 +363,7 @@ const Decor = (() => {
       for (const s of [-1, 1]) {
         const pz = cz + s * 1.12;
         if ((L.obstacles || []).some(q => q !== o && Math.abs(q.y || 0) < .5 && hit(box2(cx, pz, .25, .25, .15), q))) continue;
+        if (L.platforms.some(P => P.ramps.some(r => hit(box2(cx, pz, .25, .25, .4), { x0: Math.min(r.xa, r.xb), x1: Math.max(r.xa, r.xb), z0: r.z - 1.9, z1: r.z + 1.9 })))) continue;   // 電扶梯開口
         const top = pot(cx, 0, pz, .22, .38); bed(cx, top, pz, .4, .4, twoColors(), { round: true, dense: 60, spikes: false });
         solid(cx, pz, .44, .44);
       }
@@ -420,7 +437,7 @@ const Decor = (() => {
       } else {
         // 高架月台：屋簷下的吊籃
         const cols = [pick(flowers), pick(flowers), '#ffffff'];
-        for (const [lx, lz] of [[-26, 1.2], [-21, -1.2], [21, 1.2], [26, -1.2]]) basket(ox + lx, oy + 2.85, oz + lz, oy + 3.81, cols);
+        for (const [lx, lz] of [[-26, 1.2], [-21, -1.2], [21, 1.2], [26, -1.2]]) basket(ox + lx, oy + 3.3, oz + lz, oy + 3.81, cols);
       }
     }
 
