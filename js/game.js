@@ -1138,8 +1138,25 @@ function lockPageGestures() {
   document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
 }
 
+// 黃金圖示：畫面上所有的「🪙」都換成金條圖示
+function goldIcons() {
+  const swap = root => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => (n.nodeValue.includes('🪙') ? 1 : 3) });
+    const hits = []; while (w.nextNode()) hits.push(w.currentNode);
+    for (const t of hits) {
+      const parts = t.nodeValue.split('🪙'), frag = document.createDocumentFragment();
+      parts.forEach((p, i) => { if (i) { const g = document.createElement('i'); g.className = 'gold-ic'; g.setAttribute('role', 'img'); g.setAttribute('aria-label', '黃金'); frag.appendChild(g); } if (p) frag.appendChild(document.createTextNode(p)); });
+      t.parentNode.replaceChild(frag, t);
+    }
+  };
+  swap(document.body);
+  new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') { if (m.target.nodeValue.includes('🪙') && m.target.parentNode) swap(m.target.parentNode); } else for (const n of m.addedNodes) if (n.nodeType === 1 ? n.textContent.includes('🪙') : n.nodeType === 3 && n.nodeValue.includes('🪙')) swap(n.nodeType === 1 ? n : n.parentNode); } })
+    .observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
 function init() {
   lockPageGestures();
+  goldIcons();
   renderTitle();
   showScreen('title');
   updateHud();
