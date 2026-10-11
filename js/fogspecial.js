@@ -218,7 +218,7 @@ const FogSpecial = (() => {
       const it = items[idx];
       if (ev.matched[it.pair]) return K.say({ name: it.name, role: '已配對' }, `${it.text}<br><small>說明牌：「${pairs[it.pair].why}」</small>`, bye);
       K.say({ name: it.name, role: '第零展區' }, `${it.text}<br><small>這件展品的說明牌是空白的。它應該和哪一件放在一起？</small>`, items.map((x, j) => ({ x, j })).filter(({ x, j }) => j !== idx && !ev.matched[x.pair]).map(({ x, j }) => ({ label: `和「${x.name}」放在一起`, run: () => {
-        if (x.pair === it.pair) { ev.matched[it.pair] = 1; saveState(); K.sound('good'); K.say({ name: '說明牌', role: '浮現了' }, `「${pairs[it.pair].why}」`, [{ label: '好', run: () => { Dialog.close(); if (Object.keys(ev.matched).length === pairs.length) step2(); } }]); }
+        if (x.pair === it.pair) { ev.matched[it.pair] = 1; saveState(); K.sound('good'); if (Object.keys(ev.matched).length === pairs.length) step2(); K.say({ name: '說明牌', role: '浮現了' }, `「${pairs[it.pair].why}」`, [{ label: '好', run: () => Dialog.close() }]); }
         else { ev.wrong++; saveState(); K.hurt(10, '展示櫃的玻璃裂開，碎片劃過你的手'); Dialog.close(); }
       } })).concat(bye));
     }
@@ -419,7 +419,7 @@ const FogSpecial = (() => {
       const brake = K.prop('console', front, { label: '拉下緊急煞車', glint: false, tag: 'goal', r: 1.8, use: () => {
         if (!hasKey) return K.say({ name: '緊急煞車', role: '' }, '煞車把手上了鎖。鑰匙在某一節車廂裡。', bye);
         if (pulling) return;
-        pulling = 6; K.toast('<b>拉住煞車！</b><span>撐住 6 秒，不要離開駕駛室。</span>', 'warn');
+        pulling = performance.now() + 6000; K.toast('<b>拉住煞車！</b><span>撐住 6 秒，不要離開駕駛室。</span>', 'warn');
       } });
       K.every(dt => {
         if (!running || escaped) return;
@@ -427,13 +427,13 @@ const FogSpecial = (() => {
         if (spawnT <= 0) { spawnT = 14; const p = zpos(); K.chaser('zombie', p, { speed: 2.4, dmg: 26, range: 12, why: '被殭屍咬了一口', sleep: 1 }); K.toast('<b>🧟 又有乘客醒過來了</b>', 'warn'); }
         if (pulling) {
           if (K.dist(front, World.player) > 2.2) { pulling = 0; K.toast('<b>煞車彈回去了</b><span>你離開了駕駛室。</span>', 'warn'); return; }
-          pulling -= dt; K.hint(`拉住煞車：${Math.max(0, pulling).toFixed(1)} 秒`);
-          if (pulling <= 0) { escaped = true; win(); }
+          const left = (pulling - performance.now()) / 1000; K.hint(`拉住煞車：${Math.max(0, left).toFixed(1)} 秒`);
+          if (left <= 0) { pulling = 0; escaped = true; win(); }
         }
       });
       K.onDeath = () => { running = false; };
       K.onRevive = () => { restart(); };
-      await World.ride(tr, { toId: K.station, duration: escaped ? 6 : 240, onSpeed: v => Sound.setSpeed(v), onTick: () => (escaped ? undefined : undefined) });
+      await World.ride(tr, { toId: K.station, duration: 240, onSpeed: v => Sound.setSpeed(v), skip: () => escaped });
       Sound.stopRumble();
       if (!escaped && !K.dead) {   // 開回淡水：失敗
         K.toast('<b>🚃 列車開回了淡水</b><span>你沒能逃出去。車門打開，車上的乘客又睡著了。</span>', 'warn');

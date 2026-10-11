@@ -299,6 +299,11 @@ const FogCity = (() => {
     const el = $('#fogHud'); if (!el) return;
     const r = rec();
     if (!r || !started || !active()) { el.hidden = true; return; }
+    // 一般放進資訊框裡；橫向手機（高度很矮）改放在畫面上方中間，不壓到搖桿
+    const short = window.matchMedia('(max-height: 480px)').matches;
+    const host = short ? $('#game') : $('#panel .mini');
+    if (host && el.parentElement !== host) { if (short) host.appendChild(el); else host.prepend(el); }
+    el.classList.toggle('top', short);
     el.hidden = false;
     const mins = TaipeiTime.minutesToFirstTrain(), m = minuteOfDay(), toFade = Math.max(0, Math.ceil(330 - m));
     const s = S(), inv = s.inv;

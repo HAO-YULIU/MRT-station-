@@ -415,6 +415,7 @@ function fmtEta(sec) {
 
 /* ── 小資訊框（畫面左下角） ── */
 function buildPanel() {
+  const fh = $('#fogHud'); if (fh) $('#game').appendChild(fh);   // 迷霧 HUD 平常住在資訊框裡，重建前先拿出來
   $('#panel').innerHTML = `<div class="mini">
       <div class="mini-title" id="pTitle"></div>
       <div class="mini-rows" id="pRows"></div>

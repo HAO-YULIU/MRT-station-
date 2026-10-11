@@ -565,3 +565,18 @@ button:disabled { cursor: not-allowed; }
 .tele-slots span.on { opacity: 1; filter: none; border-style: solid; border-color: var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 60%, transparent); }
 .item-card.prologue .pro-text { text-align: left; line-height: 1.75; }
 .item-card .letter { margin: 10px 0; padding: 12px 14px; border-radius: 10px; background: #f6f1e4; color: #2a2418; font-family: var(--serif); line-height: 1.8; text-align: left; }
+
+.mini .fog-hud { position: static; width: auto; margin: 0 0 8px; padding: 6px 8px; box-shadow: none; }
+@media (max-height: 480px) {
+  .fog-card { padding: 14px 16px 12px; }
+  .fog-card h2 { font-size: 22px; margin-bottom: 6px; }
+  .fog-card p, .fog-rules { font-size: 12.5px; line-height: 1.45; }
+  .fog-rules { gap: 3px; margin: 6px 0; }
+  .fog-btns { margin-top: 8px; }
+}
+
+.fog-hud.top { left: auto; right: 118px; top: calc(var(--hud-h, 60px) + 6px); width: min(270px, 34vw); padding: 5px 8px; }
+@media (max-height: 480px) { .panel { max-width: min(320px, 40vw); } }
+.fog-hud.top .fh-row { margin-top: 3px; font-size: 11px; }
+.fog-hud.top .fh-btns { margin-top: 4px; }
+@media (orientation: portrait) and (pointer: coarse) { .panel { max-width: calc(100% - 128px); } }
