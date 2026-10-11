@@ -293,12 +293,51 @@ const MRT = {
   },
   // 某站在某線上的月台是否在地下（文湖線、環狀線大多為高架）
   undergroundOn(stationId, lineId) {
+    if (lineId === 'A') return ['台北車站', '三重', '新北產業園區'].includes(stationId) || STATIONS[stationId].ug;
     if (lineId === 'BR') return stationId === '松山機場' || stationId === '大直';
     if (lineId === 'Y') return stationId === '大坪林';
     return STATIONS[stationId].ug;
   },
+  // 桃園機場捷運：交出寶物後才加入路網
+  airportOpen() { return LINE_ORDER.includes('A'); },
+  openAirport() {
+    if (this.airportOpen()) return false;
+    for (const [id, en, ug, x, y] of AIRPORT_NEW_STATIONS) st(id, en, ug, x, y);
+    LINES.A = AIRPORT_LINE; LINE_ORDER.push('A');
+    if (typeof Economy !== 'undefined') Economy.rebuild();
+    return true;
+  },
+  closeAirport() {   // 開新遊戲時恢復原狀
+    if (!this.airportOpen()) return;
+    LINE_ORDER.splice(LINE_ORDER.indexOf('A'), 1); delete LINES.A;
+    for (const [id] of AIRPORT_NEW_STATIONS) delete STATIONS[id];
+    if (typeof Economy !== 'undefined') Economy.rebuild();
+  },
   // 兩站之間是否為地下區段（任一端在地下就以隧道呈現）
   isTunnel(a, b, lineId) { return this.undergroundOn(a, lineId) || this.undergroundOn(b, lineId); },
+};
+
+// 桃園機場捷運：交出六件寶物給小碧潭的擺渡人之前，不會出現在路網圖上、車站裡也沒有它的月台，不能搭乘
+// 解鎖後才把車站與路線加入路網（MRT.openAirport）
+// [站名, 英文, 是否地下, 路網圖座標 x, y]（A1–A3 和台北捷運共站，用原本的資料）
+const AIRPORT_NEW_STATIONS = [
+  ['新莊副都心', 'Xinzhuang Fuduxin', true, 138, 398], ['泰山', 'Taishan', false, 104, 422], ['泰山貴和', 'Taishan Guihe', false, 72, 442],
+  ['體育大學', 'National Taiwan Sport University', false, 34, 418], ['長庚醫院', 'Chang Gung Memorial Hospital', false, 2, 390],
+  ['林口', 'Linkou', false, -32, 364], ['山鼻', 'Shanbi', false, -72, 334], ['坑口', 'Kengkou', false, -110, 306],
+  ['機場第一航廈', 'Airport Terminal 1', true, -150, 292], ['機場第二航廈', 'Airport Terminal 2', true, -182, 300], ['機場旅館', 'Airport Hotel', true, -208, 318],
+  ['大園', 'Dayuan', false, -232, 348], ['橫山', 'Hengshan', false, -246, 386], ['領航', 'Linghang', false, -256, 422],
+  ['高鐵桃園站', 'Taoyuan HSR Station', true, -264, 456], ['桃園體育園區', 'Taoyuan Sports Park', true, -270, 490],
+  ['興南', 'Xingnan', false, -276, 524], ['環北', 'Huanbei', false, -282, 560], ['老街溪', 'Laojie River', true, -290, 596],
+];
+const AIRPORT_LINE = {
+  id: 'A', zh: '桃園機場捷運', en: 'Taoyuan Airport MRT', color: '#8246af', text: '#fff',
+  item: { name: '褪色的登機證', desc: '登機門寫著「霧」，起飛時間是 00:30。', icon: 'ticket' },
+  routes: [[
+    ['台北車站', 'A1'], ['三重', 'A2'], ['新北產業園區', 'A3'], ['新莊副都心', 'A4'], ['泰山', 'A5'], ['泰山貴和', 'A6'],
+    ['體育大學', 'A7'], ['長庚醫院', 'A8'], ['林口', 'A9'], ['山鼻', 'A10'], ['坑口', 'A11'], ['機場第一航廈', 'A12'],
+    ['機場第二航廈', 'A13'], ['機場旅館', 'A14a'], ['大園', 'A15'], ['橫山', 'A16'], ['領航', 'A17'], ['高鐵桃園站', 'A18'],
+    ['桃園體育園區', 'A19'], ['興南', 'A20'], ['環北', 'A21'], ['老街溪', 'A22'],
+  ]],
 };
 
 // HTML 跳脫

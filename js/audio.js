@@ -103,6 +103,7 @@ const Sound = (() => {
     O: [[N.A5, 0], [N.Cs6, .2], [N.E6, .4], [N.A6, .6], [N.E6, .95], [N.A6, 1.15]],
     BL: [[N.D6, 0], [N.Fs6, .22], [N.A6, .44], [N.D7, .66], [N.A6, 1.0]],
     Y: [[N.E6, 0], [N.G6, .18], [N.E6, .36], [N.C7, .54], [N.B6, .84], [N.A6, 1.04]],
+    A: [[N.G5, 0], [N.C6, .2], [N.E6, .4], [N.G6, .6], [N.E6, .9], [N.C7, 1.15]],
   };
   function synthChime(line) {
     const notes = CHIMES[line] || CHIMES.R;
@@ -139,6 +140,10 @@ const Sound = (() => {
   }
   function itemGet() { [523, 659, 784, 1047, 1319].forEach((f, i) => bell(f, i * .11, .16, master, 1.4)); }
   function click() { tone(1400, 0, .035, 'sine', .05); }
+  // 傳送：往上滑的鐘聲
+  function teleport() { [523, 784, 1047, 1568, 2093].forEach((f, i) => bell(f, i * .07, .12, master, 1.2)); noiseBurst(0, .9, 3000, .5, .08, master, .3); }
+  // 閘門刷卡「嗶」
+  function gate() { tone(2350, 0, .09, 'square', .045); tone(2350, .13, .09, 'square', .045); }
 
   /* ── 行駛聲：馬達變頻聲＋輪軌噪音＋接縫聲 ── */
   let run = null, brownBuf = null;
@@ -238,7 +243,18 @@ const Sound = (() => {
 
   return {
     unlock: ensure,
-    doorClose, doorOpen, arrivalChime, onboardChime, itemGet, click,
+    // 街頭表演：依樂器彈一小段旋律（音量隨距離）
+    busk(kind, vol = .12) {
+      if (!enabled || !ensure()) return;
+      const tunes = {
+        guitar: [[392, 0], [494, .25], [587, .5], [494, .75], [440, 1.0], [392, 1.25], [330, 1.5], [392, 1.75]],
+        violin: [[659, 0], [587, .4], [523, .8], [587, 1.2], [659, 1.6], [784, 2.0]],
+        dance: [[220, 0], [220, .25], [330, .5], [220, .75], [262, 1.0], [220, 1.25], [330, 1.5], [392, 1.75]],
+        magic: [[523, 0], [659, .3], [784, .6], [1047, .9]],
+      }[kind] || [];
+      for (const [f, t] of tunes) bell(f * (kind === 'violin' ? 1 : 2), t, vol, master, kind === 'violin' ? 2.4 : 1.0);
+    },
+    doorClose, doorOpen, arrivalChime, onboardChime, itemGet, click, gate, teleport,
     startRumble, setSpeed, stopRumble, ambience, announce,
     get enabled() { return enabled; },
     toggle() {

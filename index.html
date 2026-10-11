@@ -45,10 +45,12 @@
       <div class="hud-time">
         <b id="hudTime">--:--</b>
         <small id="hudDate"></small>
-        <span class="status" id="hudStatus"></span>
+        <span class="hud-stats" id="hudStats"></span>
       </div>
       <nav class="hud-btns">
         <button id="btnMap">路網圖</button>
+        <button id="btnQuest">任務 <span id="hudQuests">0</span></button>
+        <button id="btnRecord">紀錄</button>
         <button id="btnBag">背包 <span id="hudItems">0/6</span></button>
         <button id="btnSound" aria-pressed="true">音效 開</button>
       </nav>
@@ -56,7 +58,9 @@
     <div class="panel" id="panel"></div>
     <button class="action-btn" id="actionBtn" hidden></button>
     <div class="joystick" id="joystick" aria-label="移動搖桿"><span class="knob"></span></div>
-    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　拖曳畫面轉視角　E 互動</p>
+    <button class="run-btn" id="runBtn" aria-pressed="false">跑</button>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　Shift 跑步　拖曳畫面轉視角　E 互動</p>
   </section>
 
   <!-- 路網圖 -->
@@ -71,8 +75,26 @@
           <button id="mapHere" aria-label="回到目前位置">◎</button><button id="mapAll" aria-label="看整個路網">全</button>
         </div>
         <div class="map-card" id="mapCard" hidden></div>
+        <div class="compass" aria-hidden="true"><span id="compassN">N</span></div>
+        <div class="map-lines" id="mapLines" aria-label="只看某條路線"></div>
       </div>
       <p class="map-legend"><span class="lg-me"></span>你在這裡　<span class="lg-fog"></span>還沒去過的車站藏在霧裡　高架在地面上、地下段在地面下　拖曳移動、滾輪或雙指縮放、右鍵拖曳或雙指旋轉</p>
+    </div>
+  </div>
+
+  <!-- 任務 -->
+  <div class="modal" id="questLog" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="questTitle">
+      <header><h3 id="questTitle">任務</h3><span id="questCount"></span><button class="x" data-close="questLog" aria-label="關閉">×</button></header>
+      <div id="questBody"></div>
+    </div>
+  </div>
+
+  <!-- 紀錄：角色、探索、評價、收藏、聲望、人物 -->
+  <div class="modal" id="record" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="recordTitle">
+      <header><h3 id="recordTitle">紀錄</h3><button class="x" data-close="record" aria-label="關閉">×</button></header>
+      <div id="recordBody"></div>
     </div>
   </div>
 
@@ -86,6 +108,12 @@
 
   <!-- 獲得物品 -->
   <div class="modal item-overlay" id="itemOverlay" hidden></div>
+
+  <!-- 對話 -->
+  <div class="dialog" id="dialog" hidden></div>
+
+  <!-- 傳送轉場 -->
+  <div class="tp-fx" id="tpFx" hidden></div>
 
   <!-- 停駛時段 -->
   <div class="closed" id="closedOverlay" hidden>
@@ -106,8 +134,21 @@
   <script src="js/characters.js"></script>
   <script src="js/time.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/economy.js"></script>
+  <script src="js/quests.js"></script>
+  <script src="js/puzzles.js"></script>
+  <script src="js/story.js"></script>
+  <script src="js/outfits.js"></script>
   <script src="js/human3d.js"></script>
+  <script src="js/trains.js"></script>
+  <script src="js/station3d.js"></script>
   <script src="js/world3d.js"></script>
+  <script src="js/npcs.js"></script>
+  <script src="js/sidequests.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/gold.js"></script>
+  <script src="js/life.js"></script>
   <script src="js/map3d.js"></script>
   <script src="js/game.js"></script>
 </body>

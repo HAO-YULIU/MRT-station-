@@ -60,8 +60,8 @@ const Map3D = (() => {
       const t = new T.CanvasTexture(x.canvas); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(8, 8); t.colorSpace = T.SRGBColorSpace;
       return t;
     })();
-    const ground = new T.Mesh(new T.PlaneGeometry(160, 150), new T.MeshStandardMaterial({ map: groundTex, transparent: true, opacity: .72, roughness: .95, depthWrite: false }));
-    ground.rotation.x = -Math.PI / 2; ground.position.set(50, H_GROUND, 47); ground.renderOrder = 1;
+    const ground = new T.Mesh(new T.PlaneGeometry(220, 150), new T.MeshStandardMaterial({ map: groundTex, transparent: true, opacity: .72, roughness: .95, depthWrite: false }));
+    ground.rotation.x = -Math.PI / 2; ground.position.set(20, H_GROUND, 47); ground.renderOrder = 1;
     g.add(ground);
     // 河流
     const water = new T.MeshStandardMaterial({ color: '#7fb2cf', roughness: .3, metalness: .1, transparent: true, opacity: .9 });
@@ -93,14 +93,82 @@ const Map3D = (() => {
     return g;
   }
 
+  /* ── 地標與市區 ── */
+  function landmarks() {
+    const g = new T.Group();
+    const at = (id, dx = 0, dz = 0) => new T.Vector3(STATIONS[id].x / S + dx, 0, STATIONS[id].y / S + dz);
+    const part = (parent, mesh, y) => { mesh.position.y = y; parent.add(mesh); return mesh; };
+    const add = (mesh, p, label) => { mesh.position.add(p); g.add(mesh); if (label) { const l = textSprite(label, { size: 38, color: '#3d454d', bg: 'rgba(255,255,255,.75)', bold: 700 }); l.position.copy(p); l.position.y = label.y || 0; l.scale.set(1 * l.userData.aspect, 1, 1); l.userData.landmark = true; g.add(l); return l; } };
+    // 台北 101：一節一節往上收
+    const t101 = new T.Group(), glassM = new T.MeshStandardMaterial({ color: '#6f9f9a', roughness: .25, metalness: .5 });
+    part(t101, new T.Mesh(new T.BoxGeometry(2.6, 3, 2.6), glassM), 1.5);
+    for (let i = 0; i < 8; i++) { const m = new T.Mesh(new T.CylinderGeometry(1.0, 1.25, 1.3, 4), glassM); m.rotation.y = Math.PI / 4; m.position.y = 3.6 + i * 1.3; t101.add(m); }
+    const spire = new T.Mesh(new T.CylinderGeometry(.08, .2, 3, 6), new T.MeshStandardMaterial({ color: '#c9d2d6', metalness: .8, roughness: .3 })); spire.position.y = 15.4; t101.add(spire);
+    const l101 = add(t101, at('台北101/世貿', 2.4, 1.6), '台北 101'); if (l101) l101.position.y = 18;
+    // 台北車站：方形大屋頂
+    const tms = new T.Group(); const wallM = new T.MeshStandardMaterial({ color: '#e8e2d2', roughness: .8 });
+    part(tms, new T.Mesh(new T.BoxGeometry(5, 1.6, 4), wallM), .8);
+    const roof = new T.Mesh(new T.CylinderGeometry(2.2, 3.4, 1.2, 4), new T.MeshStandardMaterial({ color: '#8a6a3a', roughness: .7 })); roof.rotation.y = Math.PI / 4; roof.position.y = 2.2; tms.add(roof);
+    const lt = add(tms, at('台北車站', -2.8, -1.8), '台鐵台北車站'); if (lt) lt.position.y = 4.2;
+    // 圓山大飯店：紅柱金黃屋頂
+    const gh = new T.Group();
+    part(gh, new T.Mesh(new T.BoxGeometry(4, 2.2, 1.6), new T.MeshStandardMaterial({ color: '#b3262b' })), 1.1);
+    const ghRoof = new T.Mesh(new T.CylinderGeometry(1.2, 2.8, 1.2, 4, 1), new T.MeshStandardMaterial({ color: '#d9a62e' })); ghRoof.scale.z = .5; ghRoof.rotation.y = Math.PI / 4; ghRoof.position.y = 2.8; gh.add(ghRoof);
+    const lg = add(gh, at('圓山', -3.6, -1.6), '圓山大飯店'); if (lg) lg.position.y = 5;
+    // 台北小巨蛋
+    const dome = new T.Mesh(new T.SphereGeometry(1.8, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new T.MeshStandardMaterial({ color: '#dfe5ea', roughness: .4, metalness: .3 })); dome.scale.set(1.3, .6, 1);
+    const ld = add(dome, at('台北小巨蛋', 0, -2.4), '小巨蛋'); if (ld) ld.position.y = 2.6;
+    // 國父紀念館：黃色飛簷
+    const sy = new T.Group();
+    part(sy, new T.Mesh(new T.BoxGeometry(3.2, 1.2, 3.2), new T.MeshStandardMaterial({ color: '#efe8d8' })), .6);
+    const syRoof = new T.Mesh(new T.CylinderGeometry(1.2, 2.6, .9, 4), new T.MeshStandardMaterial({ color: '#e0b030' })); syRoof.rotation.y = Math.PI / 4; syRoof.position.y = 1.6; sy.add(syRoof);
+    const ls = add(sy, at('國父紀念館', 0, 2.6), '國父紀念館'); if (ls) ls.position.y = 3.6;
+    // 松山機場跑道
+    const rw = new T.Mesh(new T.PlaneGeometry(26, 1.6), new T.MeshStandardMaterial({ color: '#5d6066', roughness: .9 })); rw.rotation.x = -Math.PI / 2;
+    const lr = add(rw, at('松山機場', 6, -1.2).setY(.03), '松山機場'); if (lr) lr.position.y = 1.2;
+    const dash = new T.Mesh(new T.PlaneGeometry(24, .12), new T.MeshBasicMaterial({ color: '#ffffff' })); dash.rotation.x = -Math.PI / 2; dash.position.copy(at('松山機場', 6, -1.2)).setY(.04); g.add(dash);
+    // 淡水夕照碼頭、象山
+    return g;
+  }
+  // 市區建築群：用路網密度決定高度，避開河流
+  function cityBlocks() {
+    const pts = Object.values(STATIONS).map(s => [s.x / S, s.y / S]);
+    const nearRiver = (x, z) => RIVERS.some(r => r.pts.some((p, i) => {
+      if (!r.pts[i + 1]) return false;
+      const ax = p[0] / S, az = p[1] / S, bx = r.pts[i + 1][0] / S, bz = r.pts[i + 1][1] / S;
+      const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2)));
+      return Math.hypot(x - (ax + t * (bx - ax)), z - (az + t * (bz - az))) < r.w * .9 + .6;
+    }));
+    const list = [];
+    let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    for (let x = 4; x < 98; x += 1.6) for (let z = 4; z < 92; z += 1.6) {
+      let dmin = 1e9, dens = 0;
+      for (const [px, pz] of pts) { const d = Math.hypot(px - x, pz - z); dmin = Math.min(dmin, d); if (d < 8) dens++; }
+      if (dmin < 2.2 || dmin > 8 || nearRiver(x, z) || rnd() < .55) continue;
+      const h = .25 + Math.min(1.4, dens * .07) * (.4 + rnd());
+      list.push([x + (rnd() - .5) * .6, z + (rnd() - .5) * .6, .8 + rnd() * .6, h]);
+    }
+    const inst = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshStandardMaterial({ color: '#d4d6d0', roughness: .9, transparent: true, opacity: .85 }), list.length);
+    const m4 = new T.Matrix4(), q = new T.Quaternion(), col = new T.Color();
+    list.forEach(([x, z, w, h], i) => {
+      m4.compose(new T.Vector3(x, h / 2, z), q, new T.Vector3(w, h, w * (.8 + (i % 3) * .15)));
+      inst.setMatrixAt(i, m4);
+      inst.setColorAt(i, col.setHSL(.08 + (i % 5) * .02, .05, .72 + (i % 4) * .04));
+    });
+    return inst;
+  }
+
   /* ── 路線 ── */
+  let lineMeshes = {};
   function buildLines() {
     const g = new T.Group();
     const done = new Set();
+    lineMeshes = {};
     for (const lid of LINE_ORDER) {
       const L = LINES[lid];
+      lineMeshes[lid] = [];
       const mat = new T.MeshStandardMaterial({ color: L.color, roughness: .45, emissive: L.color, emissiveIntensity: .12 });
-      const ugMat = new T.MeshStandardMaterial({ color: L.color, roughness: .5, emissive: L.color, emissiveIntensity: .45, transparent: true, opacity: .9 });
+      const ugMat = new T.MeshStandardMaterial({ color: L.color, roughness: .5, emissive: L.color, emissiveIntensity: .6 });
       const pierM = new T.MeshStandardMaterial({ color: '#9a9a96', roughness: .9 });
       for (const route of LINES[lid].routes) {
         for (let i = 0; i < route.length - 1; i++) {
@@ -122,10 +190,11 @@ const Map3D = (() => {
             const s0 = pts[k], s1 = pts[k + 1];
             const len = s0.distanceTo(s1);
             const ug = s0.y < 0 && s1.y < 0;
-            const tube = new T.Mesh(new T.CylinderGeometry(.32, .32, len, 10, 1), ug ? ugMat : mat);
+            const tube = new T.Mesh(new T.CylinderGeometry(.45, .45, len, 12, 1), ug ? ugMat : mat);
             tube.position.copy(s0.clone().add(s1).multiplyScalar(.5));
             tube.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), s1.clone().sub(s0).normalize());
             g.add(tube);
+            lineMeshes[lid].push(tube);
             // 高架段的橋墩
             if (s0.y > 0 && s1.y > 0) {
               const n = Math.max(1, Math.floor(len / 2.2));
@@ -140,6 +209,16 @@ const Map3D = (() => {
         }
       }
     }
+    return g;
+  }
+
+  /* ── 隱藏地圖：圓山與劍潭之間，一個未登錄的「霧」站 ── */
+  function ghostMarker() {
+    const a = P('圓山'), b = P('劍潭'), p = a.clone().lerp(b, .5); p.x += 1.2;
+    const g = new T.Group();
+    const st = new T.Mesh(new T.CylinderGeometry(.7, .7, .5, 20), new T.MeshStandardMaterial({ color: '#e9e7f0', emissive: '#9fe0c8', emissiveIntensity: .6, transparent: true, opacity: .7 }));
+    st.position.set(p.x, .6, p.z); g.add(st);
+    const lab = textSprite('霧（未登錄）', { size: 40, color: '#2a5a4a', bg: 'rgba(220,245,235,.85)' }); lab.position.set(p.x, 2.2, p.z); lab.scale.set(1.1 * lab.userData.aspect, 1.1, 1); g.add(lab);
     return g;
   }
 
@@ -308,6 +387,7 @@ const Map3D = (() => {
       f.position.z = u.oz + Math.cos(t / 3100 + u.ph) * .5;
     }
     if (marker) { marker.position.y += Math.sin(t / 300) * .006; marker.rotation.y = t / 900; }
+    if (opts.compass) opts.compass.style.transform = `rotate(${cam.yaw}rad)`;
     if (heroRig) heroRig.update(.016, 0, t / 1000);
     renderer.render(scene, camera);
   }
@@ -333,10 +413,14 @@ const Map3D = (() => {
       scene.add(new T.HemisphereLight('#ffffff', '#8a8f86', 1.5));
       const d = new T.DirectionalLight('#fff6e8', 1.6); d.position.set(30, 80, 40); scene.add(d);
       scene.add(buildTerrain());
+      scene.add(cityBlocks());
+      scene.add(landmarks());
       scene.add(buildLines());
       scene.add(buildStations());
+      if (o.hiddenMap) scene.add(ghostMarker());
       hero = heroRig = marker = null;
       placeHero();
+      this._solo = null;
       if (o.current && STATIONS[o.current]) this.focus(o.current, 45);
       running = true; cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
     },
@@ -344,6 +428,21 @@ const Map3D = (() => {
     focus(id, dist = 40) { const p = P(id); cam.tx = p.x; cam.tz = p.z; cam.dist = dist; },
     overview() { cam.tx = 50; cam.tz = 47; cam.dist = 95; cam.yaw = 0; cam.pitch = .95; },
     rotate(a) { cam.yaw += a; },
+    // 只看某一條線（其他變淡）；再按一次恢復
+    focusLine(lid) {
+      const solo = lid && lid !== this._solo ? lid : null;
+      this._solo = solo;
+      for (const id in lineMeshes) for (const m of lineMeshes[id]) {
+        m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = !solo || id === solo ? 1 : .12;
+      }
+      if (solo) {
+        const ids = [...new Set(LINES[solo].routes.flat().map(r => r[0]))];
+        const xs = ids.map(i => STATIONS[i].x / S), zs = ids.map(i => STATIONS[i].y / S);
+        cam.tx = (Math.min(...xs) + Math.max(...xs)) / 2; cam.tz = (Math.min(...zs) + Math.max(...zs)) / 2;
+        cam.dist = Math.max(40, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) * 1.4);
+      }
+      return solo;
+    },
     zoom(f) { zoom(f); },
   };
 })();

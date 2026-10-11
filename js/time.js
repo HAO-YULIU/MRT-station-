@@ -1,8 +1,7 @@
 /* 台灣時間與捷運營運時段
  *  06:00–00:30  營運中（open）
- *  00:30–05:30  迷霧時刻（mist）：特殊玩法，之後開放
- *  05:30–06:00  清晨，車站尚未開放（dawn）
- * 測試用：網址加上 ?time=23:58 可模擬台灣時間（之後仍會繼續走）
+ *  00:30–06:00  迷霧時刻（mist）：特殊玩法，之後開放
+ * 測試用：網址加上 ?time=23:58 可模擬台灣時間（之後仍會繼續走），?date=10-20 可模擬日期
  */
 const TaipeiTime = (() => {
   const fmt = new Intl.DateTimeFormat('en-US', {
@@ -18,6 +17,12 @@ const TaipeiTime = (() => {
     const [h, m] = q.split(':').map(Number);
     const now = parts(new Date());
     offsetMs = ((h * 60 + m) - (now.hour * 60 + now.minute)) * 60000 - now.second * 1000;
+  }
+  // 測試用：?date=10-20 模擬某一天
+  const qd = new URLSearchParams(location.search).get('date');
+  if (qd && /^\d{1,2}-\d{1,2}$/.test(qd)) {
+    const [mo, d] = qd.split('-').map(Number), now = parts(new Date(Date.now() + offsetMs));
+    offsetMs += Date.UTC(now.year, mo - 1, d) - Date.UTC(now.year, now.month - 1, now.day);
   }
 
   function parts(d) {
@@ -37,8 +42,7 @@ const TaipeiTime = (() => {
   function state(t = now()) {
     const m = t.hour * 60 + t.minute;
     if (m >= 360 || m < 30) return 'open';
-    if (m < 330) return 'mist';
-    return 'dawn';
+    return 'mist';   // 00:30–06:00 迷霧時刻
   }
 
   // 距離 06:00 首班車還有幾分鐘
