@@ -101,12 +101,13 @@ function updateHud() {
 
 function onServiceChange(st) {
   Game.service = st;
-  if (st === 'open') { $('#closedOverlay').hidden = true; return; }
+  if (st === 'open') { $('#closedOverlay').hidden = true; if (Game.state.fog && !Game.state.fog.settled) FogCity.dawn(); return; }
   if (Game.ride) { Game.ride.mustAlight = true; return; }   // 搭乘中：到下一站再處理
   if (document.body.dataset.screen === 'game') showClosed();
 }
 
 function showClosed() {
+  if (TaipeiTime.state() === 'mist') { $('#closedOverlay').hidden = true; if (!FogCity.started) FogCity.enter(); return; }   // 迷霧之城
   const st = TaipeiTime.state();
   const ov = $('#closedOverlay');
   ov.dataset.s = st;
@@ -163,8 +164,13 @@ Game.onQuestChange = (what, id, o, k) => {
   if (what === 'accept') toast(`<b>接下任務</b><span>${q.title}</span>`);
   if (what === 'fail') { toast(`<b>限時任務失敗</b><span>${q.title}：時間到了。今天來不及了，請之後或明天再來找${q.giver && NPCS[q.giver] ? NPCS[q.giver].name : '他'}。</span>`, 'warn'); Sound.click(); }
   // 六條主線都完成：秀蔅指引去小碧潭
-  if (what === 'done' && /^main_/.test(id) && Object.keys(MAIN_STORY).every(l => Quests.isDone('main_' + l)) && !Quests.isActive('final') && !Quests.isDone('final')) {
-    setTimeout(() => { Quests.accept('final'); toast('<b>秀蔅：「六樣東西都到齊了。」</b><span>帶著寶物去小碧潭，月台上有人在等你。</span>', 'level'); }, 1500);
+  // 主線完成：得到一個傳送裝置的零件，可以先拿去小碧潭放
+  if (what === 'done' && /^main_/.test(id) && MAIN_STORY[q.line]) {
+    const it = ITEMS['treasure_' + q.line];
+    setTimeout(() => {
+      if (!Quests.isActive('final') && !Quests.isDone('final')) Quests.accept('final');
+      toast(`<b>秀蔅：「是${it.name}！」</b><span>傳送裝置的${TELE_PARTS[q.line]}。帶去小碧潭月台放上去吧（不用等六個都找齊）。</span>`, 'level');
+    }, 1500);
   }
   // 主線完成：揭曉這條線的結局
   if (what === 'done' && /^main_/.test(id) && STORY[q.line]) setTimeout(() => showEnding(q.line), 1200);
@@ -363,7 +369,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Onsen.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
+  World.addTicker((dt, now) => { FogCity.tick(dt, now); Teleporter.tick(dt, now); NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Onsen.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -374,13 +380,15 @@ function enterGame(stationId) {
   World.setCharacter(Game.state.char, Game.state.wardrobe.wear);
   buildPanel();
   updateHud();
-  if (TaipeiTime.state() !== 'open') showClosed();
+  FogCity.catchUp();
   World.loadStation(stationId);
   World.spawnInConcourse();
   Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
   startStation(stationId);
-  // 開場：秀蔅出現在旁邊，一定要選板南線或文湖線
-  if (!Game.state.flags.xiuyuIntro) {
+  // 開場：先收到委託（序章），再由秀蔅說明；一定要選板南線或文湖線
+  if (!Game.state.flags.prologue && !Game.state.flags.xiuyuIntro && !FogCity.locked()) {
+    Teleporter.prologue().then(() => { const xy = NPCManager.list.find(n => n.id === 'xiuyu'); if (xy) { const p = World.player; xy.x = p.x - 1.6; xy.z = p.z; xy.y = p.y; setTimeout(() => Dialog.open(xy), 500); } });
+  } else if (!Game.state.flags.xiuyuIntro) {
     const xy = NPCManager.list.find(n => n.id === 'xiuyu');
     if (xy) { const p = World.player; xy.x = p.x - 1.6; xy.z = p.z; xy.y = p.y; setTimeout(() => Dialog.open(xy), 900); }
   }
@@ -407,6 +415,7 @@ function fmtEta(sec) {
 
 /* ── 小資訊框（畫面左下角） ── */
 function buildPanel() {
+  const fh = $('#fogHud'); if (fh) $('#game').appendChild(fh);   // 迷霧 HUD 平常住在資訊框裡，重建前先拿出來
   $('#panel').innerHTML = `<div class="mini">
       <div class="mini-title" id="pTitle"></div>
       <div class="mini-rows" id="pRows"></div>
@@ -426,17 +435,27 @@ function startStation(stationId, carry) {
   ctl = { id, stationId, busy: new Set(), chimed: new Set(), doors: new Map() };
   if (carry) ctl.busy.add(carry.key);
   World.onZone = () => tickStation();
-  Xiuyu.arrive(stationId);
-  NPCManager.enter(stationId, World.layout);
-  Crowd.spawn(World.layout);
-  Pickups.spawn(stationId);
-  Challenges.spawn(stationId);
-  Secrets.spawn(stationId);
-  Achievements.spawn(stationId);
-  Life.spawn(stationId);
-  Festival.spawn(stationId);
-  ArtInstall.spawn(stationId);
-  Onsen.spawn(stationId);
+  // 迷霧之城（00:30–06:00）：一般的人群、委託、活動都不出現，換成霧裡的東西
+  const fog = FogCity.active() && !Game.ride;
+  if (fog) {
+    NPCManager.clear(); Crowd.clear(); Pickups.clear(); Challenges.clear(); Secrets.clear(); Life.clear(); Festival.clear();
+    Achievements.spawn(stationId); ArtInstall.spawn(stationId); Onsen.spawn(stationId); Teleporter.spawn(stationId);
+    FogCity.spawn(stationId, id);
+  } else {
+    FogCity.teardown(); World.setMood(null); World.setPlayerLight(0);
+    Xiuyu.arrive(stationId);
+    NPCManager.enter(stationId, World.layout);
+    Crowd.spawn(World.layout);
+    Pickups.spawn(stationId);
+    Challenges.spawn(stationId);
+    Secrets.spawn(stationId);
+    Achievements.spawn(stationId);
+    Life.spawn(stationId);
+    Festival.spawn(stationId);
+    ArtInstall.spawn(stationId);
+    Onsen.spawn(stationId);
+    Teleporter.spawn(stationId);
+  }
   Daily.refresh();
   Phone.deliverFollowups();
   arriveChecks(stationId);
@@ -526,6 +545,7 @@ function renderPanel(z, L) {
     setPart('pTitle', `${head}<span class="mini-sub">電扶梯</span>`);
   }
   setPart('pRows', rows);
+  if (FogCity.locked() && FogCity.hint) hint = `<span class="tag fogtag">🌫 ${FogCity.hint}</span>`;
   if (!ctl.doorHint) setPart('pHint', hint);
 }
 
@@ -554,7 +574,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, ArtInstall.interaction, Onsen.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
+  list.push(FogCity.interaction, Teleporter.interaction, exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, ArtInstall.interaction, Onsen.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -728,6 +748,11 @@ const spotInteraction = {
   when: p => !Dialog.with && !!nearSpot(p) && !NPCManager.nearest(p, 1.2),
   run: () => {
     const sp = nearSpot(World.player), st = ctl.stationId;
+    if (FogCity.locked()) {   // 迷霧之城：有些事件靠設施觸發；店家、販賣機不收新台幣
+      const K = FogCity.K;
+      if (K && K.onSpot && K.onSpot(sp)) return;
+      if (['shop', 'cafe', 'vending', 'breakfast', 'stall'].includes(sp.kind) && FogCity.cashBlocked(sp.kind)) return;
+    }
     if (sp.kind === 'elevator') return elevatorMenu(sp);
     if (sp.kind === 'ticket') return Dialog.info('售票機・票價表', fareTable(st));
     if (sp.kind === 'toilet') return restroom();
@@ -960,7 +985,7 @@ function exitInteraction() {
   return {
     id: 'exit', label: '出站',
     when: p => p.zone.kind === 'unpaid' && p.z > World.layout.unpaid.z1 - 2.2,
-    run: () => { setPart('pHint', '<span class="tag warn">地面世界尚未開放</span>'); Sound.click(); },
+    run: () => { if (FogCity.locked()) { Sound.click(); return Dialog.info('出口', '你推開出口的門。外面只有白茫茫的霧。<br>你往前走了幾步——又回到了閘門前面。'); } setPart('pHint', '<span class="tag warn">地面世界尚未開放</span>'); Sound.click(); },
   };
 }
 
@@ -995,27 +1020,11 @@ function showEnding(line) {
   ov.hidden = false;
   $('#endOk').onclick = () => { ov.hidden = true; }; $('#endOk').focus();
 }
-// 六件寶物交給擺渡人：路網圖上出現桃園機場捷運
-Game.unlockMistLine = () => {
-  Sound.itemGet();
-  const ov = $('#itemOverlay');
-  ov.innerHTML = `<div class="item-card" style="--c:#8246af" role="dialog" aria-modal="true" aria-labelledby="mistName">
-    <div class="item-line">小碧潭的渡口</div>
-    <div class="item-icon" style="font-size:84px">🌫️</div>
-    <h2 id="mistName">新路線出現了</h2>
-    <p>${(() => { const n = Object.values(Game.state.story || {}).filter(x => x.ending === 'true').length; return n === 6 ? '擺渡人看著你：「六個真相，你一個都沒有錯過。」<br>' : n >= 3 ? `擺渡人說：「你看清了 ${n} 個真相。剩下的，霧還替你留著。」<br>` : '擺渡人說：「有些真相，你還沒看清楚。不過，路還很長。」<br>'; })()}擺渡人把六件寶物放進提燈裡。燈光穿過霧，一路往西照向機場——路網圖上出現了<b>桃園機場捷運</b>。<br>從台北車站、三重、新北產業園區都可以轉乘，一路坐到機場和老街溪。</p>
-    <button class="btn primary" id="mistOk">打開路網圖看看</button>
-  </div>`;
-  ov.hidden = false;
-  $('#mistOk').onclick = () => { ov.hidden = true; openMap(); Map3D.focusLine('A'); };
-  $('#mistOk').focus();
-};
-
 function openBag() {
   const s = Game.state;
   const n = Object.keys(s.items).length;
   const inv = Object.entries(s.inv).filter(([, n]) => n > 0);
-  const tre = Object.keys(MAIN_STORY).filter(l => s.inv['treasure_' + l] > 0).length;
+  const tre = Teleporter.total(), placedN = Teleporter.placed().length;
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
     <div class="wallet"><span>黃金</span><b>🪙 ${s.gold || 0}</b><span>調查</span><b>🔍 ${Investigate.info().name}</b></div>
@@ -1037,8 +1046,9 @@ function openBag() {
       }).join('')}
     </ul>
     <div class="gate${s.flags.mistLine || tre === 6 ? ' ready' : ''}">
-      <b>小碧潭的渡口</b>
-      <p>${s.flags.mistLine ? '六件寶物已經交給擺渡人，路網圖上出現了桃園機場捷運，可以搭了。' : tre === 6 ? '六條主線的寶物都到齊了。去小碧潭的月台，交給擺渡人。' : `完成六條主線、找到各線的寶物（目前 ${tre} / 6），帶到小碧潭交給擺渡人，路網圖上就會出現新路線。`}</p>
+      <b>小碧潭・時空傳送裝置</b>
+      <p>${s.flags.mistLine ? '秀蔅已經回到 2087 年。傳送裝置的光留在路網圖上，變成了桃園機場捷運。' : `六條主線解到最後會得到六個零件：水晶、羅盤、懷錶、懸鏡、石環、星圖。找到一個就可以先放上小碧潭月台的傳送裝置（已找到 ${tre} / 6，已放上 ${placedN} / 6）。`}</p>
+      <div class="tele-slots">${Object.keys(MAIN_STORY).map(l => `<span class="${Teleporter.placed().includes(l) ? 'on' : s.inv['treasure_' + l] > 0 ? 'have' : ''}" style="--c:${LINES[l].color}" title="${ITEMS['treasure_' + l].name}">${ITEMS['treasure_' + l].icon}<small>${ITEMS['treasure_' + l].name}</small></span>`).join('')}</div>
     </div>`;
   $('#bag').hidden = false;
   $('#bagBody').onclick = e => {
@@ -1078,7 +1088,7 @@ function openMap() {
   const s = Game.state;
   $('#mapStats').textContent = `已走過 ${Object.keys(s.visited).length} / ${Object.keys(STATIONS).length} 站　搭乘 ${s.rides} 次`;
   $('#mapCard').hidden = true;
-  $('#mapLines').innerHTML = LINE_ORDER.map(l => `<button class="ml" data-l="${l}" style="--c:${LINES[l].color};--t:${LINES[l].text}" aria-pressed="false">${l}<span>${LINES[l].zh}</span></button>`).join('');
+  $('#mapLines').innerHTML = LINE_ORDER.map(l => `<button class="ml" data-l="${l}" style="--c:${LINES[l].color};--t:${LINES[l].text}" aria-pressed="false"><span>${LINES[l].zh}</span></button>`).join('');
   $('#mapLines').onclick = e => {
     const b = e.target.closest('.ml'); if (!b) return;
     const solo = Map3D.focusLine(b.dataset.l);
@@ -1094,11 +1104,11 @@ function openMap() {
         <small>${esc(STATIONS[id].en)}</small>
         <p>${here ? '你現在在這裡' : been ? '去過了，可以傳送' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>
         ${been && !here ? `<button class="btn primary small" id="tpBtn">傳送到這裡</button>` : ''}
-        ${been && !here && Game.ride ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}`;
+        ${been && !here && Game.ride ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}${been && !here && FogCity.locked() ? '<p class="warn-text">迷霧之城：06:00 以前離不開這一站</p>' : ''}`;
       card.hidden = false;
       Sound.click();
       const tp = $('#tpBtn');
-      if (tp) { tp.disabled = !!Game.ride || Challenges.escorting(); tp.onclick = () => teleport(id); }
+      if (tp) { tp.disabled = !!Game.ride || Challenges.escorting() || FogCity.locked(); tp.onclick = () => teleport(id); }
     },
   });
 }
@@ -1108,6 +1118,7 @@ function closeMap() { $('#mapModal').hidden = true; Map3D.close(); }
 async function teleport(id) {
   const s = Game.state;
   if (Game.ride || !s.visited[id] || id === s.current) return;
+  if (FogCity.locked()) { toast('<b>🌫 迷霧之城</b><span>霧把這一站封住了。06:00 以前，哪裡都去不了。</span>', 'warn'); return; }
   if (Challenges.escorting()) { toast('<b>帶著人不能傳送</b><span>先陪他把路走完吧</span>', 'warn'); return; }
   closeMap();
   newSession(); clearInterval(Game.ctlTimer);
@@ -1124,7 +1135,36 @@ async function teleport(id) {
 }
 
 /* ── 初始化 ── */
+// 手機：擋掉瀏覽器自己的手勢（雙指縮放網頁、雙擊放大、長按選單、下拉重新整理），只留可捲動清單的捲動
+function lockPageGestures() {
+  // 只有這些面板裡的清單可以捲動（不用每次都算樣式）
+  const SCROLLERS = '.modal-card, .phone, .dialog, .fog-card, .item-card, .closed-inner, .screen:not(#game)';
+  const scrollable = el => !!(el && el.closest && el.closest(SCROLLERS));
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1 || !scrollable(e.target)) e.preventDefault(); }, { passive: false });
+  for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+  document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
+}
+
+// 黃金圖示：畫面上所有的「🪙」都換成金條圖示
+function goldIcons() {
+  const swap = root => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => (n.nodeValue.includes('🪙') ? 1 : 3) });
+    const hits = []; while (w.nextNode()) hits.push(w.currentNode);
+    for (const t of hits) {
+      const parts = t.nodeValue.split('🪙'), frag = document.createDocumentFragment();
+      parts.forEach((p, i) => { if (i) { const g = document.createElement('i'); g.className = 'gold-ic'; g.setAttribute('role', 'img'); g.setAttribute('aria-label', '黃金'); frag.appendChild(g); } if (p) frag.appendChild(document.createTextNode(p)); });
+      t.parentNode.replaceChild(frag, t);
+    }
+  };
+  swap(document.body);
+  new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') { if (m.target.nodeValue.includes('🪙') && m.target.parentNode) swap(m.target.parentNode); } else for (const n of m.addedNodes) if (n.nodeType === 1 ? n.textContent.includes('🪙') : n.nodeType === 3 && n.nodeValue.includes('🪙')) swap(n.nodeType === 1 ? n : n.parentNode); } })
+    .observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
 function init() {
+  lockPageGestures();
+  $('#fogHud').addEventListener('click', e => FogCity.onHudClick(e));
+  goldIcons();
   renderTitle();
   showScreen('title');
   updateHud();

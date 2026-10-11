@@ -8,7 +8,7 @@ const World = (() => {
   let renderer, scene, camera, container;
   let env, stationGroup, nextGroup, segGroup, surround;
   let layout = null;
-  let rig = null, charId = null, hemi, sun;
+  let rig = null, charId = null, hemi, sun, plight;
   const trains = new Set();   // 目前場上的列車
   let riding = null;          // 正在搭乘的列車
   const player = { x: 0, y: 0, z: 0, face: Math.PI, speed: 0, inputOn: true, auto: null, sitting: false };
@@ -29,19 +29,28 @@ const World = (() => {
     dawn: { bg: '#8f97ad', fog: '#a4a8b6', hemi: .8, sun: .7 },
     night: { bg: '#0d1626', fog: '#1a2436', hemi: .45, sun: .15 },
   };
+  let mood = null;   // 迷霧之城等特殊氣氛：覆蓋天色、霧、光
   function applySky(open) {
     const s = SKY[TaipeiTime.sky()];
+    if (mood) {
+      scene.background = new T.Color(mood.bg); scene.fog = new T.Fog(mood.fog, mood.near, mood.far);
+      hemi.intensity = mood.hemi; sun.intensity = mood.sun; hemi.color.set(mood.tint || '#ffffff');
+      return;
+    }
+    hemi.color.set('#ffffff');
     if (!open) {
       scene.background = new T.Color('#1a1c1e'); scene.fog = new T.Fog('#2a2e33', 35, 110);
-      hemi.intensity = 1.75; sun.intensity = .45;
+      hemi.intensity = 1.5; sun.intensity = .45;
     } else {
       scene.background = new T.Color(s.bg); scene.fog = new T.Fog(s.fog, 50, 240);
-      hemi.intensity = Math.max(1.3, s.hemi + .4); sun.intensity = s.sun;
+      hemi.intensity = Math.max(1.1, s.hemi + .2); sun.intensity = s.sun;
     }
   }
   const night = () => TaipeiTime.sky() === 'night';
 
+  let loadSeq = 0;   // 每次載入車站 +1；搭車中途被換場（例如 06:00）時，搭乘流程就不再對齊
   function dispose(obj) {
+    if (!obj) return;
     obj.traverse(o => {
       if (o.geometry && !o.userData.shared) o.geometry.dispose();
       if (o.material) [].concat(o.material).forEach(m => { if (m.map && m.map.userData.own && !m.userData.shared) m.map.dispose(); });
@@ -243,11 +252,15 @@ const World = (() => {
       if (keys.l) ix -= 1; if (keys.r) ix += 1; if (keys.u) iy += 1; if (keys.d) iy -= 1;
       ix += joy.x; iy += joy.y;
       const mag = Math.min(1, Math.hypot(ix, iy));
+      // 起步加速、放開減速（不會一按就全速、一放就急停）
+      const want = mag > .08 ? (keys.run || runToggle ? 5.2 : 2.6) * mag * speedMul : 0;   // 跑步 5.2 m/s、走路 2.6 m/s（體力越高越快）
+      player.vnow = (player.vnow || 0) + (want - (player.vnow || 0)) * Math.min(1, dt * (want > (player.vnow || 0) ? 7 : 11));
       if (mag > .08) {
         const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
         let mx = rx * ix + fx * iy, mz = rz * ix + fz * iy;
         const n = Math.hypot(mx, mz); mx /= n; mz /= n;
-        const v = (keys.run || runToggle ? 5.2 : 2.6) * mag * speedMul;   // 跑步 5.2 m/s、走路 2.6 m/s（體力越高越快）
+        player.mdir = { x: mx, z: mz };
+        const v = Math.max(player.vnow, .4);
         const sp = v * dt;
         const bx = player.x, bz = player.z;
         tryMove(player.x + mx * sp, player.z + mz * sp);
@@ -257,9 +270,14 @@ const World = (() => {
           tryMove(bx + mx * sp, bz); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; tryMove(bx, bz + mz * sp); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; } }
         }
         if (blocked && blocked(player.x, player.z, player.y)) { player.x = bx; player.z = bz; }   // 不能穿過 NPC
-        player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * 12));
+        player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * (v > 4 ? 9 : 12)));
         player.speed = v; moved = true;
-      } else player.speed = 0;
+      } else if (player.vnow > .15 && player.mdir) {   // 放開搖桿：再滑一小步停下來
+        const bx = player.x, bz = player.z;
+        tryMove(player.x + player.mdir.x * player.vnow * dt, player.z + player.mdir.z * player.vnow * dt);
+        if (hitObstacle(player.x, player.z, player.y) || (blocked && blocked(player.x, player.z, player.y))) { player.x = bx; player.z = bz; player.vnow = 0; }
+        player.speed = player.vnow; moved = true;
+      } else { player.speed = 0; player.vnow = 0; }
       // 電扶梯會自己把人往上／往下帶
       const cv = conveyorAt(player.x, player.z);
       if (cv) { tryMove(player.x + cv * dt, player.z); if (!moved) player.speed = 0; }
@@ -297,9 +315,14 @@ const World = (() => {
       px = Math.min(ctx + 30, Math.max(ctx - 30, px)); pz = Math.min(ctz + 1.3, Math.max(ctz - 1.3, pz)); py = Math.min(player.y + 2.15, py);
     } else if (z.kind === 'platform') {
       pz = Math.min(z.P.z + 6.5, Math.max(z.P.z - 6.5, pz)); py = Math.min(player.y + (z.P.under ? 3.2 : 3.6), py);
-    } else if (z.room) {   // 在房間裡：鏡頭拉近、不穿牆
-      const r = z.room;
-      px = Math.min(r.x1 - .4, Math.max(r.x0 + .4, px)); pz = Math.min(r.z1 - .3, Math.max(r.z0 + .3, pz)); py = Math.min(2.55, py);
+    } else if (z.room) {   // 在房間裡：鏡頭拉近、不穿牆；靠近門口時鏡頭可以退到門外（沿著門洞），太擠就改從上面往下看
+      const r = z.room, out = r.door.wx === r.x0 ? -1 : 1;
+      const halfDoor = r.door.w / 2 - .12, nearDoor = Math.abs(player.z - r.door.z) < halfDoor + .5 && Math.abs(player.x - r.door.wx) < 3.5;
+      if (nearDoor && (px - r.door.wx) * out > -.4) {
+        px = out > 0 ? Math.min(r.door.wx + 2.6, px) : Math.max(r.door.wx - 2.6, px);
+        pz = Math.min(r.door.z + halfDoor, Math.max(r.door.z - halfDoor, pz)); py = Math.min(2.1, py);
+      } else { px = Math.min(r.x1 - .4, Math.max(r.x0 + .4, px)); pz = Math.min(r.z1 - .3, Math.max(r.z0 + .3, pz)); py = Math.min(2.55, py); }
+      if (Math.hypot(px - player.x, pz - player.z) < 1.1) py = Math.max(py, player.y + 2.4);   // 太近：從頭頂往下看，不會卡進角色裡
     } else if (z.kind === 'unpaid') {
       const U = layout.unpaid;
       px = Math.min(U.x1 - .5, Math.max(U.x0 + .5, px)); pz = Math.min(U.z1 - .5, Math.max(layout.gateZ + .6, pz)); py = Math.min(3.9, py);
@@ -329,6 +352,7 @@ const World = (() => {
       camera.position.copy(cam.pos);
       camera.lookAt(player.x + fx * 3, ey - (cam.pitch - .3) * 3, player.z + fz * 3);
     } else camera.lookAt(tx, ty, tz);
+    if (plight && plight.intensity > 0) plight.position.set(player.x + Math.sin(player.face) * .4, player.y + 1.7, player.z + Math.cos(player.face) * .4);
     for (const fn of tickers) fn(dt, now);
     updateActionBtn();
     renderer.render(scene, camera);
@@ -425,14 +449,28 @@ const World = (() => {
       renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
       renderer.outputColorSpace = T.SRGBColorSpace;
       renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
+      renderer.toneMappingExposure = .94;
       renderer.domElement.className = 'world-canvas';
       el.appendChild(renderer.domElement);
       scene = new T.Scene();
-      camera = new T.PerspectiveCamera(55, 1, .05, 700);
+      camera = new T.PerspectiveCamera(55, 1, .1, 700);
       hemi = new T.HemisphereLight('#ffffff', '#8a8c90', 1.7); scene.add(hemi);
       sun = new T.DirectionalLight('#fff4e0', 1); sun.position.set(20, 40, 25); scene.add(sun);
       env = new T.Group(); scene.add(env);
+      // 環境反射：一個簡單的「室內燈箱」場景做成環境貼圖，讓金屬、玻璃、磁磚有柔和的反光
+      {
+        const envScene = new T.Scene(), pm = new T.PMREMGenerator(renderer);
+        envScene.background = new T.Color('#5a6068');
+        const room = new T.Mesh(new T.BoxGeometry(20, 8, 20), new T.MeshBasicMaterial({ color: '#7d848c', side: T.BackSide })); envScene.add(room);
+        const floor = new T.Mesh(new T.PlaneGeometry(20, 20), new T.MeshBasicMaterial({ color: '#4a4f55' })); floor.rotation.x = -Math.PI / 2; floor.position.y = -3.9; envScene.add(floor);
+        for (let i = -2; i <= 2; i++) { const l = new T.Mesh(new T.PlaneGeometry(2.6, .7), new T.MeshBasicMaterial({ color: '#ffffff' })); l.rotation.x = Math.PI / 2; l.position.set(i * 3.6, 3.9, 0); envScene.add(l); l.material.color.multiplyScalar(3); }
+        const warm = new T.Mesh(new T.PlaneGeometry(6, 3), new T.MeshBasicMaterial({ color: '#ffd8a0' })); warm.position.set(0, 1, -9.9); envScene.add(warm);
+        scene.environment = pm.fromScene(envScene, .02).texture;
+        scene.environmentIntensity = .55;
+        pm.dispose();
+      }
+      // 玩家身上的光（迷霧之城的暗區用；平常強度 0，光源數量固定，不會重編材質）
+      plight = new T.PointLight('#ffe6b0', 0, 9, 1.6); scene.add(plight);
       bindInput();
       window.addEventListener('resize', resize);
       new ResizeObserver(resize).observe(el);
@@ -444,6 +482,14 @@ const World = (() => {
     set onGate(fn) { gateCheck = fn; },
     set blocker(fn) { blocked = fn; },
     setSpeedMul(v) { speedMul = v; },
+    get speedMul() { return speedMul; },
+    setMood(m) { mood = m; if (layout) applySky(layout.hasElevated); },
+    get mood() { return mood; },
+    setPlayerLight(intensity, distance = 9) { plight.intensity = intensity; plight.distance = distance; },
+    get facing() { return player.face; },
+    get camYaw() { return cam.yaw; },
+    get moving() { return player.speed > .1; },
+    pushPlayer(dx, dz) { tryMove(player.x + dx, player.z + dz); },
     cycleView,
     // 鏡頭轉向某個點（例如欣賞作品時）
     lookToward(x, z) { cam.yaw = Math.atan2(-(x - player.x), -(z - player.z)); cam.lastDrag = performance.now(); },
@@ -474,13 +520,15 @@ const World = (() => {
       charId = id; rig = Human3D.build(id, wear); rig.key = key; rig.sit = sit; scene.add(rig.root);
     },
     // 載入車站（整座：大廳＋各線月台）
-    loadStation(stationId) {
+    loadStation(stationId, alias = null) {
+      loadSeq++; riding = null; shake = 0;
       for (const tr of [...trains]) this.removeTrain(tr);
       for (const grp of [stationGroup, segGroup, nextGroup, surround]) if (grp) { env.remove(grp); dispose(grp); }
       segGroup = nextGroup = null;
       env.position.set(0, 0, 0);
       layout = S.layout(stationId);
-      stationGroup = S.build(layout, TaipeiTime.sky());
+      layout.alias = alias;
+      S.setAlias(alias); stationGroup = S.build(layout, TaipeiTime.sky()); S.setAlias(null);
       surround = S.surroundings(layout, night());
       env.add(stationGroup); env.add(surround);
       applySky(layout.hasElevated);
@@ -488,13 +536,15 @@ const World = (() => {
       return layout;
     },
     get layout() { return layout; },
+    get trains() { return trains; },
+    get stationGroup() { return stationGroup; },
     // 把玩家放在大廳（付費區，靠近第一條線的電扶梯）
     spawnInConcourse() {
       const P = layout.platforms[0], r = P.ramps[1];
-      player.x = r.xb + 2.5; player.y = 0; player.z = P.z + 3.2; player.face = Math.PI;
+      player.x = r.xb + 2.5; player.y = 0; player.z = P.z + 3.2; player.face = Math.PI; player.vnow = 0;
       cam.yaw = Math.PI / 2; cam.pos.set(player.x + 4, 2.6, player.z);
     },
-    placePlayer(x, y, z, face = Math.PI) { player.x = x; player.y = y; player.z = z; player.face = face; cam.pos.set(x, y + 2.6, z + 4); },
+    placePlayer(x, y, z, face = Math.PI) { player.x = x; player.y = y; player.z = z; player.face = face; player.vnow = 0; cam.pos.set(x, y + 2.6, z + 4); },
     get player() { return pstate(); },
     zone,
     // 列車
@@ -526,14 +576,15 @@ const World = (() => {
       if (rel > S.PLAT_HALF - .1 && rel < S.TRACK - 1.3) player.z = rel < (S.PSD + .2) ? tr.P.z + tr.side * (S.PLAT_HALF - .2) : tz - tr.side * 1.25;
     },
     // 搭乘：從目前車站開到 toId，回傳新車站版面；列車會停在新車站同一條線、同一側
-    async ride(tr, { toId, duration = 22, onSpeed, skip, anomaly }) {
-      const P = tr.P, travel = tr.travel, D = 520;
+    async ride(tr, { toId, duration = 22, onSpeed, skip, anomaly, alias = null, onTick }) {
+      const P = tr.P, travel = tr.travel, D = 520, seq = loadSeq;
       const tx0 = P.x + tr.x, tz = P.z + tr.side * S.TRACK, ty = P.y;
       for (const o of [...trains]) if (o !== tr) this.removeTrain(o);
       riding = tr;
       const nextL = S.layout(toId);
+      nextL.alias = alias;
       const P2 = nextL.platforms.find(p => p.line === tr.line);
-      nextGroup = S.build(nextL, TaipeiTime.sky());
+      S.setAlias(alias); nextGroup = S.build(nextL, TaipeiTime.sky()); S.setAlias(null);
       const nextSur = S.surroundings(nextL, night());
       const off = new T.Vector3(tx0 + travel * D - P2.x, ty - P2.y, tz - (P2.z + tr.side * S.TRACK));
       nextGroup.position.copy(off); nextSur.position.copy(off);
@@ -562,11 +613,14 @@ const World = (() => {
           const lm = tr.group.userData.lightM;
           if (lm) lm.emissiveIntensity = anomaly && Math.abs(p - D / 2) < 45 ? (Math.sin(now / 37) > .2 ? 1.6 : .15) : 1.6;
           onSpeed && onSpeed(v);
+          if (seq !== loadSeq) return res();
+          if (onTick && onTick(t, p) === 'stop') return res();
           t < T0 ? requestAnimationFrame(step) : res();
         };
         requestAnimationFrame(step);
       });
       shake = 0;
+      if (seq !== loadSeq) return layout;   // 中途換場了：新車站已經載入，不用再對齊
       // 以新車站為原點重新對齊
       for (const grp of [stationGroup, segGroup, surround]) { env.remove(grp); dispose(grp); }
       stationGroup = nextGroup; surround = nextSur; nextGroup = segGroup = null;
@@ -590,7 +644,7 @@ const World = (() => {
       if (pg) S.drawLed(pg.userData[`led${side}`], layout.platforms[k].line, rows);
     },
     setInteractions(list) { interactions = list; const b = document.getElementById('actionBtn'); if (b) b.dataset.id = ''; },
-    setInput(on) { player.inputOn = on; if (!on) for (const k in keys) keys[k] = false; },
+    setInput(on) { player.inputOn = on; if (!on) { for (const k in keys) keys[k] = false; player.vnow = 0; } },
     walkPath(points) { return new Promise(resolve => { player.auto = { points: points.map(p => ({ ...p })), resolve }; }); },
     refreshSky() { if (layout) applySky(layout.hasElevated); },
   };

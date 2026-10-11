@@ -532,30 +532,41 @@ const Human3D = (() => {
     const shadow = new T.Mesh(new T.PlaneGeometry(.75, .75), new T.MeshBasicMaterial({ map: new T.CanvasTexture(sc), transparent: true, depthWrite: false }));
     shadow.rotation.x = -Math.PI / 2; shadow.position.y = .005;
     rig.root.add(shadow);
-    let phase = 0, amt = 0;
+    let phase = 0, amt = 0, runA = 0, lastYaw = null, lean = 0;
     rig.sit = 0;
+    // 走路／跑步分開兩種姿勢：跑步時身體前傾、手肘彎、步幅大、彈跳明顯；轉彎時身體往內傾；站著時會慢慢換重心
     rig.update = (dt, speed, t) => {
       for (const c of rig.root.children) if (c.userData.spin) c.rotation.y += dt * c.userData.spin;   // 繞著飛的蝙蝠
-      const target = Math.min(1, speed / 1.6);
+      const target = Math.min(1, speed / 1.6), runT = Math.min(1, Math.max(0, (speed - 3) / 2));
       amt += (target - amt) * Math.min(1, dt * 8);
-      phase += dt * (4 + speed * 3.2);
-      const sw = Math.sin(phase);
+      runA += (runT - runA) * Math.min(1, dt * 6);
+      phase += dt * (4 + speed * (3.2 - runA * .9));
+      const sw = Math.sin(phase), sit = rig.sit;
+      // 轉彎傾斜：用根節點的旋轉變化估計轉彎速度
+      const yaw = rig.root.rotation.y;
+      if (lastYaw != null && dt > 0) { let d = yaw - lastYaw; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; lean += (Math.max(-.18, Math.min(.18, -d / dt * .045 * amt)) - lean) * Math.min(1, dt * 6); }
+      lastYaw = yaw;
+      const hipAmp = .55 + runA * .35, kneeAmp = .9 + runA * .6;
       for (const L of rig.legs) {
         const p = L.s > 0 ? sw : -sw;
-        L.hp.rotation.x = p * .55 * amt - rig.sit * 1.45;
-        L.kn.rotation.x = Math.max(0, -Math.sin(phase + (L.s > 0 ? 0 : Math.PI) - .6)) * .9 * amt + rig.sit * 1.5;
+        L.hp.rotation.x = p * hipAmp * amt - runA * .12 * amt - sit * 1.45;
+        L.kn.rotation.x = Math.max(0, -Math.sin(phase + (L.s > 0 ? 0 : Math.PI) - .6)) * kneeAmp * amt + runA * .25 * amt + sit * 1.5;
       }
       for (const A of rig.arms) {
         const p = A.s > 0 ? -sw : sw;
-        A.sh.rotation.x = p * rig.armSwing * amt - rig.sit * .3;
-        A.el.rotation.x = -.15 - .25 * amt - rig.sit * .5;
+        A.sh.rotation.x = p * (rig.armSwing + runA * .45) * amt - sit * .3;
+        A.sh.rotation.z = A.s * runA * .12 * amt;
+        A.el.rotation.x = -.15 - (.25 + runA * .95) * amt - sit * .5;
       }
-      const breath = Math.sin(t * 1.8) * .006;
-      rig.hips.position.y = rig.P.hipY + Math.abs(Math.cos(phase)) * .035 * amt - .015 * amt - rig.sit * (rig.P.hipY - .48);
-      rig.spine.rotation.y = sw * .08 * amt;
-      rig.spine.rotation.x = .05 * amt;
+      const breath = Math.sin(t * 1.8) * .006, idle = (1 - amt) * (1 - sit);
+      rig.hips.position.y = rig.P.hipY + Math.abs(Math.cos(phase)) * (.035 + runA * .045) * amt - (.015 + runA * .02) * amt - sit * (rig.P.hipY - .48);
+      rig.hips.rotation.z = Math.sin(t * .7) * .025 * idle + lean * .4;   // 站著換重心；轉彎往內傾
+      rig.spine.rotation.y = sw * (.08 + runA * .06) * amt;
+      rig.spine.rotation.x = (.05 + runA * .16) * amt;
+      rig.spine.rotation.z = lean * .6 - Math.sin(t * .7) * .02 * idle;
       rig.spine.scale.set(1 + breath, 1, 1 + breath);
-      rig.headJ.rotation.y = -sw * .05 * amt;
+      rig.headJ.rotation.y = -sw * .05 * amt + Math.sin(t * .37) * .12 * idle;   // 站著時偶爾左右看
+      rig.headJ.rotation.x = -runA * .1 * amt;
     };
     rig.update(0, 0, 0);
     return rig;

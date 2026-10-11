@@ -2,7 +2,7 @@
 <html lang="zh-Hant-TW">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#121a21">
   <title>迷霧</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -63,6 +63,8 @@
     <button class="view-btn" id="viewBtn" title="切換視角（V）">視角：標準</button>
     <button class="view-btn transfer-btn" id="transferBtn" hidden>🔁 快速轉乘</button>
     <span class="trip-badge" id="tripBadge" hidden></span>
+    <div class="fog-hud" id="fogHud" hidden></div>
+    <div class="fog-flash" id="fogFlash" hidden></div>
     <div class="toasts" id="toasts" aria-live="polite"></div>
     <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　Shift 跑步　拖曳畫面轉視角　E 互動</p>
   </section>
@@ -125,6 +127,9 @@
   <!-- 傳送轉場 -->
   <div class="tp-fx" id="tpFx" hidden></div>
 
+  <!-- 迷霧之城：開場、倒下、結算 -->
+  <div class="fog-overlay" id="fogOverlay" hidden></div>
+
   <!-- 停駛時段 -->
   <div class="closed" id="closedOverlay" hidden>
     <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -165,6 +170,13 @@
   <script src="js/festival.js"></script>
   <script src="js/art.js"></script>
   <script src="js/onsen.js"></script>
+  <script src="js/teleporter.js"></script>
+  <script src="js/kaicheng.js"></script>
+  <script src="js/fog.js"></script>
+  <script src="js/fogevents.js"></script>
+  <script src="js/fogcontent.js"></script>
+  <script src="js/fogcontent2.js"></script>
+  <script src="js/fogspecial.js"></script>
   <script src="js/map3d.js"></script>
   <script src="js/game.js"></script>
 </body>

@@ -9,7 +9,7 @@ const XIUYU_LOOK = {
 const NPCS = {
   xiuyu: {
     name: '秀蔅', role: '提著燈的女孩', look: XIUYU_LOOK, speed: .8,
-    lines: ['霧又變濃了。每條路線的盡頭，都有一樣東西在等人去拿。', '我記得所有的路線……可是我想不起來，我是從哪一站上車的。', '你身上有末班車的味道。'],
+    lines: ['霧又變濃了。每條路線的盡頭，都有一個零件在等人去拿。', '在我的時代，這條線已經延伸到山的另一邊了。', '小碧潭的傳送裝置，你放上幾個零件了？', '你身上有末班車的味道。'],
     rumors: ['00:30 以後，有些月台會亮起不存在的站名。', '聽說第七節車廂的門，只對記得自己名字的人打開。'],
   },
   chen: {
@@ -230,7 +230,7 @@ const NPCS = {
   ferryman: {
     name: '擺渡人', role: '小碧潭的渡口', station: '小碧潭', spot: 'platform', speed: 0,
     look: { old: true, skin: '#d8b8a8', hair: 'short', hairColor: '#e8e8e4', top: '#4a5a6a', pattern: 'knit', bottom: '#2a2a30', coat: true, hat: 'cap', hatColor: '#2a2a30', lantern: true },
-    lines: ['這條支線只有一站。很多人以為這裡是終點。', '我在等一個帶著六樣東西的人。'],
+    lines: ['這條支線只有一站。很多人以為這裡是終點。', '月台盡頭那台機器？秀蔅說那是傳送裝置。我替她顧了很久了。', '找到零件就放上去吧，一個一個來也可以。'],
     rumors: [],
   },
   eventstaff: {
@@ -683,9 +683,9 @@ const Dialog = (() => {
     const s = Game.state;
     if (!s.flags.xiuyuIntro) {
       // 開場：一定要選板南線或文湖線
-      return show(npc, '你也看得到霧嗎？……太好了。我叫秀蔅。這座城的每條路線盡頭，都藏著一樣東西，集齊了，霧才會散。<br>先從這裡開始吧——你想先走哪一條？', [
-        { label: '板南線主線：第七節車廂', primary: true, run: () => introChoose('BL') },
-        { label: '文湖線主線：無人駕駛的聲音', primary: true, run: () => introChoose('BR') },
+      return show(npc, '你來了……謝謝你接下我的委託。我叫秀蔅，從 2087 年來。<br>水晶、羅盤、懷錶、懸鏡、石環、星圖——六個零件散在六條路線上。每條線解開到最後，零件就會出現。<br>先從這裡開始吧——你想先走哪一條？', [
+        { label: '板南線：第七節車廂的懸鏡', primary: true, run: () => introChoose('BL') },
+        { label: '文湖線：會說話的水晶', primary: true, run: () => introChoose('BR') },
       ]);
     }
     // 找到她：完成「找到秀蔅」並提供這一站各線的主線
@@ -700,7 +700,7 @@ const Dialog = (() => {
       ...(npc.gives || []).filter(id => Quests.canAccept(id)).map(id => ({ label: `接任務：${QUESTS[id].title}`, run: () => { Quests.accept(id); close(); } })),
       { label: '聊天', run: () => { s.friends.xiuyu = (s.friends.xiuyu || 0) + 2; saveState(); xiuyuChat(npc); } },
       { label: '送禮', run: () => gift(npc) },
-      ...(s.flags.xiuyuTalk ? [{ label: '問她：妳是從哪一站上車的？', run: () => show(npc, '……1987 年，圓山。那時候還不是捷運，是火車。我上了末班車，窗外起了霧。<br>等我再睜開眼睛，就在這裡了。<br>你是第一個問我這件事的人。', [{ label: '再見', run: close }]) }] : []),
+      ...(s.flags.xiuyuTalk ? [{ label: '問她：未來的台北是什麼樣子？', run: () => show(npc, '……2087 年的台北，捷運已經有十五條線，最遠到宜蘭。可是我最喜歡的，還是這個時代的末班車。<br>車廂裡的人都很累，可是每一個人都在回家的路上。<br>你是第一個問我這件事的人。', [{ label: '再見', run: close }]) }] : []),
       { label: '再見', run: close },
     ]);
   }
@@ -724,25 +724,12 @@ const Dialog = (() => {
   }
   // 小碧潭的擺渡人：收下六件寶物後，路網圖上會出現新路線
   function ferryman(npc) {
-    const s = Game.state, lines = Object.keys(MAIN_STORY);
-    const have = lines.filter(l => s.inv['treasure_' + l] > 0);
-    if (s.flags.mistLine) return show(npc, '霧散開了一點。你看，桃園機場捷運已經出現在路網上，從台北車站就能搭。剩下的路，要你自己去走。', [{ label: '再見', run: close }]);
-    if (have.length < lines.length) {
-      const miss = lines.filter(l => !have.includes(l)).map(l => LINES[l].zh);
-      return show(npc, `${pick(npc.lines)}<br><small>（擺渡人看了看你的背包：寶物 ${have.length} / ${lines.length}。還差：${miss.join('、')}的寶物。）</small>`, [{ label: '再見', run: close }]);
-    }
-    show(npc, '六樣東西……都在這裡了。鑰匙、錄音帶、票卡、葉子、發條、指針。<br>把它們交給我吧，我帶你過河。', [
-      { label: '交出六件寶物', primary: true, run: () => {
-        for (const l of lines) s.inv['treasure_' + l]--;
-        s.flags.mistLine = true;
-        MRT.openAirport();
-        if (!Quests.isActive('final') && !Quests.isDone('final')) Quests.accept('final');
-        const done = Quests.emit({ kind: 'handin' });
-        saveState(); updateHud();
-        close();
-        Game.unlockMistLine && Game.unlockMistLine(done.length > 0);
-      } },
-      { label: '再想想', run: close },
+    const s = Game.state;
+    if (s.flags.mistLine) return show(npc, '她回去了。走之前，她把傳送裝置的光留在這裡，往西照出了一條新路線——桃園機場捷運。剩下的路，要你自己去走。', [{ label: '再見', run: close }]);
+    const n = Teleporter.placed().length, t = Teleporter.total();
+    show(npc, `${pick(npc.lines)}<br><small>（傳送裝置上已經放了 ${n} / 6 個零件${t > n ? `，你身上還有 ${t - n} 個可以放` : ''}。）</small>`, [
+      ...(t > n ? [{ label: '去放零件', primary: true, run: () => Teleporter.menu() }] : []),
+      { label: '再見', run: close },
     ]);
   }
   // 單純顯示資訊（告示牌等）

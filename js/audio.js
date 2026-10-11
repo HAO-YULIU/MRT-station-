@@ -286,6 +286,25 @@ const Sound = (() => {
       }[kind] || [];
       for (const [f, t] of tunes) bell(f * (kind === 'violin' ? 1 : 2), t, vol, master, kind === 'violin' ? 2.4 : 1.0);
     },
+    // 迷霧之城的音效
+    fog(kind) {
+      if (!enabled || !ensure()) return;
+      const F = {
+        hit: () => { noiseBurst(0, .35, 300, .8, .5); tone(90, 0, .25, 'sawtooth', .18); },
+        heart: () => { tone(55, 0, .12, 'sine', .45); tone(50, .22, .12, 'sine', .35); },
+        drum: () => { for (const t of [0, .5, .75, 1.25]) { tone(70, t, .3, 'sine', .4); noiseBurst(t, .25, 180, 1.2, .25); } },   // 太鼓
+        bell: () => bell(392, 0, .2, master, 3.2),
+        whisper: () => { noiseBurst(0, 1.4, 2400, 6, .08, master, .4); noiseBurst(.5, 1.2, 1800, 5, .06, master, .4); },
+        step: () => noiseBurst(0, .09, 900, 2, .18),
+        buzz: () => tone(120, 0, .35, 'square', .06),
+        sting: () => { tone(277, 0, .9, 'sawtooth', .08); tone(294, 0, .9, 'sawtooth', .08); noiseBurst(0, .9, 600, .6, .12); },
+        good: () => { bell(659, 0, .16); bell(880, .15, .16); bell(1175, .3, .16); },
+        die: () => { tone(220, 0, 1.6, 'sawtooth', .12); tone(110, .2, 1.8, 'sine', .3); noiseBurst(0, 1.8, 200, .5, .3, master, .3); },
+        rush: () => { noiseBurst(0, 2.6, 400, .5, .55, master, .6); tone(60, 0, 2.4, 'sawtooth', .12); },
+        radio: () => { noiseBurst(0, .8, 1600, 1.5, .12); tone(1000, .1, .1, 'square', .05); },
+      };
+      F[kind] && F[kind]();
+    },
     // 單音（地板鋼琴之類的互動藝術）
     note(freq, vol = .18) { if (enabled && ensure()) bell(freq, 0, vol, master, 1.4); },
     doorClose, doorOpen, arrivalChime, trainArrive, trainDepart, onboardChime, itemGet, click, gate, teleport,
