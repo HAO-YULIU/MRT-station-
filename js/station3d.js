@@ -100,7 +100,8 @@ const Station3D = (() => {
   const M0 = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: o.r ?? .7, metalness: o.m ?? 0, map: o.map || null, transparent: !!o.t, opacity: o.o ?? 1, side: o.side || T.FrontSide, emissive: o.e || '#000', emissiveIntensity: o.ei ?? 1, emissiveMap: o.em || null, depthWrite: o.dw ?? true });
   function box(w, h, d, mat, x, y, z, parent) { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); parent && parent.add(m); return m; }
   // 貼在地上的標記：用 polygonOffset 拉開深度，避免和地板互相閃爍
-  function decal(mat, n) { mat = mat.clone(); mat.polygonOffset = true; mat.polygonOffsetFactor = -n; mat.polygonOffsetUnits = -n * 2; return mat; }
+  // 地面標記放在透明佇列（一定畫在地板之後），不寫深度，加 polygonOffset：手機上也不會和地板互相閃爍
+  function decal(mat, n) { mat = mat.clone(); mat.transparent = true; mat.depthWrite = false; mat.polygonOffset = true; mat.polygonOffsetFactor = -n; mat.polygonOffsetUnits = -n * 2; return mat; }
   function plane(w, h, mat, parent) { const m = new T.Mesh(new T.PlaneGeometry(w, h), mat); parent && parent.add(m); return m; }
   // 兩面都看得到的看板
   function sign(tex, w, h, x, y, z, parent, rotY = 0) {
@@ -515,7 +516,7 @@ const Station3D = (() => {
       for (const s of [-1, 1]) {
         const bed = plane(LEN + 400, 3.4, M('#ffffff', { map: tiled(TEX.gravel, 40, 1) }), pg); bed.rotation.x = -Math.PI / 2; bed.position.set(0, -1.15, s * TRACK);
         for (const rz of [-.72, .72]) box(LEN + 400, .14, .08, M('#8d9196', { m: .8, r: .35 }), 0, -1.05, s * TRACK + rz, pg);
-        box(LEN, 1.2, .2, M('#8a8883', { map: TEX.concrete }), 0, -.6, s * 3.05, pg);
+        box(LEN, 1.18, .2, M('#8a8883', { map: TEX.concrete }), 0, -.61, s * 3.05, pg);   // 頂面比月台地板低 1 公分，車門前不會和地板重疊閃爍
         const tac = plane(LEN, .3, decal(M('#ffffff', { map: tiled(TEX.tactile, LEN / 1.2, 1) }), 1), pg); tac.rotation.x = -Math.PI / 2; tac.position.set(0, .01, s * 2.7);
         for (const d of DOORS) for (const sx of [-1, 1]) {
           const mk = plane(.32, .6, decal(M('#2f9e5a'), 2), pg); mk.rotation.x = -Math.PI / 2; mk.rotation.z = sx * .35; mk.position.set(d + sx * 1.1, .014, s * 2.15);
