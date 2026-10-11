@@ -502,3 +502,8 @@ button:disabled { cursor: not-allowed; }
   .phone-x { left: auto; right: 8px; transform: none; top: 4px; bottom: auto; }
   .ph-bar { padding-right: 56px; }
 }
+/* 視角切換 */
+.view-btn { position: absolute; z-index: 6; right: 14px; top: calc(var(--hud-h, 70px) + 10px); padding: 6px 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.35); background: rgba(20,26,32,.65); color: #fff; font-size: 13px; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .run-btn { left: 50px; bottom: calc(196px + env(safe-area-inset-bottom)); width: 56px; height: 56px; font-size: 18px; }
+}

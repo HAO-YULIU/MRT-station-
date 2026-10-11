@@ -496,7 +496,9 @@ const NPCManager = (() => {
     const p = World.player;
     for (const n of list) {
       n.rig.root.visible = true;
-      if (n.speed > 0) {
+      const talking = Dialog.with === n;
+      if (talking) n.speedNow = 0;   // 說話時停下來
+      else if (n.speed > 0) {
         if (n.wait > 0) { n.wait -= dt; n.speedNow = 0; }
         else {
           if (!n.target) n.target = nextTarget(n);
