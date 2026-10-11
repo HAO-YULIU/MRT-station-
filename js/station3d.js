@@ -37,15 +37,30 @@ const Station3D = (() => {
   const TEX = {};
   function textures() {
     if (TEX.floor) return;
-    TEX.floor = canvasTex(512, 512, (g, w, h) => {
-      g.fillStyle = '#c9c5bc'; g.fillRect(0, 0, w, h); noise(g, w, h, 16);
-      g.strokeStyle = '#9d988e'; g.lineWidth = 3;
-      for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, h); g.stroke(); g.beginPath(); g.moveTo(0, i * 128); g.lineTo(w, i * 128); g.stroke(); }
+    // 花崗石地磚：每塊磚的色調略有不同，有細小的斑點與深色磚縫
+    const granite = (g, w, h, n, base, grout) => {
+      const s = w / n;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const k = ((i * 7 + j * 13) % 5) - 2;
+        g.fillStyle = `hsl(${base[0]}, ${base[1]}%, ${base[2] + k * 1.4}%)`; g.fillRect(i * s, j * s, s, s);
+      }
+      for (let k = 0; k < w * h / 40; k++) { const x = Math.random() * w, y = Math.random() * h, r = Math.random(); g.fillStyle = r < .45 ? 'rgba(40,38,34,.35)' : r < .8 ? 'rgba(255,255,255,.45)' : 'rgba(120,110,95,.4)'; g.fillRect(x, y, 1 + (r > .9), 1 + (r > .95)); }
+      g.strokeStyle = grout; g.lineWidth = 2.5;
+      for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo(i * s, 0); g.lineTo(i * s, h); g.stroke(); g.beginPath(); g.moveTo(0, i * s); g.lineTo(w, i * s); g.stroke(); }
+    };
+    TEX.floor = canvasTex(512, 512, (g, w, h) => granite(g, w, h, 4, [40, 8, 76], '#8e897f'));
+    TEX.hall = canvasTex(512, 512, (g, w, h) => granite(g, w, h, 4, [38, 7, 80], '#9c968b'));
+    // 天花板：金屬格柵（細長的鋁條）
+    TEX.ceil = canvasTex(256, 256, (g, w, h) => {
+      g.fillStyle = '#b9bec4'; g.fillRect(0, 0, w, h);
+      for (let x = 0; x < w; x += 16) { g.fillStyle = '#cdd2d8'; g.fillRect(x, 0, 10, h); g.fillStyle = '#8f959c'; g.fillRect(x + 10, 0, 2, h); }
+      g.fillStyle = '#7d838a'; g.fillRect(0, 0, w, 3); g.fillRect(0, h / 2, w, 2);
     });
-    TEX.hall = canvasTex(512, 512, (g, w, h) => {
-      g.fillStyle = '#d6d3cc'; g.fillRect(0, 0, w, h); noise(g, w, h, 12);
-      g.strokeStyle = '#b4afa5'; g.lineWidth = 2;
-      for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, h); g.stroke(); g.beginPath(); g.moveTo(0, i * 64); g.lineTo(w, i * 64); g.stroke(); }
+    // 柱子：石材面板
+    TEX.col = canvasTex(128, 512, (g, w, h) => {
+      g.fillStyle = '#e9e5dc'; g.fillRect(0, 0, w, h); noise(g, w, h, 10);
+      g.strokeStyle = '#c8c1b4'; g.lineWidth = 2; for (let y = 0; y <= h; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+      g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke();
     });
     TEX.wall = canvasTex(256, 256, (g, w, h) => {
       g.fillStyle = '#e4e0d6'; g.fillRect(0, 0, w, h); noise(g, w, h, 8);
@@ -495,7 +510,7 @@ const Station3D = (() => {
       const fullPSD = P.under || P.line === 'BR';
       // 地板（扣掉電扶梯口）
       const holes = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return r.b > 0 ? { x0: a + .25, x1: b, z0: -1.85, z1: 1.85 } : { x0: a, x1: b - .25, z0: -1.85, z1: 1.85 }; });
-      slab(rectsMinus({ x0: -LEN / 2, x1: LEN / 2, z0: -3.05, z1: 3.05 }, holes), 0, M('#ffffff', { map: TEX.floor, r: .45 }), pg, .4);
+      slab(rectsMinus({ x0: -LEN / 2, x1: LEN / 2, z0: -3.05, z1: 3.05 }, holes), 0, M('#ffffff', { map: TEX.floor, r: .34 }), pg, .4);
       // 軌道、月台邊
       for (const s of [-1, 1]) {
         const bed = plane(LEN + 400, 3.4, M('#ffffff', { map: tiled(TEX.gravel, 40, 1) }), pg); bed.rotation.x = -Math.PI / 2; bed.position.set(0, -1.15, s * TRACK);
@@ -562,7 +577,8 @@ const Station3D = (() => {
       // 柱子（中央）＋滅火器、緊急對講機、路網圖
       for (const x of [-28, 0, 28]) {
         solid(P.x + x, P.z, .7, .7, P.y);
-        box(.7, 3.4, .7, M('#ffffff', { map: tiled(TEX.wall, .6, 3) }), x, 1.7, 0, pg);
+        box(.7, 3.4, .7, M('#ffffff', { map: tiled(TEX.col, 1, 1), r: .45 }), x, 1.7, 0, pg);
+        box(.76, .3, .76, M('#c8cdd2', { m: .85, r: .22 }), x, .15, 0, pg);
         box(.22, .36, .14, red, x + .36, .9, 0, pg);                               // 滅火器箱
         box(.2, .28, .1, M('#f2c200'), x - .36, 1.3, 0, pg);                        // 緊急對講機
       }
@@ -587,7 +603,7 @@ const Station3D = (() => {
       const a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
       return r.b > 0 ? { x0: a, x1: b - .25, z0: r.z - 1.85, z1: r.z + 1.85 } : { x0: a + .25, x1: b, z0: r.z - 1.85, z1: r.z + 1.85 };
     }));
-    slab(rectsMinus({ x0: C.x0, x1: C.x1, z0: C.z0, z1: L.unpaid.z1 }, hallHoles.concat([{ x0: C.x0 - 1, x1: L.unpaid.x0, z0: L.gateZ + .01, z1: L.unpaid.z1 + 1 }, { x0: L.unpaid.x1, x1: C.x1 + 1, z0: L.gateZ + .01, z1: L.unpaid.z1 + 1 }])), 0, M('#ffffff', { map: TEX.hall, r: .5 }), g, .4);
+    slab(rectsMinus({ x0: C.x0, x1: C.x1, z0: C.z0, z1: L.unpaid.z1 }, hallHoles.concat([{ x0: C.x0 - 1, x1: L.unpaid.x0, z0: L.gateZ + .01, z1: L.unpaid.z1 + 1 }, { x0: L.unpaid.x1, x1: C.x1 + 1, z0: L.gateZ + .01, z1: L.unpaid.z1 + 1 }])), 0, M('#ffffff', { map: TEX.hall, r: .32 }), g, .4);
     // 大廳牆與天花板
     const wallM = M('#ffffff', { map: tiled(TEX.wall, 20, 3), r: .6 });
     const hallH = 4.2;
@@ -610,7 +626,10 @@ const Station3D = (() => {
     buildRooms(L, g);
     for (const [a, b] of [[C.x0, L.unpaid.x0], [L.unpaid.x1, C.x1]]) box(b - a, hallH, .3, wallM, (a + b) / 2, hallH / 2, L.gateZ, g);
     const ceilHoles = L.platforms.filter(P => !P.under).flatMap(P => P.ramps.map(r => ({ x0: Math.min(r.xa, r.xb) - .2, x1: Math.max(r.xa, r.xb) + .2, z0: r.z - 1.9, z1: r.z + 1.9 })));
-    slab(rectsMinus({ x0: C.x0, x1: C.x1, z0: C.z0, z1: L.unpaid.z1 }, ceilHoles), hallH, M('#e3e3df', { r: .9 }), g, .2, false);
+    slab(rectsMinus({ x0: C.x0, x1: C.x1, z0: C.z0, z1: L.unpaid.z1 }, ceilHoles), hallH, M('#ffffff', { map: TEX.ceil, r: .55, m: .25 }), g, .2, false);
+    // 牆腳的深色踢腳板
+    const skirt = M('#4a4f55', { r: .4, m: .3 });
+    box(C.x1 - C.x0, .16, .04, skirt, (C.x0 + C.x1) / 2, .08, C.z0 + .02, g);
     for (let x = C.x0 + 3; x < C.x1 - 2; x += 6) for (let z = C.z0 + 3; z < L.unpaid.z1 - 1; z += 5) {
       if (ceilHoles.some(h => x > h.x0 - 2.6 && x < h.x1 + 2.6 && z > h.z0 - .4 && z < h.z1 + .4)) continue;   // 電扶梯口上方不放燈，免得擋到指標
       box(1.6, .04, .4, lightM, x, hallH - .03, z, g);
@@ -719,14 +738,16 @@ const Station3D = (() => {
    *    月台的通風管、電纜槽、號誌燈、月台端的工作門 ── */
   function decorate(L, g) {
     const C = L.concourse, U = L.unpaid, hallH = 4.2;
-    const dark = M('#30363c', { r: .5 }), steel = M('#b9c0c6', { m: .6, r: .35 }), colM = M('#f0eee8', { r: .6 });
+    const dark = M('#30363c', { r: .5 }), steel = M('#b9c0c6', { m: .6, r: .35 }), colM = M('#ffffff', { map: tiled(TEX.col, 1, 1), r: .45 });
     const nearRamp = (x, z, m) => L.platforms.some(P => P.ramps.some(r => Math.abs(z - r.z) < 1.85 + m && x > Math.min(r.xa, r.xb) - m && x < Math.max(r.xa, r.xb) + m));
     const free = (x, z, m = .6) => !nearRamp(x, z, m) && !L.spots.some(s => s.y === 0 && Math.hypot(s.x - x, s.z - z) < 1.6);
     // 大廳柱子＋旁邊的長椅
     for (const x of [-5.5, 5.5]) for (let z = C.z0 + 5; z < L.gateZ - 3; z += 8) {
       if (!free(x, z, 1)) continue;
       box(.8, hallH, .8, colM, x, hallH / 2, z, g); solid(x, z, .8, .8);
-      box(.82, .12, .82, M('#c8cdd2', { m: .5 }), x, .06, z, g);
+      box(.86, .32, .86, M('#c8cdd2', { m: .85, r: .22 }), x, .16, z, g);                 // 不鏽鋼底座
+      box(.9, .14, .9, M('#c8cdd2', { m: .85, r: .22 }), x, hallH - .07, z, g);          // 頂蓋
+      box(.84, .03, .84, M('#ffd890', { e: '#ffd890', ei: .6 }), x, hallH - .16, z, g);   // 頂端燈帶
       const bx = x + Math.sign(x) * 1.0;
       if (free(bx, z, .4)) { box(.45, .08, 1.6, M('#8a9097', { m: .5 }), bx, .45, z, g); box(.06, .4, 1.6, M('#8a9097', { m: .5 }), bx + Math.sign(x) * .2, .68, z, g); solid(bx, z, .5, 1.6); for (const sz of [-.45, .45]) L.seats.push({ x: bx - Math.sign(x) * .02, y: 0, z: z + sz, face: -Math.sign(x) * Math.PI / 2, stand: { x: bx - Math.sign(x) * .75, z: z + sz } }); }
     }

@@ -40,10 +40,10 @@ const World = (() => {
     hemi.color.set('#ffffff');
     if (!open) {
       scene.background = new T.Color('#1a1c1e'); scene.fog = new T.Fog('#2a2e33', 35, 110);
-      hemi.intensity = 1.75; sun.intensity = .45;
+      hemi.intensity = 1.5; sun.intensity = .45;
     } else {
       scene.background = new T.Color(s.bg); scene.fog = new T.Fog(s.fog, 50, 240);
-      hemi.intensity = Math.max(1.3, s.hemi + .4); sun.intensity = s.sun;
+      hemi.intensity = Math.max(1.1, s.hemi + .2); sun.intensity = s.sun;
     }
   }
   const night = () => TaipeiTime.sky() === 'night';
@@ -250,11 +250,15 @@ const World = (() => {
       if (keys.l) ix -= 1; if (keys.r) ix += 1; if (keys.u) iy += 1; if (keys.d) iy -= 1;
       ix += joy.x; iy += joy.y;
       const mag = Math.min(1, Math.hypot(ix, iy));
+      // 起步加速、放開減速（不會一按就全速、一放就急停）
+      const want = mag > .08 ? (keys.run || runToggle ? 5.2 : 2.6) * mag * speedMul : 0;   // 跑步 5.2 m/s、走路 2.6 m/s（體力越高越快）
+      player.vnow = (player.vnow || 0) + (want - (player.vnow || 0)) * Math.min(1, dt * (want > (player.vnow || 0) ? 7 : 11));
       if (mag > .08) {
         const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
         let mx = rx * ix + fx * iy, mz = rz * ix + fz * iy;
         const n = Math.hypot(mx, mz); mx /= n; mz /= n;
-        const v = (keys.run || runToggle ? 5.2 : 2.6) * mag * speedMul;   // 跑步 5.2 m/s、走路 2.6 m/s（體力越高越快）
+        player.mdir = { x: mx, z: mz };
+        const v = Math.max(player.vnow, .4);
         const sp = v * dt;
         const bx = player.x, bz = player.z;
         tryMove(player.x + mx * sp, player.z + mz * sp);
@@ -264,9 +268,14 @@ const World = (() => {
           tryMove(bx + mx * sp, bz); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; tryMove(bx, bz + mz * sp); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; } }
         }
         if (blocked && blocked(player.x, player.z, player.y)) { player.x = bx; player.z = bz; }   // 不能穿過 NPC
-        player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * 12));
+        player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * (v > 4 ? 9 : 12)));
         player.speed = v; moved = true;
-      } else player.speed = 0;
+      } else if (player.vnow > .15 && player.mdir) {   // 放開搖桿：再滑一小步停下來
+        const bx = player.x, bz = player.z;
+        tryMove(player.x + player.mdir.x * player.vnow * dt, player.z + player.mdir.z * player.vnow * dt);
+        if (hitObstacle(player.x, player.z, player.y) || (blocked && blocked(player.x, player.z, player.y))) { player.x = bx; player.z = bz; player.vnow = 0; }
+        player.speed = player.vnow; moved = true;
+      } else { player.speed = 0; player.vnow = 0; }
       // 電扶梯會自己把人往上／往下帶
       const cv = conveyorAt(player.x, player.z);
       if (cv) { tryMove(player.x + cv * dt, player.z); if (!moved) player.speed = 0; }
@@ -438,7 +447,7 @@ const World = (() => {
       renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
       renderer.outputColorSpace = T.SRGBColorSpace;
       renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
+      renderer.toneMappingExposure = .94;
       renderer.domElement.className = 'world-canvas';
       el.appendChild(renderer.domElement);
       scene = new T.Scene();
@@ -446,6 +455,18 @@ const World = (() => {
       hemi = new T.HemisphereLight('#ffffff', '#8a8c90', 1.7); scene.add(hemi);
       sun = new T.DirectionalLight('#fff4e0', 1); sun.position.set(20, 40, 25); scene.add(sun);
       env = new T.Group(); scene.add(env);
+      // 環境反射：一個簡單的「室內燈箱」場景做成環境貼圖，讓金屬、玻璃、磁磚有柔和的反光
+      {
+        const envScene = new T.Scene(), pm = new T.PMREMGenerator(renderer);
+        envScene.background = new T.Color('#5a6068');
+        const room = new T.Mesh(new T.BoxGeometry(20, 8, 20), new T.MeshBasicMaterial({ color: '#7d848c', side: T.BackSide })); envScene.add(room);
+        const floor = new T.Mesh(new T.PlaneGeometry(20, 20), new T.MeshBasicMaterial({ color: '#4a4f55' })); floor.rotation.x = -Math.PI / 2; floor.position.y = -3.9; envScene.add(floor);
+        for (let i = -2; i <= 2; i++) { const l = new T.Mesh(new T.PlaneGeometry(2.6, .7), new T.MeshBasicMaterial({ color: '#ffffff' })); l.rotation.x = Math.PI / 2; l.position.set(i * 3.6, 3.9, 0); envScene.add(l); l.material.color.multiplyScalar(3); }
+        const warm = new T.Mesh(new T.PlaneGeometry(6, 3), new T.MeshBasicMaterial({ color: '#ffd8a0' })); warm.position.set(0, 1, -9.9); envScene.add(warm);
+        scene.environment = pm.fromScene(envScene, .02).texture;
+        scene.environmentIntensity = .55;
+        pm.dispose();
+      }
       // 玩家身上的光（迷霧之城的暗區用；平常強度 0，光源數量固定，不會重編材質）
       plight = new T.PointLight('#ffe6b0', 0, 9, 1.6); scene.add(plight);
       bindInput();

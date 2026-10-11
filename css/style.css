@@ -580,3 +580,6 @@ button:disabled { cursor: not-allowed; }
 .fog-hud.top .fh-row { margin-top: 3px; font-size: 11px; }
 .fog-hud.top .fh-btns { margin-top: 4px; }
 @media (orientation: portrait) and (pointer: coarse) { .panel { max-width: calc(100% - 128px); } }
+
+/* 畫面邊緣淡淡的暗角，讓 3D 場景比較有景深 */
+.scene::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse 85% 75% at 50% 52%, transparent 58%, rgba(0,0,0,.28) 100%); }
