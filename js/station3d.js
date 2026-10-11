@@ -749,6 +749,7 @@ const Station3D = (() => {
     furnish(L, g, night);
     decorate(L, g);
     if (typeof Decor !== 'undefined') try { Decor.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD }); } catch (e) { console.error('decor', e); }   // 額外裝飾（花、植栽、藝術品）
+    if (typeof MetroProps !== 'undefined') try { MetroProps.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD, sign }); } catch (e) { console.error('metroprops', e); }   // 台北捷運實際會有的設施
     for (const k of placesOf(L.stationId)) buildPlace(L, g, k);
     buildPlace(L, g, 'stamp');
     g.userData = { psd, layout: L };
