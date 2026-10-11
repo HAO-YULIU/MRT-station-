@@ -97,8 +97,10 @@ const FogSpecial = (() => {
     setTimeout(() => toast('<b>🚃 車廂裡</b><span>窗外沒有隧道，只有霧。坐在對面的人，全部低著頭。</span>'), 4000);
     await World.ride(tr, { toId: st, alias: { zh: g.zh, en: g.en }, duration: 24, onSpeed: v => Sound.setSpeed(v) });
     Sound.stopRumble();
+    if (FogCity.K !== K) return;   // 半路被重建（天亮、復活、回標題）就不要再接著到站
     r.ghostAt = dest; saveState();
     Sound.announce(`${g.zh}，到了。`, `${g.en}.`, { chime: true });
+    tr.fog = false;   // 重建本站迷霧時會清掉迷霧列車，玩家正站在這班車裡，先保留
     startStation(st, { key: 'fog' });
     tr.fog = true;
     setTimeout(async () => { await World.setDoors(tr, true); await sleep(20000); World.clearDoorway(tr); await World.setDoors(tr, false); if (!World.isInside(tr)) World.trainDepart(tr); }, 800);
@@ -230,7 +232,7 @@ const FogSpecial = (() => {
         const step = () => {
           const left = pairs.filter(p => !picked.includes(p));
           if (!left.length) {
-            ev.done = 1; saveState(); title('t_expo');
+            ev.done = 1; K.pend(ev.wrong ? 'good' : 'perfect', { title: '第零展區', items: { expo_piece: 1 }, gold: 2, col: [['expo', '第零展區收藏圖鑑']] }); saveState(); title('t_expo');
             return K.say(guide, `「最後一件展品，是你自己。」<br>導覽員把一個小小的玻璃盒交給你：裡面是一個縮小的你，站在${START_STATION}的月台上。<br>「這座展覽展示的不是城市的歷史，是你的。」`, [{ label: '收下', run: () => { Dialog.close(); K.done(ev.wrong ? 'good' : 'perfect', { title: '第零展區', items: { expo_piece: 1 }, gold: 2, col: [['expo', '第零展區收藏圖鑑']] }); } }]);
           }
           K.say(guide, `「最後一步：照時間的順序，介紹你的展覽。」<br><small>${picked.map(p => p.why).join(' → ') || '（從最早的開始）'}</small>`, FogEvents.shuffle(left, K.rnd).map(p => ({ label: p.why, run: () => { if (p !== sorted[picked.length]) { ev.wrong++; saveState(); K.hurt(12, '展區的燈全滅了一瞬間，有東西撞了你'); return Dialog.close(); } picked.push(p); step(); } })).concat(bye));
@@ -296,7 +298,7 @@ const FogSpecial = (() => {
       K.toast(ok ? `<b>${esc(n.name)}</b><span>「……對，就是這樣。」他的輪廓變清楚了。</span>` : `<b>${esc(n.name)}</b><span>「你在說謊。」他的臉模糊了。</span>`, ok ? '' : 'warn');
       if (ev.wrong >= 3 && !ev.over) { ev.over = 1; saveState(); return K.done('fail'); }
       if (Object.keys(ev.judged).length === use.length && !ev.over) {
-        ev.over = 1; saveState(); title('t_fogmemory');
+        ev.over = 1; K.pend(ev.wrong ? 'good' : 'perfect', { title: '每個人記得的你', gold: 3 }); saveState(); title('t_fogmemory');
         const rec = record();
         s.fogRecord = rec; s.inv.fog_record = 1; saveState();
         K.say({ name: '台北車站', role: '所有人的記憶' }, `所有人同時安靜下來，轉頭看著你。<br>「原來你是這樣的人。」<br>大廳的地上，出現了一本紅色的書：<b>迷霧之城玩家紀錄</b>。<br><small>${rec.split('\n').slice(0, 4).join('<br>')}……</small>`, [{ label: '收下', run: () => { Dialog.close(); K.done(ev.wrong ? 'good' : 'perfect', { title: '每個人記得的你', gold: 3 }); } }]);
@@ -355,7 +357,7 @@ const FogSpecial = (() => {
       } })));
     }
     function win() {
-      ev.over = 1; ev.won = 1; saveState(); title('t_twin');
+      ev.over = 1; ev.won = 1; K.pend(ev.wrong ? 'good' : 'perfect', { title: '真正的我', items: { twin_mirror: 1 }, gold: 2 }); saveState(); title('t_twin');
       K.say(tw, '另一個你看著你，表情一點一點崩落。「……原來，我只是你昨天的樣子。」它碎成了一面小鏡子，掉在地上。', [{ label: '撿起鏡子', run: () => { Dialog.close(); K.removeNpc(tw); K.done(ev.wrong ? 'good' : 'perfect', { title: '真正的我', items: { twin_mirror: 1 }, gold: 2 }); } }]);
     }
     function lose() {
@@ -434,6 +436,7 @@ const FogSpecial = (() => {
       K.onRevive = () => { restart(); };
       await World.ride(tr, { toId: K.station, duration: 240, onSpeed: v => Sound.setSpeed(v), skip: () => escaped });
       Sound.stopRumble();
+      if (FogCity.K !== K) return;   // 這段車程中途已經重來（復活、天亮）
       if (!escaped && !K.dead) {   // 開回淡水：失敗
         K.toast('<b>🚃 列車開回了淡水</b><span>你沒能逃出去。車門打開，車上的乘客又睡著了。</span>', 'warn');
         K.hurt(20, '列車到站時的劇烈晃動');

@@ -95,7 +95,7 @@ function updateHud() {
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
   $('#hudWhere').textContent = s.current ? s.current : '尚未出發';
-  $('#hudItems').textContent = `${Object.keys(s.items).length}/${LINE_ORDER.length}`;
+  $('#hudItems').textContent = `${Teleporter.total()}/6`;   // 主線寶物（傳送裝置零件）
   $('#hudQuests').textContent = Object.keys(s.quests.active).length;
 }
 
@@ -169,7 +169,7 @@ Game.onQuestChange = (what, id, o, k) => {
     const it = ITEMS['treasure_' + q.line];
     setTimeout(() => {
       if (!Quests.isActive('final') && !Quests.isDone('final')) Quests.accept('final');
-      toast(`<b>秀蔅：「是${it.name}！」</b><span>傳送裝置的${TELE_PARTS[q.line]}。帶去小碧潭月台放上去吧（不用等六個都找齊）。</span>`, 'level');
+      toast(`<b>秀蔅：「是${it.name}！」</b><span>傳送裝置的${TELE_PARTS[q.line]}。帶去小碧潭站裡的研究室放上去吧（不用等六個都找齊）。</span>`, 'level');
     }, 1500);
   }
   // 主線完成：揭曉這條線的結局
@@ -385,8 +385,12 @@ function enterGame(stationId) {
   World.spawnInConcourse();
   Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
   startStation(stationId);
-  // 開場：先收到委託（序章），再由秀蔅說明；一定要選板南線或文湖線
-  if (!Game.state.flags.prologue && !Game.state.flags.xiuyuIntro && !FogCity.locked()) {
+  opening();
+}
+// 開場：先收到委託（序章），再由秀蔅說明；一定要選板南線或文湖線（迷霧時段先跳過，天亮後再補）
+function opening() {
+  if (FogCity.locked()) return;
+  if (!Game.state.flags.prologue && !Game.state.flags.xiuyuIntro) {
     Teleporter.prologue().then(() => { const xy = NPCManager.list.find(n => n.id === 'xiuyu'); if (xy) { const p = World.player; xy.x = p.x - 1.6; xy.z = p.z; xy.y = p.y; setTimeout(() => Dialog.open(xy), 500); } });
   } else if (!Game.state.flags.xiuyuIntro) {
     const xy = NPCManager.list.find(n => n.id === 'xiuyu');
@@ -591,11 +595,14 @@ async function dwell(tr, dir, id, ride) {
   const mustAlight = ride && (isTerminal || ride.mustAlight || TaipeiTime.state() !== 'open');
   const t = MRT.label(dir.terminal, dir.line);
   const end = performance.now() + DWELL * 1000;
+  let prepped = false;
   // 停站：倒數，或（終點站）等玩家下車
   for (;;) {
     await sleep(250);
     if (!alive(id)) return;
     const inside = World.isInside(tr), left = Math.max(0, Math.ceil((end - performance.now()) / 1000));
+    // 玩家走進車廂：趁車門還開著，先把下一站建好（出發時不卡）
+    if (inside && !prepped && !mustAlight) { prepped = true; const nx = ride ? ride.stops[ride.idx] : dir.stops && dir.stops[0]; if (nx) setTimeout(() => { if (alive(id) && World.isInside(tr)) World.prepareRide(nx); }, 60); }
     const near = inside || (World.zone().P === tr.P);
     if (!near && ctl.doorHint === tr) { ctl.doorHint = false; setPart('pHint', ''); }
     if (near) {
@@ -666,6 +673,7 @@ async function doRide(tr, ride) {
   Sound.ambience(null);
   Sound.startRumble();
   await World.ride(tr, { toId: to, duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip, anomaly });
+  if (Game.ride !== ride) { Sound.stopRumble(); return; }   // 搭車途中回到標題：不再到站
   if (anomaly && MRT.undergroundOn(to, line)) {
     toast('<b>剛剛窗外……</b><span>好像有一座綠色的月台，站名寫著「霧」。</span>');
     questEvent({ kind: 'anomaly' });
@@ -1190,7 +1198,14 @@ function init() {
   $('#transferBtn').onclick = transferMenu;
   $('#viewBtn').onclick = () => { const n = World.cycleView(); toast(`<b>視角：${n}</b><span>拖曳畫面轉動、雙指或滾輪縮放；按 V 也可以切換</span>`); };
   $('#runBtn').onclick = () => { const on = !World.running; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
-  $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').textContent = on ? '音效 開' : '音效 關'; };
+  $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').innerHTML = `<i aria-hidden="true">${on ? '🔊' : '🔇'}</i>音效 ${on ? '開' : '關'}`; };
+  // 選單：手機、紀錄、音效、回到標題
+  const menu = $('#hudMenu'), menuBtn = $('#btnMenu');
+  const setMenu = open => { menu.hidden = !open; menuBtn.setAttribute('aria-expanded', open); $('.hud').classList.toggle('menu-open', open); };
+  menuBtn.onclick = e => { e.stopPropagation(); setMenu(menu.hidden); Sound.click(); };
+  menu.addEventListener('click', e => { if (e.target.closest('button')) setMenu(false); });
+  document.addEventListener('pointerdown', e => { if (!menu.hidden && !e.target.closest('#hudMenu, #btnMenu')) setMenu(false); });
+  $('#btnHome').onclick = () => { newSession(); Game.ride = null; Sound.stopRumble(); Dialog.close(); renderTitle(); showScreen('title'); };
   document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { $('#' + b.dataset.close).hidden = true; });
   $('#closedMap').onclick = openMap;
   $('#closedTitleBtn').onclick = () => { $('#closedOverlay').hidden = true; newSession(); Game.ride = null; renderTitle(); showScreen('title'); };

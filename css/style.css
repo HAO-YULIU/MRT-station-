@@ -366,6 +366,7 @@ button:disabled { cursor: not-allowed; }
 /* ── 對話 ── */
 .dialog { position: fixed; z-index: 18; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(560px, calc(100% - 24px)); }
 .dlg { padding: 14px 16px; border-radius: 14px; background: rgba(14,19,24,.95); box-shadow: 0 16px 40px rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.12); }
+.dialog .dlg { max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }   /* 橫屏／矮螢幕上長對話可以捲動，按鈕不會跑出畫面 */
 .dlg-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .dlg-head b { font-size: 18px; }
 .dlg-head span { color: var(--fog); font-size: 13px; }
@@ -592,4 +593,56 @@ button:disabled { cursor: not-allowed; }
   .item-card h2 { font-size: 21px; margin: 2px 0; }
   .item-card p, .item-card .pro-text { font-size: 13px; line-height: 1.5; }
   .item-card .letter { margin: 6px 0; padding: 8px 10px; line-height: 1.55; }
+}
+
+/* ── 上方列：只留地圖、任務、背包＋選單；介面整體放大 ── */
+.hud-btns button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; padding: 6px 16px; font-size: 16px; border-radius: 10px; position: relative; }
+.hud-btns button i, .hud-menu button i { font-style: normal; font-size: 18px; line-height: 1; }
+.hud-btns #hudQuests, .hud-btns #hudItems { font: 700 14px var(--latin); padding: 1px 7px; border-radius: 99px; background: rgba(255,255,255,.14); }
+#btnMenu[aria-expanded="true"] { background: var(--paper); color: var(--ink); }
+.menu-dot { position: absolute; top: 6px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: #ff4b5c; box-shadow: 0 0 0 2px rgba(10,14,18,.9); }
+.hud-menu { position: absolute; right: 12px; top: calc(100% + 6px); z-index: 12; display: grid; gap: 4px; min-width: 210px; padding: 8px; border-radius: 14px; background: rgba(14,19,24,.97); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+.hud-menu[hidden] { display: none; }
+.hud-menu button { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 14px; border-radius: 10px; border: 0; background: transparent; color: var(--paper); font-size: 17px; font-weight: 700; text-align: left; }
+.hud-menu button:hover, .hud-menu button:focus-visible { background: rgba(255,255,255,.1); }
+.hud-menu #hudPhone:not(:empty) { margin-left: auto; padding: 1px 8px; border-radius: 99px; background: #e0283a; font: 700 13px var(--latin); }
+.hud-me b { font-size: 18px; }
+.hud-me small { font-size: 14px; }
+.hud-avatar { width: 50px; height: 50px; }
+.hud-time b { font-size: 28px; }
+.hud-stats { font-size: 14px; }
+.mini { font-size: 15px; }
+.mini-title b { font-size: 19px; }
+.mini-sub { font-size: 14px; }
+.mini-row b { font-size: 17px; }
+.mini-hint { font-size: 14px; }
+.dlg-head b { font-size: 20px; }
+.dlg-head span { font-size: 14px; }
+.dlg-text { font-size: 17px; }
+.dlg-btns .btn.small { min-height: 44px; padding: 8px 16px; font-size: 15px; }
+.toast { font-size: 15px; }
+.toast b { font-size: 16px; }
+.toast span { font-size: 14px; }
+.view-btn { font-size: 15px; padding: 8px 14px; }
+@media (max-width: 760px) {
+  .hud-btns button { min-height: 50px; padding: 4px 6px; font-size: 16px; flex-direction: column; gap: 2px; }
+  .hud-btns button i { font-size: 20px; }
+  .hud-btns #hudQuests, .hud-btns #hudItems { position: absolute; top: 3px; right: 6px; font-size: 12px; padding: 0 6px; background: #2f6b4b; }
+  .hud-menu { right: 8px; left: auto; }
+}
+@media (pointer: coarse) {
+  .mini { font-size: 14px; }
+  .mini-title b { font-size: 18px; }
+  .action-btn { min-height: 84px; min-width: 132px; font-size: 20px; }
+  .run-btn { font-size: 21px; }
+}
+
+.hud.menu-open { z-index: 14; }   /* 選單打開時蓋在視角、轉乘按鈕上面 */
+@media (max-height: 480px) and (min-width: 761px) {   /* 手機橫向：上方列縮短，四顆按鈕放得下 */
+  .hud { gap: 10px; padding-top: calc(6px + env(safe-area-inset-top)); padding-bottom: 6px; }
+  .hud-avatar { width: 40px; height: 40px; }
+  .hud-me b { font-size: 16px; } .hud-me small { font-size: 12px; }
+  .hud-time b { font-size: 22px; }
+  .hud-btns button { min-height: 42px; padding: 4px 10px; font-size: 15px; gap: 4px; }
+  .hud-btns button i { font-size: 16px; }
 }

@@ -48,7 +48,16 @@ const World = (() => {
   }
   const night = () => TaipeiTime.sky() === 'night';
 
-  let loadSeq = 0;   // 每次載入車站 +1；搭車中途被換場（例如 06:00）時，搭乘流程就不再對齊
+  let loadSeq = 0;
+  let pre = null;   // 預先建好的下一站
+  // 分幀上傳貼圖（每幀 4 張），避免第一次看到新車站時卡頓
+  const warmQ = [];
+  function warm(obj) {
+    if (!obj || !renderer) return;
+    const seen = new Set();
+    obj.traverse(o => { if (o.material) for (const m of [].concat(o.material)) for (const k of ['map', 'emissiveMap']) if (m[k] && !seen.has(m[k])) { seen.add(m[k]); warmQ.push(m[k]); } });
+  }
+  function warmStep() { for (let i = 0; i < 4 && warmQ.length; i++) { const t = warmQ.shift(); try { renderer.initTexture(t); } catch (e) { /* 舊瀏覽器沒有 initTexture */ } } }   // 每次載入車站 +1；搭車中途被換場（例如 06:00）時，搭乘流程就不再對齊
   function dispose(obj) {
     if (!obj) return;
     obj.traverse(o => {
@@ -311,8 +320,15 @@ const World = (() => {
     let py = ty + Math.sin(pitch) * dist;
     let pz = tz + Math.cos(cam.yaw) * Math.cos(pitch) * dist;
     if (inTrain) {
-      const tr = z.train, ctx = tr.P.x + tr.x, ctz = tr.P.z + tr.side * S.TRACK;
-      px = Math.min(ctx + 30, Math.max(ctx - 30, px)); pz = Math.min(ctz + 1.3, Math.max(ctz - 1.3, pz)); py = Math.min(player.y + 2.15, py);
+      // 車廂裡：沿著視線把鏡頭拉近（不要被推到牆邊、整個畫面貼著牆），太窄就從頭頂斜看
+      const tr = z.train, ctx = tr.P.x + tr.x, ctz = tr.P.z + tr.side * S.TRACK, lim = 1.25;
+      const dzc = pz - tz;
+      if (Math.abs(pz - ctz) > lim && Math.abs(dzc) > 1e-3) {
+        const k = Math.max(0, Math.min(1, (Math.sign(dzc) * lim + ctz - tz) / dzc));
+        px = tx + (px - tx) * k; pz = tz + dzc * k; py = ty + (py - ty) * k;
+      }
+      px = Math.min(ctx + 30, Math.max(ctx - 30, px)); pz = Math.min(ctz + lim, Math.max(ctz - lim, pz)); py = Math.min(player.y + 2.15, py);
+      if (Math.hypot(px - tx, pz - tz) < .9) { py = player.y + 2.1; const b = Math.atan2(px - tx, pz - tz); px = tx + Math.sin(b) * .9; pz = Math.min(ctz + lim, Math.max(ctz - lim, tz + Math.cos(b) * .9)); }
     } else if (z.kind === 'platform') {
       pz = Math.min(z.P.z + 6.5, Math.max(z.P.z - 6.5, pz)); py = Math.min(player.y + (z.P.under ? 3.2 : 3.6), py);
     } else if (z.room) {   // 在房間裡：鏡頭拉近、不穿牆；靠近門口時鏡頭可以退到門外（沿著門洞），太擠就改從上面往下看
@@ -354,6 +370,7 @@ const World = (() => {
     } else camera.lookAt(tx, ty, tz);
     if (plight && plight.intensity > 0) plight.position.set(player.x + Math.sin(player.face) * .4, player.y + 1.7, player.z + Math.cos(player.face) * .4);
     for (const fn of tickers) fn(dt, now);
+    if (warmQ.length) warmStep();
     updateActionBtn();
     renderer.render(scene, camera);
   }
@@ -522,6 +539,7 @@ const World = (() => {
     // 載入車站（整座：大廳＋各線月台）
     loadStation(stationId, alias = null) {
       loadSeq++; riding = null; shake = 0;
+      if (pre) { dispose(pre.group); dispose(pre.sur); pre = null; }
       for (const tr of [...trains]) this.removeTrain(tr);
       for (const grp of [stationGroup, segGroup, nextGroup, surround]) if (grp) { env.remove(grp); dispose(grp); }
       segGroup = nextGroup = null;
@@ -581,11 +599,18 @@ const World = (() => {
       const tx0 = P.x + tr.x, tz = P.z + tr.side * S.TRACK, ty = P.y;
       for (const o of [...trains]) if (o !== tr) this.removeTrain(o);
       riding = tr;
-      const nextL = S.layout(toId);
-      nextL.alias = alias;
+      // 下一站：上車時已經預先建好（prepareRide）就直接用，出發那一刻不會卡
+      const key = toId + '|' + (alias ? alias.zh : '') + '|' + TaipeiTime.sky();
+      let nextL, nextSur;
+      if (pre && pre.key === key) { nextL = pre.layout; nextGroup = pre.group; nextSur = pre.sur; pre = null; }
+      else {
+        if (pre) { dispose(pre.group); dispose(pre.sur); pre = null; }
+        nextL = S.layout(toId); nextL.alias = alias;
+        S.setAlias(alias); nextGroup = S.build(nextL, TaipeiTime.sky()); S.setAlias(null);
+        nextSur = S.surroundings(nextL, night());
+        warm(nextGroup); warm(nextSur);
+      }
       const P2 = nextL.platforms.find(p => p.line === tr.line);
-      S.setAlias(alias); nextGroup = S.build(nextL, TaipeiTime.sky()); S.setAlias(null);
-      const nextSur = S.surroundings(nextL, night());
       const off = new T.Vector3(tx0 + travel * D - P2.x, ty - P2.y, tz - (P2.z + tr.side * S.TRACK));
       nextGroup.position.copy(off); nextSur.position.copy(off);
       segGroup = S.segment(tx0 + travel * 38, tx0 + travel * (D - 38), ty, tz, P.under, P2.under, tr.line, toId.charCodeAt(0) + toId.length * 17, night(), anomaly);
@@ -637,6 +662,17 @@ const World = (() => {
       return layout;
     },
     get riding() { return riding; },
+    // 預先建好下一站（玩家走進車廂、車門還開著時呼叫），並分好幾幀把貼圖送進顯示卡
+    prepareRide(toId, alias = null) {
+      const key = toId + '|' + (alias ? alias.zh : '') + '|' + TaipeiTime.sky();
+      if (pre && pre.key === key) return;
+      if (pre) { dispose(pre.group); dispose(pre.sur); }
+      const layout2 = S.layout(toId); layout2.alias = alias;
+      S.setAlias(alias); const group = S.build(layout2, TaipeiTime.sky()); S.setAlias(null);
+      const sur = S.surroundings(layout2, night());
+      pre = { key, layout: layout2, group, sur };
+      warm(group); warm(sur);
+    },
     setLcd: S.drawLcd,
     setStrip: S.drawStrip,
     setLed(k, side, rows) {

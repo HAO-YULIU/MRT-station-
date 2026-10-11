@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@700;900&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/fx.css">
 </head>
 <body data-screen="title">
 
@@ -48,13 +49,17 @@
         <span class="hud-stats" id="hudStats"></span>
       </div>
       <nav class="hud-btns">
-        <button id="btnMap">路網圖</button>
-        <button id="btnQuest">任務 <span id="hudQuests">0</span></button>
-        <button id="btnRecord">紀錄</button>
-        <button id="btnPhone">手機 <span id="hudPhone"></span></button>
-        <button id="btnBag">背包 <span id="hudItems">0/6</span></button>
-        <button id="btnSound" aria-pressed="true">音效 開</button>
+        <button id="btnMap"><i aria-hidden="true">🗺️</i>地圖</button>
+        <button id="btnQuest"><i aria-hidden="true">📋</i>任務 <span id="hudQuests">0</span></button>
+        <button id="btnBag"><i aria-hidden="true">🎒</i>背包 <span id="hudItems">0/6</span></button>
+        <button id="btnMenu" aria-haspopup="true" aria-expanded="false"><i aria-hidden="true">☰</i>選單<span class="menu-dot" id="menuDot" hidden></span></button>
       </nav>
+      <div class="hud-menu" id="hudMenu" hidden role="menu">
+        <button id="btnPhone" role="menuitem"><i aria-hidden="true">📱</i>手機 <span id="hudPhone"></span></button>
+        <button id="btnRecord" role="menuitem"><i aria-hidden="true">📖</i>紀錄</button>
+        <button id="btnSound" role="menuitem" aria-pressed="true"><i aria-hidden="true">🔊</i>音效 開</button>
+        <button id="btnHome" role="menuitem"><i aria-hidden="true">🏠</i>回到標題</button>
+      </div>
     </header>
     <div class="panel" id="panel"></div>
     <button class="action-btn" id="actionBtn" hidden></button>
@@ -157,6 +162,8 @@
   <script src="js/human3d.js"></script>
   <script src="js/trains.js"></script>
   <script src="js/station3d.js"></script>
+  <script src="js/decor.js"></script>
+  <script src="js/metroprops.js"></script>
   <script src="js/world3d.js"></script>
   <script src="js/npcs.js"></script>
   <script src="js/crowd.js"></script>
@@ -178,6 +185,7 @@
   <script src="js/fogcontent2.js"></script>
   <script src="js/fogspecial.js"></script>
   <script src="js/map3d.js"></script>
+  <script src="js/fx.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

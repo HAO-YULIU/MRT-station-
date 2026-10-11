@@ -279,6 +279,7 @@ const FogCity = (() => {
     r.dead = false; r.hp = paid ? 60 : FOG_MAX_HP; saveState(); updateHud();
     closeOverlay(); World.setInput(true);
     if (K && K.onRevive) K.onRevive(); else respawnSafe();
+    if (K && r.pend && !r.result) K.done(r.pend.result, r.pend);   // 倒下時對話被關掉，結果補上
     for (const c of chasers) { c.sleep = 4; c.x = c.home.x; c.y = c.home.y; c.z = c.home.z; }
     hurtCD = performance.now() + 3000; hud();
   }
@@ -713,8 +714,8 @@ const FogCity = (() => {
     Achievements.check();
     return { r, sc, rank, reward, judged, first };
   }
-  function showResult(res) {
-    if (!res) return;
+  function showResult(res, after) {
+    if (!res) { if (after) after(); return; }
     const { r, sc, rank, reward, judged } = res;
     const unsolved = !r.result || r.result === 'fail';
     overlay(`<div class="fog-card result"><p class="fog-kicker">清晨 06:00・迷霧之城結算</p>
@@ -728,7 +729,7 @@ const FogCity = (() => {
       <p class="fog-sub">報酬：NT$ ${reward.money}、經驗 ${reward.xp}、調查經驗 ${reward.ixp}${reward.gold ? `、🪙 黃金 ${reward.gold}` : ''}${res.first ? '（第一次解開本站事件 +1）' : ''}</p>
       ${unsolved && r.clues.length ? `<p class="fog-sub">未解的線索已記錄在「紀錄 → 迷霧之城」，下一次霧夜可以接著調查。</p>` : ''}
       <div class="fog-btns"><button class="btn primary" id="fogOk">迎接早晨</button></div></div>`);
-    $('#fogOk').onclick = closeOverlay;
+    $('#fogOk').onclick = () => { closeOverlay(); if (after) after(); };
   }
   // 06:00：迷霧之城消失
   function dawn() {
@@ -743,7 +744,9 @@ const FogCity = (() => {
       World.loadStation(st); World.spawnInConcourse();
       startStation(st);
     }
-    if (res) setTimeout(() => showResult(res), 600);
+    // 在迷霧時段開新遊戲的玩家：天亮後補上開場委託
+    const after = was && typeof opening === 'function' ? opening : null;
+    setTimeout(() => showResult(res, after), 600);
   }
   // 開遊戲時：上一晚還沒結算的（玩家沒留到 06:00）
   let pendingResult = null;
@@ -762,6 +765,7 @@ const FogCity = (() => {
     K = null;
     if (group) { World.scene.remove(group); group = null; }
     for (const tr of [...World.trains]) if (tr.fog) World.removeTrain(tr);
+    if (lampOn) World.setPlayerLight(0);
     props = []; npcs = []; chasers = []; timers = []; tickers = []; marks = []; exitProp = null; lampOn = false; lastPhase = ''; flickers = []; styledGroup = null; hintText = '';
   }
   // startStation 在迷霧時段呼叫：生成本站的迷霧
@@ -783,6 +787,7 @@ const FogCity = (() => {
       const key = r.ghostAt ? 'ghost_station' : eventKey(stationId);
       K = kit(stationId, r, rnd);
       try { FogEvents.start(key, K); } catch (e) { console.error('fog event', key, e); }
+      if (r.pend && !r.result) K.done(r.pend.result, r.pend);
       if (!r.ghostAt && typeof Kaicheng !== 'undefined') Kaicheng.fogSpawn(stationId);
       if (phase() === 'fade' && !r.result) fadeExit();
     } else spawnAmbient(stationId, rnd);
@@ -830,7 +835,7 @@ const FogCity = (() => {
       // 事件結束：result = perfect / good / bad / fail；出口門出現（或直接離開）
       done(result, o = {}) {
         if (r.result && r.result !== 'fail') return;
-        r.result = result; saveState();
+        r.result = result; r.pend = null; saveState();
         if (o.gold) r.bonusGold = (r.bonusGold || 0) + o.gold;
         if (o.items) for (const [id, n] of Object.entries(o.items)) S().inv[id] = (S().inv[id] || 0) + n;
         if (o.col) for (const [cat, id] of o.col) { const c = (S().fogCol = S().fogCol || {}); (c[cat] = c[cat] || {})[id] = r.night; }
@@ -842,6 +847,8 @@ const FogCity = (() => {
         else toast('<b>🌫 失敗了</b><span>霧沒有放過這一站。也許 05:30 霧散的時候，還找得到出去的門。</span>', 'warn');
         Achievements.check();
       },
+      // 事件已經解開、但結果要等對話按鈕才記錄：先存起來，萬一中途重新整理或倒下，重建時補上
+      pend(result, o = {}) { if (r.result) return; r.pend = { result, title: o.title, gold: o.gold, items: o.items, col: o.col }; saveState(); },
       escape: how => escape(how),
       exitDoor,
       get dead() { return r.dead; },
