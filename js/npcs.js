@@ -395,6 +395,7 @@ const NPCManager = (() => {
       const look = { skin: SKINS[(rnd() * SKINS.length) | 0], hairColor: HAIRS[(rnd() * HAIRS.length) | 0], height: .94 + rnd() * .12, ...C.gen(rnd) };
       look.hair = look.girl ? ['long', 'bob', 'bun'][(rnd() * 3) | 0] : ['short', 'mush', 'short'][(rnd() * 3) | 0];
       if (look.old) look.hairColor = '#cfcfcf';
+      if (['staff', 'police', 'cleaner', 'delivery', 'office', 'student', 'elder', 'kid'].includes(type)) look.outfit = type;   // 直接告訴人物模型身分（制服）
       if (typeof Festival !== 'undefined') Festival.dress(look, rnd);   // 萬聖節：路人變裝
       if (look.foreign) { look.skin = ['#f2d6c8', '#f5dccf', '#8a5a40'][(rnd() * 3) | 0]; look.hairColor = ['#c8a060', '#8a5a30', '#1a1a1a'][(rnd() * 3) | 0]; }
       if (look.girl && type !== 'student' && type !== 'kid' && rnd() < .4) look.skirt = true;
