@@ -188,7 +188,8 @@ function openQuests() {
   $('#questCount').textContent = `支線 ${Quests.sideCount()} / ${SIDE_LIMIT}`;
   $('#questBody').innerHTML = `
     ${ids.length ? `<ul class="quests">${ids.map(card).join('')}</ul>` : '<p class="empty-q">目前沒有任務。到處和人說話，看看誰需要幫忙。</p>'}
-    ${done.length ? `<h4 class="q-done-h">已完成</h4><ul class="q-done">${done.map(id => `<li>${QUESTS[id].title}</li>`).join('')}</ul>` : ''}`;
+    ${done.length ? `<h4 class="q-done-h">已完成</h4><ul class="q-done">${done.map(id => `<li>${QUESTS[id].title}</li>`).join('')}</ul>` : ''}
+    ${Achievements.html()}`;
   $('#questBody').onclick = e => { const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
   $('#questLog').hidden = false;
 }
@@ -311,7 +312,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); });
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -378,6 +379,7 @@ function startStation(stationId, carry) {
   Pickups.spawn(stationId);
   Challenges.spawn(stationId);
   Secrets.spawn(stationId);
+  Achievements.spawn(stationId);
   arriveChecks(stationId);
   Sound.ambience(World.layout.allUnder ? 'underground' : 'elevated');
   Game.ctlTimer = setInterval(tickStation, 400);
@@ -487,7 +489,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), puzzleInteraction, npcInteraction, spotInteraction, pickupInteraction, secretInteraction, seatInteraction, dropInteraction);
+  list.push(exitInteraction(), puzzleInteraction, npcInteraction, spotInteraction, pickupInteraction, collectInteraction, secretInteraction, seatInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -644,10 +646,10 @@ const dropInteraction = {
 // 查看告示牌、塗鴉、路線圖
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
-  cafe: '咖啡店', stage: '街頭藝人表演區', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
+  cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
   timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
-const SPOT_VERB = { cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
+const SPOT_VERB = { stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
@@ -663,8 +665,9 @@ const spotInteraction = {
     for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
     if (typeof Achievements !== 'undefined') Achievements.onInspect(sp, st);
     if (SideQuests.onInspect(sp.kind, st)) return;   // 公告欄、路線圖上的委託
+    if (Achievements.spot(sp)) return;              // 紀念章、舊地圖、磁磚、早餐攤
     if (FACILITY[sp.kind]) return FACILITY[sp.kind](sp, st);
-    Dialog.info(SPOT_NAME[sp.kind], spotText(sp, st, done.length > 0));
+    Dialog.info(SPOT_NAME[sp.kind], spotText(sp, st, done.length > 0) + (sp.kind === 'notice' ? Achievements.noticeExtra(st) : ''));
   },
 };
 // 車站設施
@@ -831,6 +834,13 @@ const secretInteraction = {
   run: () => { const s = Secrets.near(World.player); if (s) Secrets.look(s); },
 };
 
+// 收集品（舊車票、照片碎片、紙條……）與會被收走的失物
+const collectInteraction = {
+  get id() { const it = Achievements.near(World.player); return it ? 'col:' + it.kind : 'col'; },
+  get label() { const it = Achievements.near(World.player); return it ? (it.kind === 'drop' ? '撿起：別人的包包' : `撿起：${COLLECT[it.kind].name}`) : '撿起'; },
+  when: p => !Dialog.with && !!Achievements.near(p),
+  run: () => { const it = Achievements.near(World.player); if (it) Achievements.take(it); },
+};
 // 主線謎題
 const puzzleInteraction = {
   get id() { const e = Challenges.near(World.player); return e ? 'ch:' + e.type + (e.line || '') + (e.i ?? '') : 'ch'; },

@@ -242,14 +242,17 @@ const Station3D = (() => {
   };
 
   // 任務需要的特別場所：咖啡店（市政府）、街頭表演舞台（東門）；收藏品商人的攤車由 STATION_EXTRAS 決定在哪一站
-  const PLACES = { 市政府: ['cafe'], 東門: ['stage'] };
+  const PLACES = { 市政府: ['cafe'], 東門: ['stage'], 圓山: ['oldmap'], 國父紀念館: ['tiles'] };
   const placesOf = id => (PLACES[id] || []).concat(typeof STATION_EXTRAS === 'function' ? STATION_EXTRAS(id) : []);
   // 場所的位置（NPC 站的位置也用這個）
   function placeAt(L, kind) {
     const C = L.concourse, U = L.unpaid;
     if (kind === 'cafe') return { x: C.x1 - .65, y: 0, z: C.z0 + 14, buy: { x: C.x1 - 2.6, z: C.z0 + 14 } };
     if (kind === 'stage') return { x: C.x0 + 3, y: 0, z: C.z0 + 13.5 };
-    if (kind === 'stall') return { x: C.x1 - 3.4, y: 0, z: C.z0 + 18.5 };
+    if (kind === 'stall' || kind === 'breakfast') return { x: C.x1 - 3.4, y: 0, z: C.z0 + 18.5 };
+    if (kind === 'oldmap') return { x: C.x0 + .1, y: 0, z: C.z0 + 16 };
+    if (kind === 'tiles') return { x: C.x1 - .1, y: 0, z: C.z0 + 16 };
+    if (kind === 'stamp') return { x: U.x1 - .6, y: 0, z: U.z0 + 1.0 };
     if (kind === 'shop') return { x: U.x0 + 1.9, y: 0, z: U.z0 + 7 };
     return null;
   }
@@ -303,7 +306,15 @@ const Station3D = (() => {
     if (SHOPS[stationId]) spots.push({ kind: 'shop', x: unpaid.x0 + 2, y: 0, z: unpaid.z0 + 7 });
     if (GRAFFITI.includes(stationId)) spots.push({ kind: 'graffiti', x: concourse.x1 - 4, y: 0, z: concourse.z0 + .9 });
     const L0 = { concourse, unpaid };
-    for (const k of placesOf(stationId)) { const p = placeAt(L0, k); if (k === 'cafe') spots.push({ kind: 'cafe', x: p.buy.x, y: 0, z: p.buy.z }); if (k === 'stage') spots.push({ kind: 'stage', x: p.x + 1.6, y: 0, z: p.z }); }
+    for (const k of placesOf(stationId)) {
+      const p = placeAt(L0, k);
+      if (k === 'cafe') spots.push({ kind: 'cafe', x: p.buy.x, y: 0, z: p.buy.z });
+      if (k === 'stage') spots.push({ kind: 'stage', x: p.x + 1.6, y: 0, z: p.z });
+      if (k === 'breakfast') spots.push({ kind: 'breakfast', x: p.x, y: 0, z: p.z + 1.3 });
+      if (k === 'oldmap') spots.push({ kind: 'oldmap', x: p.x + 1.2, y: 0, z: p.z });
+      if (k === 'tiles') spots.push({ kind: 'tiles', x: p.x - 1.2, y: 0, z: p.z });
+    }
+    { const p = placeAt(L0, 'stamp'); spots.push({ kind: 'stamp', x: p.x - .9, y: 0, z: p.z }); }   // 每站服務台旁的紀念章
     for (const P of platforms) for (const s of [-1, 1]) spots.push({ kind: 'map', x: P.x, y: P.y, z: P.z + s * .9, line: P.line });
     // 其他車站設施（可以查看）
     const C = concourse, U = unpaid, big = !!SHOPS[stationId];
@@ -551,6 +562,7 @@ const Station3D = (() => {
     furnish(L, g, night);
     decorate(L, g);
     for (const k of placesOf(L.stationId)) buildPlace(L, g, k);
+    buildPlace(L, g, 'stamp');
     g.userData = { psd, layout: L };
     mergeStatic(g);
     return g;
@@ -646,6 +658,35 @@ const Station3D = (() => {
       box(1.0, .12, .36, M('#1d1d20', { r: .6 }), p.x + .2, .22, p.z + .8, g);  // 吉他盒
       box(.9, .02, .3, M('#c4162a', { r: .9 }), p.x + .2, .29, p.z + .8, g);
       sign(plainSign('街頭藝人表演區', 'Street performance', '#e07a3a', '#fff'), 2.2, .5, p.x, 2.6, p.z - 1.2, g);
+    }
+    if (kind === 'stamp') {   // 紀念章桌
+      box(.6, .9, .5, wood, p.x, .45, p.z, g); solid(p.x, p.z, .6, .5);
+      box(.18, .12, .18, M('#c4162a', { r: .5 }), p.x - .1, .96, p.z, g); box(.16, .02, .12, M('#1c2126'), p.x + .14, .91, p.z, g);
+      sign(plainSign('紀念章', 'Station stamp', '#c4162a', '#fff'), 1.1, .28, p.x, 1.55, p.z, g, -Math.PI / 2);
+    }
+    if (kind === 'breakfast') {   // 早餐推車（只有早上）
+      box(1.8, .9, .9, M('#e8e4dc'), p.x, .45, p.z, g); solid(p.x, p.z, 1.8, .9);
+      for (let i = 0; i < 3; i++) { const st = new T.Mesh(new T.CylinderGeometry(.22, .22, .25, 14), M('#c8cdd2', { m: .6 })); st.position.set(p.x - .5 + i * .5, 1.03, p.z); g.add(st); }
+      box(2.0, .05, 1.1, M('#e07a3a', { r: .8 }), p.x, 2.4, p.z, g); box(.04, 1.5, .04, dark, p.x - .9, 1.65, p.z - .4, g); box(.04, 1.5, .04, dark, p.x + .9, 1.65, p.z - .4, g);
+      sign(plainSign('阿桃早餐', '只賣到上午 10 點', '#e07a3a', '#fff'), 1.8, .45, p.x, 2.15, p.z + .6, g);
+    }
+    if (kind === 'oldmap') {   // 圓山懷舊展：1987 年的舊路網圖
+      const t = canvasTex(512, 320, x => {
+        x.fillStyle = '#e9dcc0'; x.fillRect(0, 0, 512, 320); x.strokeStyle = '#8a6a3a'; x.lineWidth = 6; x.strokeRect(6, 6, 500, 308);
+        x.fillStyle = '#5a3a1a'; x.font = 'bold 26px "Noto Serif TC", serif'; x.fillText('臺北鐵路淡水線　1987', 24, 44);
+        x.strokeStyle = '#7a3a2a'; x.lineWidth = 8; x.beginPath(); x.moveTo(60, 270); x.lineTo(200, 200); x.lineTo(300, 150); x.lineTo(450, 70); x.stroke();
+        [['臺北', 60, 270], ['圓山', 200, 200], ['？', 250, 175], ['士林', 300, 150], ['北投', 380, 110], ['淡水', 450, 70]].forEach(([n, a, b]) => { x.fillStyle = '#fff'; x.beginPath(); x.arc(a, b, 9, 0, 7); x.fill(); x.stroke(); x.fillStyle = '#3a2a1a'; x.font = '20px "Noto Serif TC", serif'; x.fillText(n, a + 12, b + 24); });
+      });
+      const m = plane(3, 1.9, M('#ffffff', { map: t }), g); m.position.set(p.x + .03, 1.8, p.z); m.rotation.y = Math.PI / 2;
+      box(.1, 2.1, 3.2, M('#5a3a2a'), p.x, 1.8, p.z, g);
+      sign(plainSign('懷舊展　舊路網圖', 'Old map exhibition', '#5a3a2a', '#fff'), 2, .4, p.x + .12, 3.1, p.z, g, Math.PI / 2);
+    }
+    if (kind === 'tiles') {   // 國父紀念館：牆上的四塊圖案磁磚
+      ['🌙', '☀️', '🌫️', '⭐'].forEach((ic, i) => {
+        const t = canvasTex(128, 128, x => { x.fillStyle = ['#2a3a5a', '#f2c200', '#c8ccd8', '#1c2126'][i]; x.fillRect(0, 0, 128, 128); x.font = '72px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(ic, 64, 70); });
+        const m = plane(.7, .7, M('#ffffff', { map: t }), g); m.position.set(p.x - .03, 1.6, p.z - 1.2 + i * .8); m.rotation.y = -Math.PI / 2;
+      });
+      sign(plainSign('磁磚壁畫', '「從夜晚到早晨」', '#23272b', '#fff'), 2.2, .45, p.x - .1, 2.4, p.z, g, -Math.PI / 2);
     }
     if (kind === 'stall') {
       box(1.8, .9, .9, wood, p.x, .45, p.z, g); solid(p.x, p.z, 1.8, .9);   // 攤車

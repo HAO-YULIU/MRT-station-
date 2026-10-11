@@ -513,6 +513,7 @@ const Dialog = (() => {
       return show(npc, pick(pool), [{ label: '再聊一下', run: () => open(npc) }, { label: '再見', run: close }]);
     }
     const s = Game.state, f = s.friends[npc.id] || 0;
+    if (typeof Achievements !== 'undefined') Achievements.onTalk(npc.id);
     // 需要做選擇或打工的任務步驟
     const want = Quests.wants('decide', g => g.npc === npc.id) || Quests.wants('work', g => g.npc === npc.id);
     if (want) {
@@ -1066,7 +1067,7 @@ const Challenges = (() => {
     if (e.type === 'note' && c.kind === 'passage') return say({ line: e.line, station: e.station, role: '秀蔅留下的紙條' }, c.ask);
     if (e.type === 'hidden') {
       return say({ name: '……', role: title(e.line, e.station) }, '你把手貼上牆面。磁磚像霧一樣慢慢散開，後面是一條很窄的通道，盡頭的牆上用粉筆寫著：「你找到了。下一站見。——S」', [
-        { label: '走進去看看', primary: true, run: () => { Dialog.close(); solve(e.line, e.station, { xp: 40, money: 50 }, '找到神秘通道！'); } },
+        { label: '走進去看看', primary: true, run: () => { Dialog.close(); if (typeof Achievements !== 'undefined') Achievements.onPassage(); solve(e.line, e.station, { xp: 40, money: 50 }, '找到神秘通道！'); } },
       ]);
     }
     if (e.type === 'coin') {
@@ -1228,6 +1229,7 @@ const Secrets = (() => {
       Game.reward(r, '發現：' + s.sc.name);
       extra = `<br><small>（這是你在 ${Object.keys(st.flags.found).length} 個地方的發現）</small>`;
       if (s.sc.money || s.sc.item) { World.scene.remove(s.mesh); list = list.filter(x => x !== s); }
+      if (typeof Achievements !== 'undefined') Achievements.onSecret(s.station, list.filter(x => x.station === s.station).every(x => st.flags.found[x.station + ':' + x.sc.id]));
     }
     saveState();
     Dialog.info(s.sc.name, s.sc.text + extra);
