@@ -51,6 +51,7 @@
         <button id="btnMap">路網圖</button>
         <button id="btnQuest">任務 <span id="hudQuests">0</span></button>
         <button id="btnRecord">紀錄</button>
+        <button id="btnPhone">手機 <span id="hudPhone"></span></button>
         <button id="btnBag">背包 <span id="hudItems">0/6</span></button>
         <button id="btnSound" aria-pressed="true">音效 開</button>
       </nav>
@@ -99,6 +100,12 @@
   </div>
 
   <!-- 背包 -->
+  <div class="phone-wrap" id="phone" hidden>
+    <div class="phone" role="dialog" aria-modal="true" aria-label="手機">
+      <button class="x phone-x" id="phoneClose" aria-label="關閉">×</button>
+      <div id="phoneBody"></div>
+    </div>
+  </div>
   <div class="modal" id="bag" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
       <header><h3 id="bagTitle">背包</h3><button class="x" data-close="bag" aria-label="關閉">×</button></header>
@@ -149,6 +156,8 @@
   <script src="js/progress.js"></script>
   <script src="js/gold.js"></script>
   <script src="js/life.js"></script>
+  <script src="js/daily.js"></script>
+  <script src="js/phone.js"></script>
   <script src="js/map3d.js"></script>
   <script src="js/game.js"></script>
 </body>

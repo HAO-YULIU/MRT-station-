@@ -630,6 +630,7 @@ const Dialog = (() => {
       const full = q.type === 'side' && Quests.sideCount() >= SIDE_LIMIT;
       btns.push({ label: full ? `支線已滿（${SIDE_LIMIT}/${SIDE_LIMIT}）` : q.limit ? `限時任務：${q.title}（${q.limit} 分鐘）` : `接任務：${q.title}`, primary: !full, disabled: full, run: () => { Quests.accept(qid); onAccept(qid); menu(npc, q.desc); } });
     }
+    if (typeof NPC_MENU_HOOKS !== 'undefined') for (const h of NPC_MENU_HOOKS) btns.push(...h(npc));
     btns.push({ label: '聊天', run: () => chat(npc) });
     btns.push({ label: '送禮', run: () => gift(npc) });
     btns.push({ label: '再見', run: close });
@@ -909,7 +910,7 @@ const Challenges = (() => {
     }
   }
   function storyReward(line, so, c, ev) {
-    if (ev && !so.ev[ev.id]) { so.ev[ev.id] = true; toast(`<b>取得證據：${ev.icon} ${ev.name}</b><span>${ev.desc}</span>`, 'level'); }
+    if (ev && !so.ev[ev.id]) { so.ev[ev.id] = true; toast(`<b>取得證據：${ev.icon} ${ev.name}</b><span>${ev.desc}</span>`, 'level'); Investigate.add(25, '取得關鍵證據', true); }
   }
   // 完成一章：記錄證據、下一章，並完成這一站
   function finishChapter(line, station, i, ev, msg) {
@@ -921,7 +922,7 @@ const Challenges = (() => {
     saveState();
     const [m, x] = MAIN_REWARD[STORY[line].chapters[i].kind] || [200, 110];
     Progress.addRep(station, 5);
-    solve(line, station, { money: m, xp: x }, msg || `劇情：第 ${i + 1} 章`);
+    solve(line, station, { money: m, xp: x, ixp: 20 }, msg || `劇情：第 ${i + 1} 章`);
     if (first) setTimeout(() => toast('<b>📓 第一件關鍵證據</b><span>證據和人物都記在「紀錄」裡了</span>', 'level'), 1500);
   }
   function pages(e, list, k, done) {
@@ -936,7 +937,7 @@ const Challenges = (() => {
       return Dialog.show({ name: '……', role: e.station }, c.hidden.text, [{ label: '記下來', primary: true, run: () => { Dialog.close(); finishChapter(line, e.station, e.i, c.evidence, '找到隱藏的線索！'); } }]);
     }
     if (e.type === 'suspect') {
-      return Dialog.show({ name: c.chase.suspect.name, role: '' }, c.chase.caught, [{ label: '收下', primary: true, run: () => { Dialog.close(); so.chase = null; storyReward(line, so, null, c.evidence); so.ch = Math.max(so.ch, e.i + 1); saveState(); Game.reward({ money: MAIN_REWARD.chase[0], xp: MAIN_REWARD.chase[1] }, '追到了！'); spawn(World.layout.stationId); } }]);
+      return Dialog.show({ name: c.chase.suspect.name, role: '' }, c.chase.caught, [{ label: '收下', primary: true, run: () => { Dialog.close(); so.chase = null; storyReward(line, so, null, c.evidence); so.ch = Math.max(so.ch, e.i + 1); saveState(); Game.reward({ money: MAIN_REWARD.chase[0], xp: MAIN_REWARD.chase[1], ixp: 20 }, '追到了！'); spawn(World.layout.stationId); } }]);
     }
     pages(e, c.pages, 0, (who, text) => {
       if (c.kind === 'evidence') return Dialog.show(who, text, [{ label: '收下', primary: true, run: () => { Dialog.close(); finishChapter(line, e.station, e.i, c.evidence); } }]);
@@ -950,7 +951,7 @@ const Challenges = (() => {
           label: (c.kind === 'deduce' && o.correct && Progress.markAnswer(allEv) ? '★ ' : '') + o.label, run: () => {
             let ev = null;
             if (c.kind === 'choice') { so.choice[c.choice.key] = o.value; ev = o.evidence || null; if (o.friend) for (const [k, v] of Object.entries(o.friend)) S().friends[k] = (S().friends[k] || 0) + v; }
-            if (c.kind === 'rescue') ev = o.ok ? c.evidence : null;
+            if (c.kind === 'rescue') { if (!o.ok && S().inv.firstaid > 0) { S().inv.firstaid--; o = { ...o, ok: true, text: o.text + '<br><br>🩹 還好你帶了急救包，對方沒事了。' }; } ev = o.ok ? c.evidence : null; }
             if (c.kind === 'deduce') { so.deduce = !!o.correct; so.deduceLabel = o.label; }
             saveState();
             const after = c.kind === 'deduce' ? `你說出了你的推理。秀蔅靜靜地聽完，點了點頭。<br><small>（證據 ${Object.keys(so.ev).length} / ${evTotal(line)}。結局會在找到寶物時揭曉。）</small>` : o.text;
@@ -983,7 +984,7 @@ const Challenges = (() => {
     if (safe) storyReward(line, so, null, c.evidence);
     saveState();
     Dialog.show({ name: safe ? '甩掉了' : '……', role: '' }, safe ? c.escape.safe : c.escape.caught, [{ label: '繼續', primary: true, run: () => Dialog.close() }]);
-    if (safe) Game.reward({ money: MAIN_REWARD.escape[0], xp: MAIN_REWARD.escape[1] }, '成功甩掉跟蹤者！');
+    if (safe) Game.reward({ money: MAIN_REWARD.escape[0], xp: MAIN_REWARD.escape[1], ixp: 20 }, '成功甩掉跟蹤者！');
     if (World.layout) spawn(World.layout.stationId);
   }
   // 每秒檢查：追捕、逃脫的時間

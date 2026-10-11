@@ -69,7 +69,7 @@ const Progress = (() => {
   const GRADE_OF = { perfect: 'S', special: 'S', hidden: 'S', normal: 'B', surprise: 'A', wrong: 'C' };
   function onQuestDone(id, o, k) {
     const s = S(), q = QUESTS[id];
-    if (q.type === 'side' || q.type === 'timed' || q.type === 'event') addRep(questStation(q), q.type === 'side' ? 10 : 8);
+    if (['side', 'timed', 'event', 'daily', 'weekly'].includes(q.type)) addRep(q.type === 'daily' || q.type === 'weekly' ? S().current : questStation(q), q.type === 'side' ? 10 : q.type === 'weekly' ? 20 : q.type === 'daily' ? 4 : 8);
     if (q.type === 'secret') addRep(s.current, 5);
     let g = null;
     if (q.type === 'main' && q.line && STORY[q.line]) { const so = (s.story || {})[q.line] || {}; g = so.ending === 'true' ? 'S' : so.ending === 'normal' ? 'B' : so.ending === 'bad' ? 'C' : 'B'; }
@@ -173,7 +173,9 @@ const Progress = (() => {
 })();
 
 /* ── 支線難度與獎勵（玩家看不到難度，只會感覺到報酬不同） ──
- * 簡單 30–80、普通 80–180、進階 180–350、困難 300–700、人物故事完結 300–800（每階段另有 80–250）
+ * 普通支線（簡單、普通）30–100＋少量經驗、消耗品
+ * 跨站支線（進階、困難）150–350，黃金 0–1＋收藏品、NPC 信任
+ * 多階段人物支線 300–800，黃金 0–2＋特殊對話、專屬紀念品（每階段另有 80–250）
  */
 const QUEST_DIFF = {
   easy: ['sq_card', 'sq_earphone', 'sq_guide', 'sq_translate', 'sq_sort', 'sq_clean', 'wallet', 'umbrella', 'cat', 'sound'],
@@ -182,7 +184,9 @@ const QUEST_DIFF = {
   hard: ['sq_who', 'sq_misunderstood', 'sq_liar', 'sq_impossible', 'sq_employee', 'sq_stalker'],
   story: ['sq_letters', 'sq_friend', 'sq_leave', 'sq_photoperson', 'sq_reconcile', 'sq_nohome', 'sq_musician', 'sq_nightwish', 'sq_apology', 'bench', 'notes'],
 };
-const DIFF_RANGE = { easy: [30, 80, 30, 60], normal: [80, 180, 60, 120], adv: [180, 350, 120, 200], hard: [300, 700, 200, 350], story: [300, 800, 200, 400] };
+const DIFF_RANGE = { easy: [30, 60, 30, 50], normal: [60, 100, 50, 90], adv: [150, 280, 110, 180], hard: [250, 350, 160, 260], story: [300, 800, 200, 400] };
+const DIFF_IXP = { easy: 10, normal: 15, adv: 30, hard: 45, story: 60 };
+const SIDE_SUPPLY = ['onigiri', 'greentea', 'battery', 'hint'];
 // 人物故事完結的專屬稱號
 const STORY_TITLES = { sq_musician: '最忠實的聽眾', sq_leave: '帶走台北的人', sq_letters: '三十年的信差', sq_friend: '找得到人的人', sq_nightwish: '看過日出的夜班', sq_photoperson: '記得秀蔅的人', sq_nohome: '陪人回家的人', bench: '長椅上的約定' };
 (() => {
@@ -195,7 +199,11 @@ const STORY_TITLES = { sq_musician: '最忠實的聽眾', sq_leave: '帶走台�
       r = r || {};
       r.money = f === 0 ? Math.round(m0 * .3) : Math.round(m0 + (m1 - m0) * f);
       r.xp = f === 0 ? Math.round(x0 * .3) : Math.round(x0 + (x1 - x0) * f);
-      if (diff === 'hard' && f === 1 && q.giver) r.friend = { ...(r.friend || {}), [q.giver]: ((r.friend || {})[q.giver] || 0) + 10 };   // 困難任務：較多信任
+      if ((diff === 'hard' || diff === 'adv') && f === 1 && q.giver) r.friend = { ...(r.friend || {}), [q.giver]: ((r.friend || {})[q.giver] || 0) + (diff === 'hard' ? 10 : 5) };   // 跨站任務：NPC 信任
+      if (diff === 'hard' && f === 1) r.gold = 1;
+      if (diff === 'story') r.gold = f === 1 ? 2 : f >= .8 ? 1 : 0;
+      if (diff === 'normal' && f === 1) { const it = SIDE_SUPPLY[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % SIDE_SUPPLY.length]; r.items = { ...(r.items || {}), [it]: 1 }; }   // 消耗品
+      r.ixp = f === 0 ? 0 : Math.round(DIFF_IXP[diff] * Math.max(.5, f));
       return r;
     };
     if (q.outcomes) for (const [k, o] of Object.entries(q.outcomes)) o.reward = fix(o.reward, Object.keys(q.outcomes).length === 1 ? 1 : factor(k));
@@ -207,8 +215,8 @@ const STORY_TITLES = { sq_musician: '最忠實的聽眾', sq_leave: '帶走台�
 
 /* ── 主線報酬（依階段） ── */
 const MAIN_REWARD = { evidence: [200, 110], choice: [200, 110], rescue: [220, 120], hidden: [220, 120], chase: [320, 150], escape: [320, 150], deduce: [400, 200] };
-for (const l of Object.keys(MAIN_STORY)) { QUESTS['main_' + l].reward = { money: 800, xp: 350, items: { ['casefile_' + l]: 1 }, friend: { xiuyu: 25 } }; }
+for (const l of Object.keys(MAIN_STORY)) { QUESTS['main_' + l].reward = { money: 800, xp: 350, gold: 1, ixp: 120, items: { ['casefile_' + l]: 1 }, friend: { xiuyu: 25 } }; }
 Object.assign(ITEMS, Object.fromEntries(Object.keys(MAIN_STORY).map(l => ['casefile_' + l, { name: `案件卷宗：${MAIN_STORY[l].title}`, desc: `${LINES[l].zh}主線的完整紀錄。獨一無二的收藏。`, icon: '🗂️' }])));
 ITEMS.notebook = { name: '調查筆記本', desc: '秀蔅送的。證據、線索和人物都會記在「紀錄」裡。', icon: '📓' };
-QUESTS.final.reward = { money: 1500, xp: 700, wear: 'top_mistcoat', friend: { xiuyu: 30 } };
+QUESTS.final.reward = { money: 1000, xp: 700, gold: 2, ixp: 200, wear: 'top_mistcoat', friend: { xiuyu: 30 } };
 OUTFITS.top_mistcoat = { slot: 'top', name: '秀蔅的白色長大衣', color: '#f6f4ee', pattern: 'knit', event: 'final' };

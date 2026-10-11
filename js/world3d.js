@@ -375,6 +375,8 @@ const World = (() => {
     onRecenter(fn) { recenterHooks.push(fn); },
     get running() { return runToggle; },
     groundAt: (x, z, y) => groundAt(x, z, y),
+    // 拍照：把目前的畫面縮小成一張圖
+    snap: (w = 200) => { renderer.render(scene, camera); const c = document.createElement('canvas'); c.width = w; c.height = Math.round(w * renderer.domElement.height / renderer.domElement.width); c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', .6); },
     setCharacter(id, wear) {
       const key = id + JSON.stringify(wear ? Outfits.wear(id, wear) : Outfits.wear(id));
       if (rig && rig.key === key) return;
