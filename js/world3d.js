@@ -48,7 +48,9 @@ const World = (() => {
   }
   const night = () => TaipeiTime.sky() === 'night';
 
+  let loadSeq = 0;   // 每次載入車站 +1；搭車中途被換場（例如 06:00）時，搭乘流程就不再對齊
   function dispose(obj) {
+    if (!obj) return;
     obj.traverse(o => {
       if (o.geometry && !o.userData.shared) o.geometry.dispose();
       if (o.material) [].concat(o.material).forEach(m => { if (m.map && m.map.userData.own && !m.userData.shared) m.map.dispose(); });
@@ -519,6 +521,7 @@ const World = (() => {
     },
     // 載入車站（整座：大廳＋各線月台）
     loadStation(stationId, alias = null) {
+      loadSeq++; riding = null; shake = 0;
       for (const tr of [...trains]) this.removeTrain(tr);
       for (const grp of [stationGroup, segGroup, nextGroup, surround]) if (grp) { env.remove(grp); dispose(grp); }
       segGroup = nextGroup = null;
@@ -538,10 +541,10 @@ const World = (() => {
     // 把玩家放在大廳（付費區，靠近第一條線的電扶梯）
     spawnInConcourse() {
       const P = layout.platforms[0], r = P.ramps[1];
-      player.x = r.xb + 2.5; player.y = 0; player.z = P.z + 3.2; player.face = Math.PI;
+      player.x = r.xb + 2.5; player.y = 0; player.z = P.z + 3.2; player.face = Math.PI; player.vnow = 0;
       cam.yaw = Math.PI / 2; cam.pos.set(player.x + 4, 2.6, player.z);
     },
-    placePlayer(x, y, z, face = Math.PI) { player.x = x; player.y = y; player.z = z; player.face = face; cam.pos.set(x, y + 2.6, z + 4); },
+    placePlayer(x, y, z, face = Math.PI) { player.x = x; player.y = y; player.z = z; player.face = face; player.vnow = 0; cam.pos.set(x, y + 2.6, z + 4); },
     get player() { return pstate(); },
     zone,
     // 列車
@@ -574,7 +577,7 @@ const World = (() => {
     },
     // 搭乘：從目前車站開到 toId，回傳新車站版面；列車會停在新車站同一條線、同一側
     async ride(tr, { toId, duration = 22, onSpeed, skip, anomaly, alias = null, onTick }) {
-      const P = tr.P, travel = tr.travel, D = 520;
+      const P = tr.P, travel = tr.travel, D = 520, seq = loadSeq;
       const tx0 = P.x + tr.x, tz = P.z + tr.side * S.TRACK, ty = P.y;
       for (const o of [...trains]) if (o !== tr) this.removeTrain(o);
       riding = tr;
@@ -610,12 +613,14 @@ const World = (() => {
           const lm = tr.group.userData.lightM;
           if (lm) lm.emissiveIntensity = anomaly && Math.abs(p - D / 2) < 45 ? (Math.sin(now / 37) > .2 ? 1.6 : .15) : 1.6;
           onSpeed && onSpeed(v);
+          if (seq !== loadSeq) return res();
           if (onTick && onTick(t, p) === 'stop') return res();
           t < T0 ? requestAnimationFrame(step) : res();
         };
         requestAnimationFrame(step);
       });
       shake = 0;
+      if (seq !== loadSeq) return layout;   // 中途換場了：新車站已經載入，不用再對齊
       // 以新車站為原點重新對齊
       for (const grp of [stationGroup, segGroup, surround]) { env.remove(grp); dispose(grp); }
       stationGroup = nextGroup; surround = nextSur; nextGroup = segGroup = null;
@@ -639,7 +644,7 @@ const World = (() => {
       if (pg) S.drawLed(pg.userData[`led${side}`], layout.platforms[k].line, rows);
     },
     setInteractions(list) { interactions = list; const b = document.getElementById('actionBtn'); if (b) b.dataset.id = ''; },
-    setInput(on) { player.inputOn = on; if (!on) for (const k in keys) keys[k] = false; },
+    setInput(on) { player.inputOn = on; if (!on) { for (const k in keys) keys[k] = false; player.vnow = 0; } },
     walkPath(points) { return new Promise(resolve => { player.auto = { points: points.map(p => ({ ...p })), resolve }; }); },
     refreshSky() { if (layout) applySky(layout.hasElevated); },
   };

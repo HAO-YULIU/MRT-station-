@@ -583,3 +583,13 @@ button:disabled { cursor: not-allowed; }
 
 /* 畫面邊緣淡淡的暗角，讓 3D 場景比較有景深 */
 .scene::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse 85% 75% at 50% 52%, transparent 58%, rgba(0,0,0,.28) 100%); }
+/* 獲得物品／序章／結局的卡片：螢幕矮（手機橫向）時可以捲動、圖示縮小，按鈕一定按得到 */
+.item-card { max-height: calc(100dvh - 24px); overflow-y: auto; }
+@media (max-height: 520px) {
+  .item-card { padding: 14px 18px 14px; }
+  .item-icon { width: 76px; height: 76px; margin: 6px auto 2px; font-size: 44px !important; }
+  .item-icon svg { width: 60px; height: 60px; }
+  .item-card h2 { font-size: 21px; margin: 2px 0; }
+  .item-card p, .item-card .pro-text { font-size: 13px; line-height: 1.5; }
+  .item-card .letter { margin: 6px 0; padding: 8px 10px; line-height: 1.55; }
+}

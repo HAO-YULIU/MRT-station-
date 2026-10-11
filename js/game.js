@@ -101,7 +101,7 @@ function updateHud() {
 
 function onServiceChange(st) {
   Game.service = st;
-  if (st === 'open') { $('#closedOverlay').hidden = true; if (document.body.dataset.screen === 'game' || (Game.state.fog && !Game.state.fog.settled)) FogCity.dawn(); return; }
+  if (st === 'open') { $('#closedOverlay').hidden = true; if (Game.state.fog && !Game.state.fog.settled) FogCity.dawn(); return; }
   if (Game.ride) { Game.ride.mustAlight = true; return; }   // 搭乘中：到下一站再處理
   if (document.body.dataset.screen === 'game') showClosed();
 }
@@ -1020,22 +1020,6 @@ function showEnding(line) {
   ov.hidden = false;
   $('#endOk').onclick = () => { ov.hidden = true; }; $('#endOk').focus();
 }
-// （舊版）六件寶物交給擺渡人：現在改由 Teleporter.finale 處理
-Game.unlockMistLine = () => {
-  Sound.itemGet();
-  const ov = $('#itemOverlay');
-  ov.innerHTML = `<div class="item-card" style="--c:#8246af" role="dialog" aria-modal="true" aria-labelledby="mistName">
-    <div class="item-line">小碧潭的渡口</div>
-    <div class="item-icon" style="font-size:84px">🌫️</div>
-    <h2 id="mistName">新路線出現了</h2>
-    <p>${(() => { const n = Object.values(Game.state.story || {}).filter(x => x.ending === 'true').length; return n === 6 ? '擺渡人看著你：「六個真相，你一個都沒有錯過。」<br>' : n >= 3 ? `擺渡人說：「你看清了 ${n} 個真相。剩下的，霧還替你留著。」<br>` : '擺渡人說：「有些真相，你還沒看清楚。不過，路還很長。」<br>'; })()}擺渡人把六件寶物放進提燈裡。燈光穿過霧，一路往西照向機場——路網圖上出現了<b>桃園機場捷運</b>。<br>從台北車站、三重、新北產業園區都可以轉乘，一路坐到機場和老街溪。</p>
-    <button class="btn primary" id="mistOk">打開路網圖看看</button>
-  </div>`;
-  ov.hidden = false;
-  $('#mistOk').onclick = () => { ov.hidden = true; openMap(); Map3D.focusLine('A'); };
-  $('#mistOk').focus();
-};
-
 function openBag() {
   const s = Game.state;
   const n = Object.keys(s.items).length;
@@ -1153,13 +1137,9 @@ async function teleport(id) {
 /* ── 初始化 ── */
 // 手機：擋掉瀏覽器自己的手勢（雙指縮放網頁、雙擊放大、長按選單、下拉重新整理），只留可捲動清單的捲動
 function lockPageGestures() {
-  const scrollable = el => {
-    for (; el && el !== document.body; el = el.parentElement) {
-      const cs = getComputedStyle(el);
-      if (/(auto|scroll)/.test(cs.overflowY + cs.overflowX) && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) return true;
-    }
-    return false;
-  };
+  // 只有這些面板裡的清單可以捲動（不用每次都算樣式）
+  const SCROLLERS = '.modal-card, .phone, .dialog, .fog-card, .item-card, .closed-inner, .screen:not(#game)';
+  const scrollable = el => !!(el && el.closest && el.closest(SCROLLERS));
   document.addEventListener('touchmove', e => { if (e.touches.length > 1 || !scrollable(e.target)) e.preventDefault(); }, { passive: false });
   for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
   document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea')) e.preventDefault(); });

@@ -326,13 +326,12 @@ const FogSpecial = (() => {
     const words = ['燈', '橋', '雨', '海', '霧', '鐘'], times = ['02:17', '03:44', '01:58', '04:06'], marks = ['鳥', '鑰匙', '星星', '月亮'];
     ev.word = ev.word ?? null; ev.time = ev.time ?? times[(K.rnd() * 4) | 0]; ev.mark = ev.mark ?? marks[(K.rnd() * 4) | 0]; saveState();
     // 只有今晚的你才知道的三件事
-    const wall = K.prop('note', FogEvents.at(K, 'spot:notice'), { label: '在牆上寫一個字', glint: false, tag: 'goal', use: () => {
+    K.prop('note', FogEvents.at(K, 'spot:notice'), { label: '在牆上寫一個字', glint: false, tag: 'goal', use: () => {
       if (ev.word) return K.say({ name: '牆', role: '' }, `牆上是你寫的字：「${ev.word}」。`, bye);
       K.say({ name: '牆', role: '只有你知道' }, '牆上有一支粉筆。寫一個字吧。', words.map(w => ({ label: w, run: () => { ev.word = w; saveState(); Dialog.close(); K.clue('今晚，我在牆上寫了一個字。'); } })));
     } });
-    const clock = K.prop('clock', FogEvents.at(K, 'p'), { label: '看時鐘', glint: false, tag: 'goal', use: () => { ev.sawTime = 1; saveState(); K.say({ name: '月台的時鐘', role: '' }, `時鐘停在 <b>${ev.time}</b>。<br><small>（記住它。）</small>`, bye); K.clue('今晚，我看了月台的時鐘。'); } });
+    K.prop('clock', FogEvents.at(K, 'p'), { label: '看時鐘', glint: false, tag: 'goal', use: () => { ev.sawTime = 1; saveState(); K.say({ name: '月台的時鐘', role: '' }, `時鐘停在 <b>${ev.time}</b>。<br><small>（記住它。）</small>`, bye); K.clue('今晚，我看了月台的時鐘。'); } });
     const coin = K.prop('coin', FogEvents.at(K, 'u'), { label: '撿起一枚硬幣', tag: 'goal', hidden: false, use: () => { ev.sawMark = 1; saveState(); K.removeProp(coin); K.say({ name: '霧裡的硬幣', role: '' }, `硬幣的背面刻著一個圖案：<b>${ev.mark}</b>。`, bye); K.clue('今晚，我撿到了一枚刻著圖案的硬幣。'); } });
-    void wall; void clock;
     // 另一個你
     const pos = FogEvents.at(K, 'c');
     const tw = FogEvents.selfPerson(K, pos);
@@ -402,7 +401,7 @@ const FogSpecial = (() => {
     K.hint('淡水的月台上，停著一班從沒見過的列車。車頭寫著「穿越」。');
     async function depart() {
       if (running) return;
-      if (!World.isInside(tr)) { const p = World.player; World.placePlayer(P.x - 10, P.y, P.z + side * Station3D.TRACK, Math.PI / 2); void p; }
+      if (!World.isInside(tr)) World.placePlayer(P.x - 10, P.y, P.z + side * Station3D.TRACK, Math.PI / 2);
       running = true; ev.tries++; saveState();
       Sound.doorClose(); await sleep(1200);
       await World.setDoors(tr, false);
@@ -416,7 +415,7 @@ const FogSpecial = (() => {
       let hasKey = false, pulling = 0, spawnT = 18, escaped = false;
       const key = K.prop('coin', { x: tx + keyX, y: ty, z: tz + .3 }, { label: '撿起：緊急煞車鑰匙', tag: 'goal', use: () => { hasKey = true; K.removeProp(key); K.sound('bell'); K.toast('<b>🔑 拿到鑰匙了</b><span>去最前面的駕駛室！（列車的最前端）</span>', 'level'); } });
       const front = { x: tx + 29.5, y: ty, z: tz };
-      const brake = K.prop('console', front, { label: '拉下緊急煞車', glint: false, tag: 'goal', r: 1.8, use: () => {
+      K.prop('console', front, { label: '拉下緊急煞車', glint: false, tag: 'goal', r: 1.8, use: () => {
         if (!hasKey) return K.say({ name: '緊急煞車', role: '' }, '煞車把手上了鎖。鑰匙在某一節車廂裡。', bye);
         if (pulling) return;
         pulling = performance.now() + 6000; K.toast('<b>拉住煞車！</b><span>撐住 6 秒，不要離開駕駛室。</span>', 'warn');
@@ -440,7 +439,6 @@ const FogSpecial = (() => {
         K.hurt(20, '列車到站時的劇烈晃動');
         restart();
       }
-      void brake;
     }
     function restart() {
       running = false;

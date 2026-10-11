@@ -139,7 +139,6 @@ const FogEvents = (() => {
         K.say({ name: dev.name || '裝置', role: '' }, o.text, [{ label: '……', run: () => { Dialog.close(); if (o.hurt) K.hurt(o.hurt, o.why || '霧裡有什麼撲了過來'); K.done(o.result === 'down' ? (res === 'perfect' ? 'good' : 'bad') : res, { gold: o.gold, items: o.items, title: d.title }); } }]);
       } })));
     }
-    void devP;
     K.hint(d.hint || '這一站的某樣東西被鎖起來了。');
   }
 
@@ -203,8 +202,7 @@ const FogEvents = (() => {
       });
     }
     if (d.callout) {   // 不要被點名
-      const radio = K.prop('radio', at(K, 'spot:office'), { label: '關掉廣播', glint: false, tag: 'goal', use: () => { if (ev.called) { ev.called = 0; ev.got++; saveState(); K.sound('good'); K.toast(`<b>📻 廣播停了（${ev.got} / 3）</b><span>喇叭裡傳來一聲嘆氣。</span>`); if (ev.got >= 3) finish(); } else K.say({ name: '廣播主機', role: '' }, '喇叭裡只有沙沙聲。等它念到你的名字，再來關掉它。', bye); } });
-      void radio;
+      K.prop('radio', at(K, 'spot:office'), { label: '關掉廣播', glint: false, tag: 'goal', use: () => { if (ev.called) { ev.called = 0; ev.got++; saveState(); K.sound('good'); K.toast(`<b>📻 廣播停了（${ev.got} / 3）</b><span>喇叭裡傳來一聲嘆氣。</span>`); if (ev.got >= 3) finish(); } else K.say({ name: '廣播主機', role: '' }, '喇叭裡只有沙沙聲。等它念到你的名字，再來關掉它。', bye); } });
       let t = 20;
       K.every(dt => {
         if (ev.done || K.dead) return; t -= dt;
@@ -334,7 +332,6 @@ const FogEvents = (() => {
     else if (sub === 'survive') survive(K, d);
     K.hint(d.hint || '月台上停著一班列車，車門一直開著。');
     if (d.extra) d.extra(K, tr);
-    void ev;
   }
 
   /* ════════ 引擎：交易 ════════ */
@@ -367,7 +364,7 @@ const FogEvents = (() => {
   function memory(K, d) {
     const ev = K.ev;
     const scene = d.scene, qs = d.questions;
-    const p = K.prop(d.kind || 'tv', at(K, d.at || 'c'), { label: d.label || '看著螢幕', glint: false, tag: 'device', r: 1.8, use: () => {
+    K.prop(d.kind || 'tv', at(K, d.at || 'c'), { label: d.label || '看著螢幕', glint: false, tag: 'device', r: 1.8, use: () => {
       if (ev.done) return K.say({ name: d.name || '螢幕', role: '' }, '畫面已經變成雜訊了。', bye);
       if (!ev.seen) {
         ev.seen = 1; saveState();
@@ -376,7 +373,6 @@ const FogEvents = (() => {
       }
       K.say({ name: d.name || '螢幕', role: '' }, '畫面只剩下雜訊。<br><small>去告示牌那裡回答問題。</small>', bye);
     } });
-    void p;
     let q = 0, wrong = 0;
     K.onSpot = sp => {
       if (sp.kind !== 'notice' || !ev.seen || ev.done) return false;

@@ -11,7 +11,12 @@ const Teleporter = (() => {
   const T = THREE;
   const S = () => Game.state;
   let group = null, dev = null, gems = {}, ring = null, beam = null;
-  const slots = () => { const s = S(); return (s.flags.teleSlots = s.flags.teleSlots || {}); };
+  const slots = () => {
+    const s = S(); s.flags.teleSlots = s.flags.teleSlots || {};
+    // 舊存檔：以前是把六件寶物交給擺渡人，已經完成結局的人，六個槽都算放好了
+    if (s.flags.mistLine && Object.keys(s.flags.teleSlots).length < 6) for (const l of Object.keys(MAIN_STORY)) s.flags.teleSlots[l] = s.flags.teleSlots[l] || 'legacy';
+    return s.flags.teleSlots;
+  };
   const placed = () => Object.keys(MAIN_STORY).filter(l => slots()[l]);
   const done = () => placed().length === Object.keys(MAIN_STORY).length;
   // 寶物數量：背包裡的＋已經放上去的
@@ -115,7 +120,7 @@ const Teleporter = (() => {
     if (s.flags.mistLine) return;
     s.flags.mistLine = true; s.flags.xiuyuHome = TaipeiTime.date();
     MRT.openAirport();
-    const d = Quests.emit({ kind: 'handin' });
+    Quests.emit({ kind: 'handin' });
     saveState(); updateHud(); refresh();
     const nTrue = Object.values(s.story || {}).filter(x => x.ending === 'true').length;
     const ov = $('#itemOverlay');
@@ -138,7 +143,6 @@ const Teleporter = (() => {
     };
     Sound.fog && Sound.fog('good');
     show();
-    void d;
   }
 
   /* ── 開場：一份委託 ── */

@@ -37,8 +37,11 @@ const FogCity = (() => {
   const hsh = s => [...String(s)].reduce((a, c) => (a * 31 + c.codePointAt(0)) % 1000003, 7);
 
   /* ── 時間 ── */
-  const active = () => TaipeiTime.state() === 'mist';
-  const minuteOfDay = () => { const t = TaipeiTime.now(); return t.hour * 60 + t.minute + t.second / 60; };
+  // 時間每 250ms 算一次就好（TaipeiTime.now 用 Intl 格式化，每幀呼叫很多次太浪費）
+  let tc = { at: -1e9, t: null };
+  const nowT = () => { const n = performance.now(); if (n - tc.at > 250) tc = { at: n, t: TaipeiTime.now() }; return tc.t; };
+  const active = () => TaipeiTime.state(nowT()) === 'mist';
+  const minuteOfDay = () => { const t = nowT(); return t.hour * 60 + t.minute + t.second / 60; };
   const phase = () => (minuteOfDay() >= 330 && minuteOfDay() < 360 ? 'fade' : 'fog');
   // 這一夜的代號：00:30 之後的日期
   const nightKey = () => TaipeiTime.date();
@@ -60,10 +63,10 @@ const FogCity = (() => {
   function seeded(seed) { let x = seed % 2147483647 || 1; return () => (x = (x * 16807) % 2147483647) / 2147483647; }
   function assignment() {
     const s = S();
-    if (s.fogMap && Object.keys(s.fogMap).length === Object.keys(STATIONS).length) return s.fogMap;
+    if (s.fogMap && Object.keys(s.fogMap).length >= 118) return s.fogMap;   // 存檔第一次決定後固定（機場線開通後也不重洗）
     s.fogSeed = s.fogSeed || (1 + Math.floor(Math.random() * 2e9));
     const rnd = seeded(s.fogSeed);
-    const ids = Object.keys(STATIONS).filter(id => !FIXED[id]);
+    const ids = Object.keys(STATIONS).filter(id => !FIXED[id] && !MRT.linesAt(id).every(l => l.line === 'A'));
     for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
     const map = { ...FIXED };
     map[ids.shift()] = 'sp_twin';   // 《兩個你》：隨機一個車站
@@ -420,12 +423,14 @@ const FogCity = (() => {
     toast('<b>📢 「通過列車，請勿靠近月台邊緣」</b><span>廣播的聲音斷斷續續，月台門不知道什麼時候打開了。</span>', 'warn');
     await sleep(6000);
     if (!started || World.zone().P !== P) return;
-    const tr = World.spawnTrain(k, side, P.line, 1, null);
+    const sid = started;
+    const tr = World.spawnTrain(k, side, P.line, 1, null); tr.fog = true;
     tintTrain(tr, '#2a2a2a', '#ff3030');
     tr.x = -200; Sound.fog('rush');
     const t0 = performance.now(); let hit = false;
     await new Promise(res => {
       const step = now => {
+        if (started !== sid) return res();   // 迷霧結束或換站：停止
         const u = Math.min(1, (now - t0) / 2600); tr.x = -200 + 400 * u; tr.group.position.x = tr.P.x + tr.x;
         const pp = World.player, edge = (pp.z - P.z) * side;
         if (!hit && Math.abs(pp.y - P.y) < .5 && edge > 2.45 && Math.abs(pp.x - (tr.P.x + tr.x)) < 32) { hit = true; hurt(35, '被通過的列車撞到'); World.pushPlayer(0, -side * .9); }
@@ -641,17 +646,15 @@ const FogCity = (() => {
         fadeExit();
       }
     }
-    if ((now | 0) % 1000 < 20) hud();
+    if (now - (tick.hudAt || 0) > 1000) { tick.hudAt = now; hud(); }
   }
 
   /* ── 出口、離開迷霧 ── */
   let exitProp = null;
   function exitDoor(pos, why) {
     if (exitProp) return exitProp;
-    const L = World.layout;
     const pt = pos || pointIn({ kind: Math.random() < .5 ? 'unpaid' : 'concourse' });
     exitProp = prop('door', pt, { label: '推開發光的門', r: 1.6, tag: 'exit', rot: Math.random() * 6, use: () => escape(why || 'door') });
-    void L;
     return exitProp;
   }
   function fadeExit() {
@@ -690,7 +693,7 @@ const FogCity = (() => {
     const judged = !r.escaped;
     if (judged && !r.dead) r.deaths++;
     const sc = score(r), [, rank, gold] = RANKS.find(([t]) => sc >= t);
-    const key = eventKey(r.station), log = (s.fogLog = s.fogLog || {}), L0 = log[r.station] || { nights: 0, best: null, results: [] };
+    const log = (s.fogLog = s.fogLog || {}), L0 = log[r.station] || { nights: 0, best: null, results: [] };
     const first = r.result && r.result !== 'fail' && !L0.cleared;
     const g = gold + (first ? 1 : 0) + (r.bonusGold || 0);
     const reward = { money: sc * 4, xp: sc * 3, ixp: Math.round(sc / 2), gold: g };
@@ -708,7 +711,6 @@ const FogCity = (() => {
     Game.reward(reward, '迷霧之城結算');
     if (typeof Life !== 'undefined') Life.log(`迷霧之城（${r.station}）：評價 ${rank}${judged ? '（未離開，判定死亡）' : ''}`);
     Achievements.check();
-    void key;
     return { r, sc, rank, reward, judged, first };
   }
   function showResult(res) {
@@ -733,7 +735,8 @@ const FogCity = (() => {
     const was = started;
     const res = settle();
     teardown();
-    World.setMood(null); World.setPlayerLight(0);
+    if (!World.scene) { if (res) pendingResult = res; return; }   // 還在標題畫面（3D 世界還沒建立）：進遊戲再顯示結算
+    World.setMood(null); World.setPlayerLight(0); World.setInput(true);
     $('#fogHud').hidden = true;
     if (was && document.body.dataset.screen === 'game') {
       const st = S().current;
@@ -743,7 +746,9 @@ const FogCity = (() => {
     if (res) setTimeout(() => showResult(res), 600);
   }
   // 開遊戲時：上一晚還沒結算的（玩家沒留到 06:00）
+  let pendingResult = null;
   function catchUp() {
+    if (pendingResult) { const res = pendingResult; pendingResult = null; setTimeout(() => showResult(res), 1200); }
     const s = S(); const r = s.fog;
     if (!r || r.settled) return;
     if (active() && r.night === nightKey()) return;
