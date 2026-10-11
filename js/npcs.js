@@ -356,7 +356,7 @@ const NPCManager = (() => {
   }
   function placeFor(def) {
     const L = layout, U = L.unpaid;
-    if (['cafe', 'stage', 'stall', 'shop', 'breakfast', 'mistshop'].includes(def.spot)) return Station3D.placeAt(L, def.spot);
+    if (['cafe', 'stage', 'stall', 'shop', 'breakfast', 'mistshop', 'onsen'].includes(def.spot)) return Station3D.placeAt(L, def.spot);
     if (def.spot === 'service') return { x: U.x1 - 3.5, y: 0, z: U.z0 + 4.4 };
     if (def.spot === 'lostfound') return { x: U.x1 - 8.2, y: 0, z: U.z0 + 4.4 };
     if (def.spot === 'bench') { const P = L.platforms[0]; return { x: P.x + 31, y: P.y, z: P.z + .15 }; }
@@ -1027,7 +1027,7 @@ const Challenges = (() => {
     spawnStoryTargets(stationId);
     // 1) 這一站各線的委託（紙條或委託人）
     for (const l of MRT.linesAt(stationId)) {
-      const line = l.line; if (!unsolved(line, stationId)) continue;
+      const line = l.line; if (Puzzles.NO_MAIN.has(stationId) || !unsolved(line, stationId)) continue;
       const P = platformOf(line), pos = P && standPos(P); if (!pos) continue;
       if (chapterAt(line, stationId)) { spawnStory(line, stationId, P, pos); continue; }
       const c = Puzzles.challenge(line, stationId), st = chState(line, stationId);

@@ -1,5 +1,5 @@
 /* 節慶活動的限定內容
- * 萬聖節（10/15–10/30）：
+ * 萬聖節（10/15–10/31）：
  *   - 車站布置：南瓜燈、蝙蝠、蜘蛛網、橘紫色燈串；很多路人變裝（魔女帽、南瓜頭、吸血鬼、幽靈）
  *   - 糖果：和變裝的路人說話（Trick or treat）、找紫色南瓜、遇見幽靈都拿得到；拿去活動志工那裡換限定服裝
  *   - 晚上 20:00 以後，十個車站的月台會出現幽靈（幽靈卡收藏）
@@ -8,7 +8,7 @@
  * 其他節慶：完成活動任務會得到「活動紀念章」，並各有一件限定飾品。
  */
 const HW = 'event_halloween';
-const HW_DAYS = Array.from({ length: 16 }, (_, i) => 15 + i);   // 10/15–10/30
+const HW_DAYS = Array.from({ length: 17 }, (_, i) => 15 + i);   // 10/15–10/31
 
 Object.assign(ITEMS, {
   candy: { name: '萬聖節糖果', desc: '活動期間的貨幣，可以向台北車站的活動志工換限定服裝。', icon: '🍬', cat: 'col' },
@@ -195,7 +195,7 @@ const Festival = (() => {
     const banner = document.createElement('canvas'); banner.width = 1024; banner.height = 256;
     { const g = banner.getContext('2d'); const gr = g.createLinearGradient(0, 0, 1024, 0); gr.addColorStop(0, '#3a1a5a'); gr.addColorStop(1, '#5a2a7a'); g.fillStyle = gr; g.fillRect(0, 0, 1024, 256);
       g.fillStyle = '#ff9a2a'; g.font = '900 96px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillText('🎃 萬聖節快樂 🦇', 512, 120);
-      g.fillStyle = '#f4e8ff'; g.font = '700 48px sans-serif'; g.fillText('Happy Halloween · 10/15–10/30', 512, 200); }
+      g.fillStyle = '#f4e8ff'; g.font = '700 48px sans-serif'; g.fillText('Happy Halloween · 10/15–10/31', 512, 200); }
     const bt = new T.CanvasTexture(banner); bt.colorSpace = T.SRGBColorSpace;
     for (const [z, r] of [[(C.z0 + L.gateZ) / 2 - 3, 0], [(C.z0 + L.gateZ) / 2 - 3.02, Math.PI]]) { const b = new T.Mesh(new T.PlaneGeometry(6, 1.5), new T.MeshBasicMaterial({ map: bt })); b.position.set(0, hallH - 1.1, z); b.rotation.y = r; group.add(b); }
     for (const x of [-5.5, 5.5]) for (let z = C.z0 + 5; z < L.gateZ - 3; z += 8) { const px = x - Math.sign(x) * .75; if (World.groundAt(px, z + .75, 0) != null) lantern(px, 0, z + .75, .8, Math.random() * 6); }

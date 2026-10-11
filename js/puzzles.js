@@ -195,5 +195,8 @@ const Puzzles = (() => {
     return (chCache[key] = c);
   }
 
-  return { stations, hops, question, challenge, LOST, LANDMARK, RAIL };
+  // 沒有主線委託的特別車站（新北投：溫泉站，只有支線與隱藏任務）
+  const NO_MAIN = new Set(['新北投']);
+  const mainStations = line => stations(line).filter(x => !NO_MAIN.has(x));
+  return { stations, mainStations, NO_MAIN, hops, question, challenge, LOST, LANDMARK, RAIL };
 })();

@@ -61,6 +61,8 @@
     <div class="joystick" id="joystick" aria-label="移動搖桿"><span class="knob"></span></div>
     <button class="run-btn" id="runBtn" aria-pressed="false">跑</button>
     <button class="view-btn" id="viewBtn" title="切換視角（V）">視角：標準</button>
+    <button class="view-btn transfer-btn" id="transferBtn" hidden>🔁 快速轉乘</button>
+    <span class="trip-badge" id="tripBadge" hidden></span>
     <div class="toasts" id="toasts" aria-live="polite"></div>
     <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　Shift 跑步　拖曳畫面轉視角　E 互動</p>
   </section>
@@ -162,6 +164,7 @@
   <script src="js/phone.js"></script>
   <script src="js/festival.js"></script>
   <script src="js/art.js"></script>
+  <script src="js/onsen.js"></script>
   <script src="js/map3d.js"></script>
   <script src="js/game.js"></script>
 </body>

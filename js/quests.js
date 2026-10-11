@@ -485,6 +485,7 @@ const Quests = (() => {
       case 'ride': return (g.line == null || g.line === ev.line) && (g.station == null || match(where(g.station), ev.station));
       case 'terminal': case 'anomaly': case 'sit': case 'handin': case 'ghost': return true;
       case 'costume': return g.station == null || match(g.station, ev.station);
+      case 'soak': return (g.night == null || g.night === !!ev.night) && (g.egg == null || g.egg === !!ev.egg) && (g.days == null || (ev.days || 0) >= g.days);
       case 'talk': return g.npc === ev.npc;
       case 'inspect': return g.spot === ev.spot && (g.station == null || match(g.station, ev.station));
       case 'find': return g.item === ev.item && (g.station == null || match(where(g.station), ev.station));
@@ -508,7 +509,7 @@ const Quests = (() => {
         st.solved = st.solved || {};
         if (st.solved[ev.station]) continue;
         st.solved[ev.station] = true;
-        const all = Puzzles.stations(g.line), n = all.filter(x => st.solved[x]).length;
+        const all = Puzzles.mainStations(g.line), n = all.filter(x => st.solved[x]).length;
         done.push({ id, text: `${ev.station}的委託（${n}/${all.length}）` });
         if (n < all.length) continue;
         st.treasure = all[(Math.random() * all.length) | 0];
