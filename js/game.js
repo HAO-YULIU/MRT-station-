@@ -148,13 +148,15 @@ Game.reward = (r = {}, label = '') => {
   if (r.place) { (s.places = s.places || {})[r.place] = TaipeiTime.date(); parts.push(`特殊地點紀錄：${r.place}`); }
   saveState(); updateHud();
   if (label || parts.length) { toast(`<b>${label}</b>${parts.length ? `<span>${parts.join('　')}</span>` : ''}`, 'reward'); Sound.itemGet(); }
+  FX.reward(r);   // FX：硬幣飛進餘額、物品飛進背包
   const after = Economy.levelInfo(s.xp).lv;
-  if (after > before) setTimeout(() => { toast(`<b>升級！Lv ${after}</b>`, 'level'); Sound.itemGet(); Progress.onLevel(before, after); }, 900);
+  if (after > before) setTimeout(() => { toast(`<b>升級！Lv ${after}</b>`, 'level'); Sound.itemGet(); Progress.onLevel(before, after); FX.levelUp(after); }, 900);
 };
 Game.onQuestChange = (what, id, o, k) => {
   const q = QUESTS[id];
   if (what === 'next') toast(`<b>收到後續委託</b><span>${q.title}</span>`, 'level');
   if (what === 'done') {
+    FX.questDone(q.title);   // FX：任務完成橫幅與彩帶
     Life.log(`完成「${q.title}」${k ? `（${(o && o.name) || Quests.OUTCOME_NAME[k] || ''}）` : ''}`);
     SideQuests.onDone(id);
     Progress.onQuestDone(id, o, k);
@@ -174,7 +176,7 @@ Game.onQuestChange = (what, id, o, k) => {
   }
   // 主線完成：揭曉這條線的結局
   if (what === 'done' && /^main_/.test(id) && STORY[q.line]) setTimeout(() => showEnding(q.line), 1200);
-  if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); }
+  if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); FX.banner('發現秘密任務', q.title, 'secret'); }
   if ((what === 'accept' || what === 'done') && ctl) Challenges.spawn(ctl.stationId);
   updateHud();
 };
@@ -384,6 +386,7 @@ if (window.ResizeObserver) window.addEventListener('DOMContentLoaded', () => { c
 function ensureWorld() {
   if (worldReady) return;
   World.init(sceneEl());
+  FX.init();   // 互動效果（粒子、光圈、閘門翼片、月台門警示燈）
   World.bindJoystick($('#joystick'));
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
@@ -531,7 +534,7 @@ function tickStation() {
   if (P) {
     for (const side of [-1, 1]) {
       const dirs = sideDirs(P, side);
-      World.setLed(P.k, side, dirs.map(d => ({ text: '往 ' + MRT.label(d.terminal, d.line).zh, eta: open ? fmtEta(d.eta) : '--' })));
+      World.setLed(P.k, side, FX.led(P.k, side, open && dirs[0] ? dirs[0].eta : null, dirs.map(d => ({ text: '往 ' + MRT.label(d.terminal, d.line).zh, eta: open ? fmtEta(d.eta) : '--' }))));   // FX：即將進站時閃爍
       const key = trackKey(P.k, side);
       if (!open || ctl.busy.has(key) || !dirs[0] || dirs[0].eta == null) continue;
       const d = dirs[0];
@@ -658,6 +661,7 @@ async function dwell(tr, dir, id, ride) {
   if (ctl.doorHint === tr) ctl.doorHint = false;
   // 關門
   Sound.doorClose();
+  FX.doorWarn(tr);   // FX：月台門警示燈閃爍、關門提示
   await sleep(1900); if (!alive(id)) return;
   ctl.doors.delete(tr); doorInteractions();
   World.clearDoorway(tr);
@@ -781,7 +785,7 @@ const dropInteraction = {
   get id() { const d = Passengers.dropNear(World.player); return d ? 'drop:' + d.item : 'drop'; },
   get label() { const d = Passengers.dropNear(World.player); return d ? `撿起：${d.item === 'coin' ? '硬幣' : ITEMS[d.item].name}` : '撿起'; },
   when: p => !World.sitting && !!Passengers.dropNear(p),
-  run: () => Passengers.takeDrop(),
+  run: () => { const d = Passengers.dropNear(World.player); if (d) FX.pickup(d, d.item === 'coin' ? '' : ITEMS[d.item].icon); Passengers.takeDrop(); },
 };
 // 查看告示牌、塗鴉、路線圖
 const SPOT_NAME = {
@@ -1011,7 +1015,7 @@ const collectInteraction = {
   get id() { const it = Achievements.near(World.player); return it ? 'col:' + it.kind : 'col'; },
   get label() { const it = Achievements.near(World.player); return it ? (it.kind === 'drop' ? '撿起：別人的包包' : `撿起：${COLLECT[it.kind].name}`) : '撿起'; },
   when: p => !Dialog.with && !!Achievements.near(p),
-  run: () => { const it = Achievements.near(World.player); if (it) Achievements.take(it); },
+  run: () => { const it = Achievements.near(World.player); if (it) { FX.pickup(it, it.kind === 'drop' ? '👜' : COLLECT[it.kind].icon); Achievements.take(it); } },
 };
 // 主線謎題
 const puzzleInteraction = {
@@ -1026,7 +1030,7 @@ const pickupInteraction = {
   get id() { const it = nearPickup(World.player); return it ? 'pick:' + it.item : 'pick'; },
   get label() { const it = nearPickup(World.player); return it ? `撿起：${ITEMS[it.item].name}` : '撿起'; },
   when: p => !!nearPickup(p),
-  run: () => { const it = nearPickup(World.player); if (it) Pickups.take(it); },
+  run: () => { const it = nearPickup(World.player); if (it) { FX.pickup(it, ITEMS[it.item].icon); Pickups.take(it); } },
 };
 
 // 出口（地面世界之後開放）
@@ -1052,6 +1056,7 @@ function showItemGet(line) {
     <button class="btn primary" id="itemOk">收進背包</button>
   </div>`;
   ov.hidden = false;
+  FX.confetti(70);   // FX：彩帶
   return new Promise(res => { $('#itemOk').onclick = () => { ov.hidden = true; res(); }; $('#itemOk').focus(); });
 }
 
