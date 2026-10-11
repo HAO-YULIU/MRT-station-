@@ -117,6 +117,7 @@ const Achievements = (() => {
     const s = S(); if (s.ach[id]) return;
     const a = ACHIEVEMENTS.find(x => x.id === id); if (!a) return;
     s.ach[id] = TaipeiTime.date(); saveState();
+    if (typeof Life !== 'undefined') Life.log(`🏆 成就：${a.name}`);
     Sound.itemGet();
     toast(`<b>🏆 成就解鎖：${a.name}</b><span>${a.desc}</span>`, 'level');
     Game.reward({ xp: 50, gold: a.gold || 0 });

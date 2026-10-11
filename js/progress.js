@@ -81,7 +81,7 @@ const Progress = (() => {
     if (g === 'S' && (q.diff === 'hard' || q.type === 'main')) Game.reward({ gold: q.type === 'main' ? 2 : 1 }, '特殊案件獎勵');
     if (g) { s.quests.grade[id] = g; saveState(); setTimeout(() => toast(`<b>案件評價：${g}</b><span>${q.title}</span>`, g === 'S' ? 'level' : ''), 1400); }
   }
-  function onTalk(npcId) { const s = S(); if (NPCS[npcId] && !s.met[npcId]) { s.met[npcId] = TaipeiTime.date(); saveState(); } }
+  function onTalk(npcId) { const s = S(); if (NPCS[npcId] && !s.met[npcId]) { s.met[npcId] = TaipeiTime.date(); saveState(); Life.log(`認識了${NPCS[npcId].name}（${NPCS[npcId].role || ''}）`); } }
 
   /* 數值 */
   function exploration() {
@@ -104,6 +104,7 @@ const Progress = (() => {
       ['照片碎片', c('photo'), COLLECT.photo.stations.length],
       ['人物檔案', named.filter(id => s.met[id]).length, named.length],
       ['路線收藏', Object.keys(s.items).length, LINE_ORDER.length],
+      ['海報圖鑑', c('posters'), Station3D.ADS.length],
     ];
     const pct = Math.round(parts.reduce((a, [, h, n]) => a + Math.min(1, h / n), 0) / parts.length * 100);
     return { parts, pct };
@@ -113,10 +114,10 @@ const Progress = (() => {
 
   /* 畫面 */
   let tab = 'char';
-  function open() { render(); document.getElementById('record').hidden = false; }
+  function open(t) { if (t) tab = t; render(); document.getElementById('record').hidden = false; }
   function render() {
     const s = S(), lv = Economy.levelInfo(s.xp || 0), el = document.getElementById('recordBody');
-    const tabs = [['char', '角色'], ['explore', '探索'], ['case', '評價'], ['collect', '收藏'], ['rep', '聲望'], ['people', '人物']];
+    const tabs = [['char', '角色'], ['life', '生活'], ['explore', '探索'], ['case', '評價'], ['collect', '收藏'], ['rep', '聲望'], ['people', '人物']];
     let body = '';
     if (tab === 'char') {
       body = `<div class="rc-hero"><b>${esc(CHARACTERS[s.char].name)}</b><span class="rc-title">「${esc(titleName())}」</span>
@@ -124,6 +125,7 @@ const Progress = (() => {
         <ul class="rc-stats">${STATS.map(([k, n, d]) => `<li><b>${n}</b><span class="rc-bar"><i style="width:${Math.min(100, stat(k) * 10)}%"></i></span><em>${stat(k)}</em>${s.points > 0 ? `<button class="btn small" data-pt="${k}">＋</button>` : ''}<small>${d}</small></li>`).join('')}</ul>
         <h4 class="bag-h">稱號</h4><div class="rc-titles">${titles().map(t => `<button class="wd-chip" data-title="${t.id}" aria-pressed="${titleName() === t.name}">${esc(t.name)}</button>`).join('')}</div>`;
     }
+    if (tab === 'life') body = Life.html();
     if (tab === 'explore') {
       const e = exploration();
       body = `<div class="rc-big">城市探索度 <b>${e.pct}%</b><small>去過 ${e.v} / ${e.n} 站　發現 ${e.found} 個秘密</small></div>

@@ -326,6 +326,7 @@ const NPCManager = (() => {
     for (let i = 0; i < 30; i++) {
       let x, y, z;
       if (area.kind === 'platform') { const P = area.P; x = P.x + (rnd() - .5) * 60; z = P.z + (rnd() - .5) * 4.6; y = P.y; }
+      else if (area.kind === 'unpaid') { const U = L.unpaid; x = U.x0 + 2 + rnd() * (U.x1 - U.x0 - 4); z = U.z0 + 1.5 + rnd() * (U.z1 - U.z0 - 4); y = 0; }
       else { const C = L.concourse; x = C.x0 + 2 + rnd() * (C.x1 - C.x0 - 4); z = C.z0 + 2 + rnd() * (L.gateZ - C.z0 - 4); y = 0; }
       const h = World.groundAt(x, z, y);
       if (h != null && Math.abs(h - y) < .1) return { x, y, z };
@@ -400,6 +401,7 @@ const NPCManager = (() => {
       const pos = randomPoint(area); if (!pos) continue;
       addNpc({ id: 'crowd' + i, name: { office: '上班族', student: '學生', elder: '長輩', tourist: '觀光客', casual: '路人', staff: '站務員', cleaner: '清潔人員', police: '捷運警察', delivery: '外送員', kid: '小朋友', runner: '晨跑的人', foreigner: '外國旅客' }[type], type, look, pos, area, speed: C.speed[0] + rnd() * (C.speed[1] - C.speed[0]) });
     }
+    assignBehaviors(L, hr);
   }
   // 秀蔅藏身處：某個月台的端點附近，或大廳角落
   function hiddenSpot() {
@@ -408,23 +410,101 @@ const NPCManager = (() => {
     const C = L.concourse; opts.push({ x: C.x0 + 1.5, y: 0, z: C.z0 + 1.5 }, { x: C.x1 - 1.5, y: 0, z: C.z0 + 1.5 });
     return opts[(rnd() * opts.length) | 0];
   }
-  function clear() { for (const n of list) World.scene.remove(n.rig.root); list = []; }
+  function clear() { for (const n of list) World.scene.remove(n.rig.root); list = []; queues = []; }
+
+  /* ── 日常動作：排隊（售票機、販賣機、商店）、在月台車門前候車、通勤、買東西 ── */
+  let queues = [];
+  function addQueuer(L, look, q, k) {
+    const pos = { x: q.x + q.dx * k, y: q.y, z: q.z + q.dz * k };
+    if (World.groundAt(pos.x, pos.z, pos.y) == null) return;
+    const n = addNpc({ id: 'q' + queues.length + k + q.name, name: q.who || '排隊的人', type: 'casual', look, pos, area: { kind: q.z > layout.gateZ ? 'unpaid' : 'concourse' }, speed: 1.1 });
+    n.behavior = 'queue'; n.queue = q; n.slot = k; n.target = null; n.wait = 0; n.face = Math.atan2(-q.dx, -q.dz);
+    q.members.push(n);
+  }
+  function crowdLook() {
+    const C = CROWD_TYPES[['office', 'casual', 'student', 'tourist'][(rnd() * 4) | 0]];
+    const look = { skin: SKINS[(rnd() * SKINS.length) | 0], hairColor: HAIRS[(rnd() * HAIRS.length) | 0], height: .94 + rnd() * .12, ...C.gen(rnd) };
+    look.hair = look.girl ? ['long', 'bob', 'bun'][(rnd() * 3) | 0] : ['short', 'mush'][(rnd() * 2) | 0];
+    return look;
+  }
+  function assignBehaviors(L, hr) {
+    const U = L.unpaid, C = L.concourse, rush = (hr >= 7 && hr < 9) || (hr >= 17 && hr < 20);
+    // 排隊的地方：售票機前、販賣機前、商店／咖啡店櫃台前
+    const spots = [{ name: '售票機', x: U.x0 + 2, y: 0, z: U.z1 - 1.5, dx: 0, dz: -.8 }, { name: '販賣機', x: U.x1 - 1.4, y: 0, z: U.z0 + 6.2, dx: -.8, dz: 0 }];
+    if (Station3D.SHOPS[L.stationId]) spots.push({ name: '商店', x: U.x0 + 1.9, y: 0, z: U.z0 + 7, dx: .8, dz: 0 });
+    const cafe = L.spots.find(s => s.kind === 'cafe'); if (cafe) spots.push({ name: '咖啡店', x: cafe.x, y: 0, z: cafe.z, dx: -.8, dz: 0 });
+    for (const q of spots) {
+      q.members = []; q.timer = 6 + rnd() * 5; queues.push(q);
+      const n = (rush ? 3 : 1) + ((rnd() * 2) | 0);
+      for (let k = 0; k < n; k++) addQueuer(L, crowdLook(), q, k);
+    }
+    // 其他人群：月台上在車門前排隊候車、尖峰時段快步通勤、偶爾去買東西
+    for (const n of list) {
+      if (n.named || n.behavior) continue;
+      if (n.area && n.area.kind === 'platform' && rnd() < .7) {
+        const P = n.area.P, side = rnd() < .5 ? 1 : -1, d = Station3D.DOORS[(rnd() * Station3D.DOORS.length) | 0];
+        n.behavior = 'platformWait'; n.target = { x: P.x + d + (rnd() < .5 ? -1.05 : 1.05), y: P.y, z: P.z + side * (1.9 + rnd() * .4) }; n.lookZ = side;
+      } else if (n.area && n.area.kind === 'concourse') {
+        if (rush && rnd() < .6) { n.behavior = 'commute'; n.speed *= 1.25; }
+        else if (rnd() < .3) n.behavior = 'shopping';
+      }
+    }
+  }
+  function nextTarget(n) {
+    const L = layout;
+    if (n.behavior === 'commute') {   // 閘門 ↔ 電扶梯口
+      n.leg = !n.leg;
+      if (n.leg) return { x: -5 + rnd() * 10, y: 0, z: L.gateZ - 1.4 };
+      const P = L.platforms[(rnd() * L.platforms.length) | 0], r = P.ramps[(rnd() * P.ramps.length) | 0];
+      return { x: r.xb + r.b * 1.2, y: 0, z: r.z + (rnd() - .5) * 2 };
+    }
+    if (n.behavior === 'shopping' && !n.bought) {   // 去最近的販賣機或商店
+      const sp = L.spots.find(s => ['cafe', 'vending', 'shop', 'breakfast'].includes(s.kind) && s.z < L.gateZ) || null;
+      if (sp) return { x: sp.x, y: 0, z: sp.z };
+      n.behavior = null;
+    }
+    return randomPoint(n.area || { kind: 'concourse' });
+  }
+  function arrived(n) {
+    if (n.behavior === 'platformWait') { n.wait = 1e9; n.face = n.lookZ > 0 ? 0 : Math.PI; return; }   // 面向軌道等車
+    if (n.behavior === 'shopping' && !n.bought) {
+      n.bought = true; n.wait = 3;
+      const bag = new THREE.Mesh(new THREE.BoxGeometry(.22, .26, .1), new THREE.MeshStandardMaterial({ color: ['#e8e4dc', '#2a9d8f', '#c4162a'][(rnd() * 3) | 0], roughness: .9 }));
+      bag.position.set(.28, .62, .05); n.rig.root.add(bag);
+      return;
+    }
+    if (n.behavior === 'queue') { n.wait = 1e9; n.face = Math.atan2(-n.queue.dx, -n.queue.dz); return; }
+    n.wait = n.behavior === 'commute' ? .2 : 1 + Math.random() * 4;
+  }
+  // 排隊：最前面的人辦完就離開（買東西的會提著袋子走），後面的人往前一格
+  function tickQueues(dt) {
+    for (const q of queues) {
+      q.timer -= dt; if (q.timer > 0 || !q.members.length) continue;
+      q.timer = 6 + rnd() * 6;
+      const first = q.members.shift();
+      if (q.name !== '售票機') { const bag = new THREE.Mesh(new THREE.BoxGeometry(.22, .26, .1), new THREE.MeshStandardMaterial({ color: ['#e8e4dc', '#2a9d8f', '#c4162a'][(rnd() * 3) | 0], roughness: .9 })); bag.position.set(.28, .62, .05); first.rig.root.add(bag); }
+      first.behavior = null; first.wait = 0; first.area = { kind: 'unpaid' };
+      q.members.forEach((m, k) => { m.slot = k; m.target = { x: q.x + q.dx * k, y: q.y, z: q.z + q.dz * k }; m.wait = 0; });
+    }
+  }
+
 
   // 每幀更新：走向目標點；前方有玩家就停下
   function tick(dt, now) {
     if (World.riding) { for (const n of list) n.rig.root.visible = false; return; }
+    tickQueues(dt);
     const p = World.player;
     for (const n of list) {
       n.rig.root.visible = true;
       if (n.speed > 0) {
         if (n.wait > 0) { n.wait -= dt; n.speedNow = 0; }
         else {
-          if (!n.target) n.target = randomPoint(n.area || { kind: 'concourse' });
+          if (!n.target) n.target = nextTarget(n);
           if (n.target) {
             const dx = n.target.x - n.x, dz = n.target.z - n.z, d = Math.hypot(dx, dz);
             const toP = Math.hypot(p.x - n.x, p.z - n.z);
             const ahead = toP < 1.1 && Math.abs(p.y - n.y) < .6 && ((p.x - n.x) * dx + (p.z - n.z) * dz) > 0;
-            if (d < .2) { n.target = null; n.wait = 1 + Math.random() * 4; n.speedNow = 0; }
+            if (d < .2) { n.target = null; n.speedNow = 0; arrived(n); }
             else if (ahead) { n.speedNow = 0; n.face = Math.atan2(p.x - n.x, p.z - n.z); }
             else {
               const st = Math.min(d, n.speed * dt), nx = n.x + dx / d * st, nz = n.z + dz / d * st;

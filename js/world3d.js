@@ -365,7 +365,8 @@ const World = (() => {
     setRun(on) { runToggle = on; },
     // 坐下／起身
     sit(pos) {
-      if (pos) { player.sitting = true; player.x = pos.x; player.z = pos.z; player.face = pos.face; player.speed = 0; }
+      if (pos) { player.sitting = true; player.stand = pos.stand || null; player.x = pos.x; player.z = pos.z; player.face = pos.face; player.speed = 0; }
+      else if (player.stand) { player.sitting = false; player.x = player.stand.x; player.z = player.stand.z; player.stand = null; }
       else { player.sitting = false; const tr = trainOf(player.x, player.z, player.y); if (tr) { const tz = tr.P.z + tr.side * S.TRACK; player.z = tz + Math.sign(player.z - tz) * .5; } }
     },
     get sitting() { return player.sitting; },

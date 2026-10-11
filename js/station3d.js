@@ -342,7 +342,7 @@ const Station3D = (() => {
   function build(L, skyName) {
     textures();
     clocks.length = 0;
-    curL = L; L.obstacles = [];
+    curL = L; L.obstacles = []; L.seats = []; L.ads = [];
     const g = new T.Group();
     const night = skyName === 'night';
     const frame = M('#4a5259', { r: .5, m: .4 });
@@ -437,7 +437,7 @@ const Station3D = (() => {
       for (const sz of [-1, 1]) box(1.2, 2.2, .04, M('#c9cfd4', { m: .8, r: .2 }), -24, 1.1, sz * .72, pg);
       sign(plainSign('電梯', 'Elevator', '#23272b', '#fff', { bg: '#2a7de1', fg: '#fff', text: '⇅' }), 1.4, .35, -24, 2.85, .75, pg);
       // 座椅
-      for (const x of [-31, 31, -21, 23.5]) { box(1.8, .08, .45, M('#8a9097', { m: .5 }), x, .45, 0, pg); box(1.8, .4, .06, M('#8a9097', { m: .5 }), x, .68, -.2, pg); for (const lx of [-.8, .8]) box(.06, .45, .4, M('#5d6368', { m: .5 }), x + lx, .225, 0, pg); solid(P.x + x, P.z, 1.8, .5, P.y); }
+      for (const x of [-31, 31, -21, 23.5]) { box(1.8, .08, .45, M('#8a9097', { m: .5 }), x, .45, 0, pg); box(1.8, .4, .06, M('#8a9097', { m: .5 }), x, .68, -.2, pg); for (const lx of [-.8, .8]) box(.06, .45, .4, M('#5d6368', { m: .5 }), x + lx, .225, 0, pg); solid(P.x + x, P.z, 1.8, .5, P.y); for (const sx of [-.45, .45]) L.seats.push({ x: P.x + x + sx, y: P.y, z: P.z + .02, face: 0, stand: { x: P.x + x + sx, z: P.z + .75 } }); }
       // 站名吊牌
       const stn = stationSignTex(L.stationId, P.line);
       for (const x of [-15, 15]) sign(stn, 2.4, .6, x, 2.95, 0, pg);
@@ -582,7 +582,7 @@ const Station3D = (() => {
       box(.8, hallH, .8, colM, x, hallH / 2, z, g); solid(x, z, .8, .8);
       box(.82, .12, .82, M('#c8cdd2', { m: .5 }), x, .06, z, g);
       const bx = x + Math.sign(x) * 1.0;
-      if (free(bx, z, .4)) { box(.45, .08, 1.6, M('#8a9097', { m: .5 }), bx, .45, z, g); box(.06, .4, 1.6, M('#8a9097', { m: .5 }), bx + Math.sign(x) * .2, .68, z, g); solid(bx, z, .5, 1.6); }
+      if (free(bx, z, .4)) { box(.45, .08, 1.6, M('#8a9097', { m: .5 }), bx, .45, z, g); box(.06, .4, 1.6, M('#8a9097', { m: .5 }), bx + Math.sign(x) * .2, .68, z, g); solid(bx, z, .5, 1.6); for (const sz of [-.45, .45]) L.seats.push({ x: bx - Math.sign(x) * .02, y: 0, z: z + sz, face: -Math.sign(x) * Math.PI / 2, stand: { x: bx - Math.sign(x) * .75, z: z + sz } }); }
     }
     // 盆栽
     const planter = (x, z) => { if (!free(x, z, .4)) return; box(.7, .55, .7, M('#6a6e72', { r: .7 }), x, .275, z, g); solid(x, z, .7, .7); for (let i = 0; i < 5; i++) { const s = new T.Mesh(new T.SphereGeometry(.32 - i * .03, 10, 8), M(['#3d7a4a', '#4a8a52', '#2f6a3c'][i % 3], { r: .9 })); s.position.set(x + Math.sin(i * 2.3) * .14, .75 + i * .14, z + Math.cos(i * 2.3) * .14); g.add(s); } };
@@ -844,9 +844,21 @@ const Station3D = (() => {
     const bin = (x, y, z) => { solid(x, z, .42, .42, y); box(.42, .75, .42, M('#5d6b7a', { m: .4, r: .4 }), x, y + .375, z, g); box(.44, .06, .44, darkM, x, y + .78, z, g); box(.16, .02, .2, M('#1c2126'), x, y + .81, z, g); };
     for (const x of [-5.2, 5.2]) bin(x, 0, C.z0 + .45);                                   // 大廳站名牆兩側
     bin(U.x0 + .5, 0, U.z0 + 3.4); bin(U.x1 - 5.8, 0, U.z1 - .5);                         // 非付費區
-    const adW = (x, z, rot, i) => { const b = box(.12, 1.7, 3.2, M('#e8e8e4'), x, 1.7, z, g); b.rotation.y = rot; const p = plane(3, 1.5, M('#ffffff', { map: adTex(i), e: '#ffffff', ei: .15 }), g); p.position.set(x + Math.sin(rot) * .07, 1.7, z + Math.cos(rot) * .07); p.rotation.y = rot; };
+    const adW = (x, z, rot, i) => { L.ads.push({ x: x + Math.sin(rot) * 1.1, y: 0, z: z + Math.cos(rot) * 1.1, ad: ((i % ADS.length) + ADS.length) % ADS.length }); const b = box(.12, 1.7, 3.2, M('#e8e8e4'), x, 1.7, z, g); b.rotation.y = rot; const p = plane(3, 1.5, M('#ffffff', { map: adTex(i), e: '#ffffff', ei: .15 }), g); p.position.set(x + Math.sin(rot) * .07, 1.7, z + Math.cos(rot) * .07); p.rotation.y = rot; };
     for (const [k, z] of [C.z0 + 12, C.z0 + 20].entries()) if (z < L.gateZ - 2.5) { adW(C.x0 + .08, z, Math.PI / 2, k + 1); if (!placesOf(L.stationId).includes('cafe')) adW(C.x1 - .08, z, -Math.PI / 2, k + 4); }
     { const p = plane(3, 1.5, M('#ffffff', { map: adTex(5), e: '#ffffff', ei: .15 }), g); p.position.set(8.5, 1.7, U.z1 - .16); p.rotation.y = Math.PI; box(3.2, 1.7, .1, M('#e8e8e4'), 8.5, 1.7, U.z1 - .08, g); }
+    // 路線指南看板（閘門內側）
+    { const gx = -10.5, gz = L.gateZ - 1.4;
+      if (!L.platforms.some(P => Math.abs(P.z - gz) < 3)) {
+        const t = canvasTex(320, 400, x => {
+          x.fillStyle = '#fbfbf8'; x.fillRect(0, 0, 320, 400); x.fillStyle = '#23272b'; x.font = 'bold 26px "Noto Sans TC", sans-serif'; x.fillText('路線指南', 18, 40);
+          x.font = '15px "Noto Sans TC", sans-serif'; x.fillText('Route guide', 20, 62);
+          LINE_ORDER.slice(0, 7).forEach((l, i) => { x.fillStyle = LINES[l].color; x.fillRect(18, 86 + i * 42, 46, 28); x.fillStyle = '#fff'; x.font = 'bold 16px sans-serif'; x.fillText(l, 26, 106 + i * 42); x.fillStyle = '#23272b'; x.font = '18px "Noto Sans TC", sans-serif'; x.fillText(LINES[l].zh, 76, 106 + i * 42); });
+        });
+        box(1.3, 1.9, .12, M('#30363c', { r: .5 }), gx, 1.25, gz, g); solid(gx, gz, 1.3, .3);
+        for (const s of [-1, 1]) { const p = plane(1.2, 1.5, M('#ffffff', { map: t }), g); p.position.set(gx, 1.35, gz + s * .07); p.rotation.y = s > 0 ? 0 : Math.PI; }
+        L.spots.push({ kind: 'guide', x: gx, y: 0, z: gz - 1 });
+      } }
     // 吊掛的出口指標（付費區往閘門）
     const exitSign = plainSign('出口 Exit ↓', '往閘門 To fare gates', '#f2c200', '#1c2126');
     for (const x of [-8, 8]) { box(.04, .5, .04, darkM, x, hallH - .25, L.gateZ - 4, g); sign(exitSign, 2.4, .55, x, hallH - .8, L.gateZ - 4, g); }
@@ -1166,7 +1178,7 @@ const Station3D = (() => {
   }
 
   return {
-    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS, tickClocks, placeAt,
+    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS, tickClocks, placeAt, ADS,
     layout, build, makeTrain, segment, surroundings, sides,
     drawLcd, drawStrip, drawLed, SKY_CITY,
   };

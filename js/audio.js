@@ -243,6 +243,17 @@ const Sound = (() => {
 
   return {
     unlock: ensure,
+    // 街頭表演：依樂器彈一小段旋律（音量隨距離）
+    busk(kind, vol = .12) {
+      if (!enabled || !ensure()) return;
+      const tunes = {
+        guitar: [[392, 0], [494, .25], [587, .5], [494, .75], [440, 1.0], [392, 1.25], [330, 1.5], [392, 1.75]],
+        violin: [[659, 0], [587, .4], [523, .8], [587, 1.2], [659, 1.6], [784, 2.0]],
+        dance: [[220, 0], [220, .25], [330, .5], [220, .75], [262, 1.0], [220, 1.25], [330, 1.5], [392, 1.75]],
+        magic: [[523, 0], [659, .3], [784, .6], [1047, .9]],
+      }[kind] || [];
+      for (const [f, t] of tunes) bell(f * (kind === 'violin' ? 1 : 2), t, vol, master, kind === 'violin' ? 2.4 : 1.0);
+    },
     doorClose, doorOpen, arrivalChime, onboardChime, itemGet, click, gate, teleport,
     startRumble, setSpeed, stopRumble, ambience, announce,
     get enabled() { return enabled; },

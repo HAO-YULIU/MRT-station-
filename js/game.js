@@ -152,6 +152,7 @@ Game.onQuestChange = (what, id, o, k) => {
   const q = QUESTS[id];
   if (what === 'next') toast(`<b>收到後續委託</b><span>${q.title}</span>`, 'level');
   if (what === 'done') {
+    Life.log(`完成「${q.title}」${k ? `（${(o && o.name) || Quests.OUTCOME_NAME[k] || ''}）` : ''}`);
     SideQuests.onDone(id);
     Progress.onQuestDone(id, o, k);
     if (o && o.text) setTimeout(() => Dialog.info(`${q.title}——${o.name || Quests.OUTCOME_NAME[k] || ''}`, o.text), 700);
@@ -170,6 +171,7 @@ Game.onQuestChange = (what, id, o, k) => {
 };
 // 任務事件：完成某步驟時提示
 function questEvent(ev) {
+  Life.onEvent(ev);
   for (const d of Quests.emit(ev)) if (Game.state.quests.active[d.id]) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
 }
 
@@ -319,7 +321,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); });
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -387,6 +389,7 @@ function startStation(stationId, carry) {
   Challenges.spawn(stationId);
   Secrets.spawn(stationId);
   Achievements.spawn(stationId);
+  Life.spawn(stationId);
   arriveChecks(stationId);
   Sound.ambience(World.layout.allUnder ? 'underground' : 'elevated');
   Game.ctlTimer = setInterval(tickStation, 400);
@@ -396,6 +399,7 @@ function startStation(stationId, carry) {
 // 到站時：支線秘密任務、寶物感應
 function arriveChecks(stationId) {
   SideQuests.onArrive(stationId);
+  if (Game.state.lastLogStation !== stationId) { Game.state.lastLogStation = stationId; Life.log(`來到 ${stationId}`); }
   Progress.onArrive(stationId);
   const other = { 新北投: '小碧潭', 小碧潭: '新北投' }[stationId];
   if (other) Quests.secret('sec_branch', { target: other });
@@ -497,7 +501,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), puzzleInteraction, npcInteraction, spotInteraction, pickupInteraction, collectInteraction, secretInteraction, seatInteraction, dropInteraction);
+  list.push(exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -656,7 +660,7 @@ const dropInteraction = {
 // 查看告示牌、塗鴉、路線圖
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
-  cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
+  guide: '路線指南', cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
   timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
 const SPOT_VERB = { stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
@@ -706,6 +710,7 @@ const FACILITY = {
   },
   vending: () => vendMenu(),
   cafe: () => cafeMenu(),
+  guide: () => Life.guide(),
   stage: () => {
     const h = TaipeiTime.now().hour, ok = Quests.isDone('sq_musician') && Game.state.quests.outcome && Game.state.quests.outcome.sq_musician === 'perfect';
     if (ok && h >= 20 && h < 22) { Sound.arrivalChime('Y'); return Dialog.info('街頭藝人表演區', '小黑正在唱〈月台之歌〉。圍觀的人跟著打拍子，有人把零錢放進吉他盒。<br>唱到最後一句，他看了你一眼，笑了。'); }
@@ -781,6 +786,11 @@ async function restroom() {
 function shopMenu(st) {
   const shop = Station3D.SHOPS[st]; if (!shop) return;
   const wear = (OUTFIT_SHOPS[st] || []).filter(id => Outfits.fits(id, Game.state.char));
+  if (shop.services && !wear.length) return Dialog.show({ name: shop.name, role: '歡迎光臨' }, '想看什麼？', [
+    { label: '商品', primary: true, run: () => foodMenu(st) },
+    { label: '服務', primary: true, run: () => servicesMenu(st) },
+    { label: '離開', run: () => Dialog.close() },
+  ]);
   if (!wear.length) return foodMenu(st);
   Dialog.show({ name: shop.name, role: '歡迎光臨' }, '想看什麼？', [
     { label: '飲食、伴手禮', primary: true, run: () => foodMenu(st) },
@@ -846,6 +856,24 @@ const secretInteraction = {
   run: () => { const s = Secrets.near(World.player); if (s) Secrets.look(s); },
 };
 
+// 街頭表演、長椅、廣告海報
+const performerInteraction = {
+  get id() { const pf = Life.nearPerformer(World.player); return pf ? 'perf:' + pf.name : 'perf'; },
+  get label() { const pf = Life.nearPerformer(World.player); return pf ? `欣賞：${pf.name}` : '欣賞'; },
+  when: p => !Dialog.with && !World.sitting && !!Life.nearPerformer(p),
+  run: () => Life.watch(),
+};
+const benchInteraction = {
+  get id() { return World.sitting ? 'bench:up' : 'bench'; },
+  get label() { return World.sitting ? '休息選單' : '坐下休息'; },
+  when: p => !Dialog.with && p.zone.kind !== 'train' && (World.sitting || !!Life.nearSeat(p)),
+  run: () => { if (!World.sitting) { const s = Life.nearSeat(World.player); if (!s) return; World.sit(s); } Life.sitMenu(); },
+};
+const adInteraction = {
+  id: 'ad', label: '看廣告',
+  when: p => !Dialog.with && !World.sitting && !!Life.nearAd(p) && !nearSpot(p),
+  run: () => { const a = Life.nearAd(World.player); if (a) Life.lookAd(a); },
+};
 // 收集品（舊車票、照片碎片、紙條……）與會被收走的失物
 const collectInteraction = {
   get id() { const it = Achievements.near(World.player); return it ? 'col:' + it.kind : 'col'; },
