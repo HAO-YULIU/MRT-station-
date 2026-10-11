@@ -888,15 +888,14 @@ const Challenges = (() => {
     for (const line of STORY_LINES) {
       const so = (S().story || {})[line]; if (!so) continue;
       const P = platformOf(line);
-      if (so.chase && so.chase.station === stationId && P) {
-        const c = STORY[line].chapters[so.chase.i];
-        const q = [-26, 24, -18, 6].map(dx => ({ x: P.x + dx, y: P.y, z: P.z + 1.4 })).find(ok);
+      if (so.chase && so.chase.station === stationId && P) {   // 嫌疑人往大廳跑，在出站前攔住他
+        const c = STORY[line].chapters[so.chase.i], C = World.layout.concourse, sd = hsh(stationId) % 2 ? 1 : -1;
+        const q = [{ x: sd * (C.x1 - 5), y: 0, z: C.z0 + 3 }, { x: -sd * (C.x1 - 5), y: 0, z: C.z0 + 3 }, ...[-26, 24, -18, 6].map(dx => ({ x: P.x + dx, y: P.y, z: P.z + 1.4 }))].find(ok);
         if (q) addPerson({ type: 'suspect', line, station: stationId, i: so.chase.i, sc: c, ...q, face: Math.PI }, STORY_LOOKS[c.chase.suspect.look]);
       }
       if (so.escape) {
         const c = STORY[line].chapters[so.escape.i];
-        if (c.escape.targets.includes(stationId)) setTimeout(() => resolveEscape(line, true), 900);
-        else { const L = World.layout, C = L.concourse, q = { x: C.x1 - 3, y: 0, z: C.z0 + 3 }; if (ok(q)) addPerson({ type: 'stalker', line, station: stationId, ...q, face: -Math.PI / 2 }, STORY_LOOKS[c.escape.stalker.look]); }
+        { const L = World.layout, C = L.concourse, q = { x: C.x1 - 3, y: 0, z: C.z0 + 3 }; if (ok(q)) addPerson({ type: 'stalker', line, station: stationId, ...q, face: -Math.PI / 2 }, STORY_LOOKS[c.escape.stalker.look]); }
       }
     }
   }
@@ -951,18 +950,16 @@ const Challenges = (() => {
         })));
       }
       if (c.kind === 'chase') {
-        const d = MRT.directionsAt(e.station).find(x => x.line === line && x.terminal === c.chase.toward) || MRT.directionsAt(e.station).find(x => x.line === line);
-        const target = d.stops[Math.min(c.chase.n, d.stops.length) - 1];
         return Dialog.show(who, text, [{ label: `追！（${c.chase.minutes} 分鐘內）`, primary: true, run: () => {
-          so.chase = { i: e.i, station: target, deadline: Date.now() + c.chase.minutes * 60000 }; saveState(); Dialog.close();
-          toast(`<b>追捕開始</b><span>${c.chase.minutes} 分鐘內趕到他下車的那一站</span>`, 'warn');
+          so.chase = { i: e.i, station: e.station, deadline: Date.now() + c.chase.minutes * 60000 }; saveState(); Dialog.close();
+          toast(`<b>追捕開始</b><span>${c.chase.minutes} 分鐘內在大廳攔住他</span>`, 'warn');
           solve(line, e.station, { xp: 20 }, '');
         } }]);
       }
       if (c.kind === 'escape') {
-        return Dialog.show(who, text, [{ label: `出發（${c.escape.minutes} 分鐘內，不能傳送）`, primary: true, run: () => {
-          so.escape = { i: e.i, deadline: Date.now() + c.escape.minutes * 60000 }; saveState(); Dialog.close();
-          toast('<b>有人在跟蹤你</b><span>搭車到終點站甩掉他</span>', 'warn');
+        return Dialog.show(who, text, [{ label: `快跑（${c.escape.minutes} 分鐘內）`, primary: true, run: () => {
+          so.escape = { i: e.i, station: e.station, deadline: Date.now() + c.escape.minutes * 60000 }; saveState(); Dialog.close();
+          toast('<b>有人在跟蹤你</b><span>跑到大廳的站務室求救</span>', 'warn');
           solve(line, e.station, { xp: 20 }, '');
         } }]);
       }
@@ -1045,11 +1042,11 @@ const Challenges = (() => {
           const list = corners(q.line); const q2 = list[hsh(from + c.item) % list.length];
           if (q2) addEnt({ type: 'lost', line: q.line, station: from, c, ...q2 }, iconSprite(ITEMS[c.item].icon, .32, false), .15);
         }
-        if (c.kind === 'person' && !st.told) {
-          const P = platformOf(q.line); if (!P) continue;
-          const side = hsh(from) % 2 ? 1 : -1;
-          const q2 = { x: P.x - 12 + (hsh(from + 'x') % 20), y: P.y, z: P.z + side * 1.7 };
-          if (ok(q2)) addPerson({ type: 'friend', line: q.line, station: from, c, ...q2, face: side > 0 ? Math.PI : 0 }, c.friend.look);
+        if (c.kind === 'person' && !st.told) {   // 朋友在同一站的大廳（或別的樓層）
+          const L = World.layout, C = L.concourse, side = hsh(from) % 2 ? 1 : -1;
+          const cands = [{ x: side * (C.x1 - 6), y: 0, z: C.z0 + 4 }, { x: -side * (C.x1 - 9), y: 0, z: L.gateZ - 3 }, ...corners()];
+          const q2 = cands.find(ok);
+          if (q2) addPerson({ type: 'friend', line: q.line, station: from, c, ...q2, face: 0 }, c.friend.look);
         }
       }
     }
@@ -1059,8 +1056,7 @@ const Challenges = (() => {
       if (!mainOf(f.line) || !c.giver) { s.flags.follow = null; saveState(); }
       else {
         ensureFollower(c);
-        if (c.kind === 'escort' && c.target === stationId) setTimeout(() => arrived(f, c), 900);
-        if (c.kind === 'way' && f.station !== stationId) {   // 迷路的人只在原本那一站
+        if ((c.kind === 'way' || c.kind === 'escort') && f.station !== stationId) {   // 迷路／帶路的人只在原本那一站
           toast(`<b>${esc(c.giver.name)}</b><span>「我還是自己在${esc(f.station)}問問別人好了，謝謝你。」</span>`);
           setCh(f.line, f.station, null); s.flags.follow = null; saveState(); dropFollower();
         }
@@ -1115,10 +1111,20 @@ const Challenges = (() => {
       const d = Math.hypot(e.x - p.x, e.z - p.z);
       if (d < r && d < bd) { best = e; bd = d; }
     }
+    // 被跟蹤：跑到這一站大廳的站務室就安全
+    for (const [line, so] of Object.entries(S().story || {})) {
+      if (!so.escape || (so.escape.station && so.escape.station !== World.layout.stationId)) continue;   // 舊存檔沒有記站名：任何一站的站務室都可以
+      const sp = World.layout.spots.find(x => x.kind === 'office');
+      if (sp && Math.abs(p.y) < 1 && Math.hypot(sp.x - p.x, sp.z - p.z) < 2.8) return { type: 'escapeHere', line };
+    }
     // 迷路的人：帶到月台某一側
     const f = S().flags.follow;
     if (!best && f && follower) {
       const c = Puzzles.challenge(f.line, f.station), z = World.zone();
+      if (c.kind === 'escort' && World.layout.stationId === f.station) {
+        const sp = World.layout.spots.find(x => x.kind === c.spot && (c.spot !== 'elevator' || x.level === 'hall'));
+        if (sp && Math.abs(sp.y - p.y) < 1 && Math.hypot(sp.x - p.x, sp.z - p.z) < 2.6) return { type: 'escortHere', f, c };
+      }
       if (c.kind === 'way' && z.kind === 'platform' && z.P.line === f.line && World.layout.stationId === f.station && Math.abs(p.z - z.P.z) > 1.2) return { type: 'wayHere', f, c, P: z.P };
     }
     return best;
@@ -1136,6 +1142,8 @@ const Challenges = (() => {
       case 'friend': return `說話：${e.c.friend.name}`;
       case 'hidden': return '調查：這面牆怪怪的';
       case 'wayHere': return '「在這一邊等車」';
+      case 'escortHere': return `「就是這裡」`;
+      case 'escapeHere': return '敲站務室的門求救';
     }
     return '查看';
   }
@@ -1178,10 +1186,12 @@ const Challenges = (() => {
     }
     if (e.type === 'friend') {
       const st = chState(e.line, e.station);
-      return say({ name: c.friend.name, role: '' }, `咦？${esc(c.giver.name)}在${esc(e.station)}等我？我搞錯月台了！謝謝你特地跑來告訴我，我現在就過去。`, [
+      return say({ name: c.friend.name, role: '' }, `咦？${esc(c.giver.name)}在月台等我？我還以為約在大廳！謝謝你特地來告訴我，我現在就過去。`, [
         { label: '不客氣', primary: true, run: () => { Dialog.close(); if (st) { st.told = true; setCh(e.line, e.station, st); } solve(e.line, e.station, { xp: 35, money: 40 }, '幫忙找到人了！'); } },
       ]);
     }
+    if (e.type === 'escortHere') return arrived(e.f, e.c);
+    if (e.type === 'escapeHere') return resolveEscape(e.line, true);
     if (e.type === 'wayHere') {
       const side = Math.sign(World.player.z - e.P.z);
       const good = (e.P.sides[side] || []).some(d => d.stops.includes(c.dest));
@@ -1234,7 +1244,7 @@ const Challenges = (() => {
   // 帶路的人到站了
   function arrived(f, c) {
     if (S().flags.follow !== f) return;
-    Dialog.show({ name: c.giver.name, role: '' }, `到了！這裡就是${esc(c.target)}。謝謝你一路陪我，第一次搭捷運就遇到你，真好。`, [
+    Dialog.show({ name: c.giver.name, role: '' }, `找到了！就是這裡。謝謝你帶我過來，第一次來這一站就遇到你，真好。`, [
       { label: '不客氣', primary: true, run: () => { Dialog.close(); solve(f.line, f.station, { xp: 45, money: 60 }, '帶路完成！'); } },
     ]);
   }

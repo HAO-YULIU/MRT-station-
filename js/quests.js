@@ -371,7 +371,7 @@ for (const [line, m] of Object.entries(MAIN_STORY)) {
     type: 'main', line, title: m.title, giver: 'xiuyu', desc: m.desc,
     steps: [
       { text: `完成${LINES[line].zh}每一站月台上的委託（紙條上的謎題，或需要幫忙的人）`, goal: { kind: 'puzzles', line } },
-      { text: `寶物出現在${LINES[line].zh}的某一站，搭${LINES[line].zh}去找出來`, goal: { kind: 'find', item: 'treasure_' + line, station: '@treasure' } },
+      { text: `寶物會出現在完成最後一個委託的那一站，在站裡找出來`, goal: { kind: 'find', item: 'treasure_' + line, station: '@treasure' } },
     ],
     reward: { money: 800, xp: 600, friend: { xiuyu: 25 } },
   };
@@ -512,9 +512,9 @@ const Quests = (() => {
         const all = Puzzles.mainStations(g.line), n = all.filter(x => st.solved[x]).length;
         done.push({ id, text: `${ev.station}的委託（${n}/${all.length}）` });
         if (n < all.length) continue;
-        st.treasure = all[(Math.random() * all.length) | 0];
+        st.treasure = ev.station;   // 寶物就出現在完成最後一個委託的這一站
         st.step++;
-        done.push({ id, text: `${LINES[g.line].zh}每一站的委託都完成了！寶物出現在${LINES[g.line].zh}的某一站` });
+        done.push({ id, text: `${LINES[g.line].zh}每一站的委託都完成了！寶物就出現在${ev.station}，在站裡找找看` });
         continue;
       }
       // 可選線索：任何時候都能蒐集，影響結局評價

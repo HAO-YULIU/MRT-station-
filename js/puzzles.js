@@ -111,6 +111,9 @@ const Puzzles = (() => {
     ['ch_glasses', '老花眼鏡'], ['ch_scarf', '格子圍巾'], ['ch_card', '學生證'], ['ch_book', '藍色筆記本'],
     ['ch_toy', '小熊玩偶'], ['ch_phone', '手機'], ['ch_keys', '鑰匙圈'], ['ch_hat', '毛線帽'],
   ];
+  const VEND = ['water', 'greentea', 'sportdrink'];   // 每一站都有的自動販賣機
+  // 帶路：站內的地方（spot 種類、委託人的說法）
+  const ESCORT = [['elevator', '要搭電梯到月台，可是找不到電梯在哪裡'], ['toilet', '想找廁所，可是指標看不懂'], ['ticket', '要買單程票，找不到售票機']];
   const BUY = ['bubbletea', 'coffee', 'onigiri', 'pineapplecake', 'soymilk', 'bread', 'chicken', 'nougat', 'postcard', 'flower'];
   const PASSAGE = [
     { at: 'platformEnd', riddle: '「月台的盡頭，風從隧道吹進來的地方，牆上有一道不該存在的縫。」' },
@@ -134,13 +137,6 @@ const Puzzles = (() => {
     const role = ROLE[(r() * ROLE.length) | 0], c = COLORS[(r() * COLORS.length) | 0];
     return { name: SURNAME[(r() * SURNAME.length) | 0] + role.t, look: look(r, role, c[1]), color: c[0] };
   }
-  // 同一條線上，距離 a 站 lo～hi 站的車站（以及往哪個終點方向）
-  function around(line, a, lo, hi, r) {
-    const opts = [];
-    for (const d of MRT.directionsAt(a).filter(d => d.line === line)) d.stops.forEach((x, i) => { if (i + 1 >= lo && i + 1 <= hi) opts.push({ station: x, n: i + 1, terminal: d.terminal }); });
-    return opts.length ? opts[(r() * opts.length) | 0] : null;
-  }
-  const shopOn = line => stations(line).filter(x => Station3D.SHOPS[x]);
   const isTerm = (line, id) => MRT.terminals(line).has(id);
 
   const chCache = {};
@@ -156,29 +152,27 @@ const Puzzles = (() => {
     const giver = person(r);
     let c = null;
     const tryKind = k => {
+      // 主線委託一律在這一站裡就能完成（不用搭車去別站）
       if (k === 'lost') {
-        const t = around(line, id, 2, 4, r); if (!t) return null;
         const it = LOST[(r() * LOST.length) | 0];
-        return { kind: k, giver, item: it[0], itemName: it[1], target: t.station,
-          ask: `我的${it[1]}好像忘在${L.zh}的某一站了……我記得是往${name(t.terminal)}的方向，大概${t.n <= 2 ? '一兩' : '三四'}站以內。月台盡頭還是大廳角落，我也不確定。可以幫我找找嗎？` };
+        return { kind: k, giver, item: it[0], itemName: it[1], target: id,
+          ask: `我的${it[1]}不見了……剛剛還在手上，一定是掉在${name(id)}站裡的某個地方。月台盡頭、大廳角落，還是別的樓層？可以幫我找找嗎？` };
       }
       if (k === 'escort') {
-        const t = around(line, id, 2, 5, r); if (!t) return null;
-        return { kind: k, giver, target: t.station,
-          ask: `不好意思，我要去${name(t.station)}，可是我第一次搭捷運，看不懂……可以帶我一起坐過去嗎？（帶著人的時候不能傳送）` };
+        const sp = ESCORT[(r() * ESCORT.length) | 0];
+        return { kind: k, giver, spot: sp[0],
+          ask: `不好意思，我第一次來這一站，${sp[1]}……可以帶我過去嗎？` };
       }
       if (k === 'person') {
-        const t = around(line, id, 2, 5, r); if (!t) return null;
         const friend = person(r);
-        return { kind: k, giver, friend, target: t.station,
-          ask: (pr => `我在等${friend.name}，${pr}說${pr}在「往${name(t.terminal)}方向第 ${t.n} 站」的月台等我，可是電話打不通……${pr}穿${friend.color}的衣服。可以幫我去跟${pr}說我在${name(id)}等${pr}嗎？`)(friend.look.girl ? '她' : '他') };
+        return { kind: k, giver, friend, target: id,
+          ask: (pr => `我在等${friend.name}，我們約在${name(id)}站，可是走散了，電話也打不通……${pr}穿${friend.color}的衣服，可能在大廳或別的樓層。可以幫我去跟${pr}說我在這裡等${pr}嗎？`)(friend.look.girl ? '她' : '他') };
       }
       if (k === 'buy') {
-        const shops = shopOn(line).filter(x => Station3D.SHOPS[x].items.some(i => BUY.includes(i))); if (!shops.length) return null;
-        const at = shops[(r() * shops.length) | 0], items = Station3D.SHOPS[at].items.filter(i => BUY.includes(i));
-        const item = items[(r() * items.length) | 0];
-        return { kind: k, giver, item, shop: at,
-          ask: `我腳受傷了走不動……可以幫我買一個${ITEMS[item].name}嗎？${L.zh}上的${name(at)}站有商店在賣。買回來我會把錢還你，還多給你一點。` };
+        const own = Station3D.SHOPS[id] ? Station3D.SHOPS[id].items.filter(i => BUY.includes(i)) : [];
+        const item = own.length ? own[(r() * own.length) | 0] : VEND[(r() * VEND.length) | 0];
+        return { kind: k, giver, item, shop: id,
+          ask: `我腳受傷了走不動……可以幫我買一個${ITEMS[item].name}嗎？${own.length ? '這一站的商店就有賣' : '大廳非付費區的自動販賣機就有'}。買回來我會把錢還你，還多給你一點。` };
       }
       if (k === 'passage') { const pz = PASSAGE[(r() * PASSAGE.length) | 0]; return { kind: k, at: pz.at, ask: `秀蔅的紙條：${pz.riddle}<br><small>（現場不會有任何標記，靠近對的地方才會發現）</small>` }; }
       if (k === 'coins') return { kind: k, giver, ask: '剛剛被人撞了一下，零錢包整個打開……三枚硬幣滾到這一站不知道哪裡去了，有的好像掉到別的樓層。可以幫我找回來嗎？硬幣很小，要仔細看。' };

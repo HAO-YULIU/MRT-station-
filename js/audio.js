@@ -4,6 +4,8 @@
  *  - 列車馬達變頻聲（起步升調、進站降調）、軌道接縫聲
  *  - 月台環境音（地下站空調低鳴與人聲、高架站風聲）、車廂內行駛聲
  *  - 中英文到站廣播（瀏覽器語音合成）
+ *   arrive2／depart2 另一組進站離站錄音（輪流用）、steps 腳步、crickets 高架站夜晚蟲鳴、
+ *   fog 迷霧之城氛圍、ghost 鬼站配樂、chase 被追時的配樂、died 倒下時的人聲、jazz 標題畫面、shop 便利商店
  * 若 assets/sounds/arrive-<路線>.mp3 存在，進站音樂會優先播放音檔。
  * 實際錄音（assets/sounds，來源見該資料夾的 README）：
  *   station.mp3 台北捷運車站環境音（循環）、train-run.mp3 車廂行駛聲（循環，已濾掉廣播人聲）
@@ -163,7 +165,7 @@ const Sound = (() => {
     sample(name).then(buf => {
       if (!buf || h.stopped) return;
       const s = c.createBufferSource(); s.buffer = buf; s.loop = !!opts.loop;
-      s.connect(h.g); s.start(0, opts.offset ? opts.offset * buf.duration : 0); h.src = s;
+      s.connect(h.g); s.start(0, opts.at != null ? Math.min(opts.at, buf.duration - .5) : opts.offset ? opts.offset * buf.duration : 0); h.src = s;
       h.g.gain.setTargetAtTime(vol, now(), opts.fadeIn || .05);
       if (opts.fadeOutAt) h.g.gain.setTargetAtTime(0, now() + opts.fadeOutAt, opts.fadeOut || 1);
     });
@@ -172,8 +174,69 @@ const Sound = (() => {
     return h;
   }
   // 月台上看到的列車：進站、離站
-  function trainArrive(vol = .9) { return playSample('arrive', vol, { fadeOutAt: 9, fadeOut: 1.2 }); }
-  function trainDepart(vol = .8) { return playSample('depart', vol, { fadeIn: .3, fadeOutAt: 8, fadeOut: 1.2 }); }
+  // 兩段錄音輪流用，每班車聽起來不完全一樣（arrive2 從後段開始播，煞停的聲音剛好對上列車停下）
+  function trainArrive(vol = .9) { return Math.random() < .5 ? playSample('arrive', vol, { fadeOutAt: 9, fadeOut: 1.2 }) : playSample('arrive2', vol * .8, { at: 12.5, fadeIn: .4, fadeOutAt: 8, fadeOut: 1 }); }
+  function trainDepart(vol = .8) { return Math.random() < .5 ? playSample('depart', vol, { fadeIn: .3, fadeOutAt: 8, fadeOut: 1.2 }) : playSample('depart2', vol * .8, { fadeIn: .5, fadeOutAt: 8, fadeOut: 1.5 }); }
+
+  /* ── 腳步聲：把水泥地腳步錄音切成一步一步，跟著走路節奏播放 ── */
+  const STEP_AT = [.297, .987, 1.638, 2.102, 2.618, 3.138, 3.685, 4.139, 4.572, 5.198, 6.641];
+  let stepBuf = null, stepIdx = 0;
+  function footstep(vol = .5, run = false) {
+    const c = ensure(); if (!c || !enabled) return;
+    if (!stepBuf) { sample('steps').then(b => { stepBuf = b; }); return; }
+    const s = c.createBufferSource(), g = c.createGain();
+    s.buffer = stepBuf; s.playbackRate.value = (run ? 1.12 : 1) * (.94 + Math.random() * .12);
+    g.gain.value = vol * (.8 + Math.random() * .3);
+    s.connect(g); g.connect(master);
+    stepIdx = (stepIdx + 1 + ((Math.random() * 3) | 0)) % STEP_AT.length;
+    s.start(0, Math.max(0, STEP_AT[stepIdx] - .02), .3);
+  }
+
+  /* ── 背景音樂／氛圍：同一時間只有一條，換的時候交叉淡入淡出 ── */
+  let bed = null;
+  function setBed(name, vol = .5) {
+    if (bed && bed.name === name) { if (bed.vol !== vol) { bed.vol = vol; bed.h.set(vol, .8); } return; }
+    if (bed) bed.h.stop(1.2);
+    bed = null;
+    if (!name || !ensure()) return;
+    bed = { name, vol, h: playSample(name, vol, { loop: true, fadeIn: 1.5, offset: name === 'chase' ? 0 : Math.random() * .6 }) };
+  }
+  // 夜晚的高架站：蟲鳴（沒有室外場景，高架月台最接近戶外）
+  let night = null;
+  function crickets(on) {
+    if (on && !night && ensure()) night = playSample('crickets', .55, { loop: true, offset: Math.random(), fadeIn: 3 });
+    else if (!on && night) { night.stop(1.5); night = null; }
+  }
+  // 依目前畫面決定要播什麼（每 0.3 秒檢查一次，不用到處插程式）
+  let stepT = 0, lastPoll = 0, chaseHold = 0;
+  function director() {
+    const t = performance.now(), dt = Math.min(.5, (t - lastPoll) / 1000); lastPoll = t;
+    if (!ctx || !enabled || typeof World === 'undefined') return;
+    const screen = document.body.dataset.screen;
+    if (screen !== 'game') { setBed(screen === 'title' || screen === 'char' ? 'jazz' : null, .32); crickets(false); return; }
+    let want = null, vol = .5;
+    const F = typeof FogCity !== 'undefined' && FogCity.started ? FogCity.K : null;
+    const z = World.layout ? World.zone() : null;
+    if (F) {
+      want = F.r && F.r.ghostAt ? 'ghost' : 'fog'; vol = want === 'ghost' ? .4 : .55;
+      const p = World.player, chasing = (F.chasers || []).some(c => c.on !== false && c.sleep <= 0 && c.mode !== 'statue' && Math.hypot(c.x - p.x, c.z - p.z) < (c.range || 14) && Math.abs(c.y - p.y) < 3);
+      if (chasing) chaseHold = t + 4000;
+      if (t < chaseHold && !F.dead) { want = 'chase'; vol = .5; }
+    } else if (z && z.room && z.room.kind === 'store') { want = 'shop'; vol = .3; }
+    setBed(want, vol);
+    if (amb && amb.rec) amb.rec.set(F ? .12 : amb.kind === 'underground' ? .55 : .4, .8);   // 霧裡把平常的車站人聲壓低
+    const h = TaipeiTime.now().hour;
+    crickets(!F && !Game.ride && z && z.P && !z.P.under && (h >= 19 || h < 5));
+    // 腳步：依實際移動速度決定步伐間隔
+    const p = World.player;
+    if (World.moving && !World.sitting && !Game.ride && !(z && z.kind === 'ramp')) {
+      stepT -= dt * Math.max(.6, p.speed || 0) / .78;   // 一步約 0.78 公尺
+      if (stepT <= 0) { stepT = 1; footstep(World.running ? .55 : .4, World.running); }
+    } else stepT = .35;
+  }
+  setInterval(director, 120);
+  // 瀏覽器要等使用者第一次點擊才能出聲：一點就建立音訊（標題畫面的爵士樂才放得出來）
+  ['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, () => { if (enabled) ensure(); }, { once: true, passive: true }));
 
   /* ── 行駛聲：馬達變頻聲＋輪軌噪音＋接縫聲（加上實際錄音的車廂聲） ── */
   let run = null, brownBuf = null;
@@ -307,6 +370,9 @@ const Sound = (() => {
     },
     // 單音（地板鋼琴之類的互動藝術）
     note(freq, vol = .18) { if (enabled && ensure()) bell(freq, 0, vol, master, 1.4); },
+    died() { if (enabled && ensure()) playSample('died', .9, { fadeIn: .01 }); },
+    footstep, setBed,
+    get debug() { return { bed: bed && bed.name, crickets: !!night }; },
     doorClose, doorOpen, arrivalChime, trainArrive, trainDepart, onboardChime, itemGet, click, gate, teleport,
     startRumble, setSpeed, stopRumble, ambience, announce,
     get enabled() { return enabled; },
