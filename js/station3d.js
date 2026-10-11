@@ -254,6 +254,7 @@ const Station3D = (() => {
     if (kind === 'tiles') return { x: C.x1 - .1, y: 0, z: C.z0 + 16 };
     if (kind === 'stamp') return { x: U.x1 - .6, y: 0, z: U.z0 + 1.0 };
     if (kind === 'shop') return { x: U.x0 - 3.1, y: 0, z: U.z0 + 6.2 };   // 店員站在櫃台後面
+    if (kind === 'onsen') return { x: U.x0 - 2.4, y: 0, z: U.z0 + 5.6 };   // 湯之庭的櫃台
     return null;
   }
 
@@ -341,6 +342,8 @@ const Station3D = (() => {
       { kind: 'nursing', x0: C.x1, x1: C.x1 + 4, z0: C.z0 + 3, z1: C.z0 + 7, door: { wx: C.x1, z: C.z0 + 5, w: 1.1 } },
       { kind: 'office', x0: C.x0 - 5, x1: C.x0, z0: C.z0 + 2.5, z1: C.z0 + 7.5, door: { wx: C.x0, z: C.z0 + 5, w: 1.1 } },
     ];
+    // 新北投：溫泉站，非付費區旁邊有一座可以泡湯的「湯之庭」
+    if (stationId === '新北投') { rooms.push({ kind: 'onsen', x0: U.x0 - 14, x1: U.x0, z0: U.z0 + 1, z1: U.z1 - 1.5, door: { wx: U.x0, z: U.z0 + 9.5, w: 2.2 } }); spots.push({ kind: 'onsen', x: U.x0 - 9, y: 0, z: U.z0 + 4.2 }); }
     if (big) rooms.push({ kind: 'store', x0: U.x0 - 6, x1: U.x0, z0: U.z0 + 4.4, z1: U.z0 + 11.6, door: { wx: U.x0, z: U.z0 + 8, w: 1.5 } });
     return { stationId, platforms, concourse, gateZ, unpaid, gates, spots, rooms, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
   }
@@ -351,11 +354,11 @@ const Station3D = (() => {
   const solid = (cx, cz, w, d, y = 0) => { if (curL) curL.obstacles.push({ x0: cx - w / 2, x1: cx + w / 2, z0: cz - d / 2, z1: cz + d / 2, y }); };
   // 房間內部：地板、天花板、牆、燈與擺設（家具會擋路）
   function buildRooms(L, g) {
-    const H = 2.9;
     for (const r of L.rooms || []) {
+      const H = r.kind === 'onsen' ? 3.8 : 2.9;
       const w = r.x1 - r.x0, d = r.z1 - r.z0, cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
-      const tone = { toilet_m: '#dfe8ef', toilet_f: '#f1e3e6', toilet_a: '#e2ecf2', nursing: '#f6e4ea', office: '#e4e6e2', store: '#f4f4f0' }[r.kind];
-      const wallM = M(tone, { r: .6 }), floorM = M(r.kind === 'store' ? '#d9d6cf' : r.kind === 'office' ? '#9aa3a8' : '#c9d2d6', { r: .5 });
+      const tone = { onsen: '#cdb48e', toilet_m: '#dfe8ef', toilet_f: '#f1e3e6', toilet_a: '#e2ecf2', nursing: '#f6e4ea', office: '#e4e6e2', store: '#f4f4f0' }[r.kind];
+      const wallM = M(tone, { r: .6 }), floorM = M(r.kind === 'onsen' ? '#8a6a4a' : r.kind === 'store' ? '#d9d6cf' : r.kind === 'office' ? '#9aa3a8' : '#c9d2d6', { r: .5 });
       box(w, .1, d, floorM, cx, -.05, cz, g);
       box(w, .1, d, M('#efefec', { r: .9 }), cx, H, cz, g);
       box(Math.min(1.6, w - .6), .04, .4, M('#ffffff', { e: '#ffffff', ei: 1 }), cx, H - .06, cz, g);   // 天花板燈
@@ -396,6 +399,7 @@ const Station3D = (() => {
         const p = plane(1.8, .9, M('#ffffff', { map: mon, e: '#ffffff', ei: .4 }), g); p.position.set(far - dir * .02, 1.7, cz); p.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
         box(.5, 1.9, 1.2, M('#9aa3aa', { m: .5 }), far - dir * .3, .95, r.z1 - .7, g); solid(far - dir * .3, r.z1 - .7, .5, 1.2);   // 置物櫃
       }
+      if (r.kind === 'onsen') buildOnsen(r, dir, far, fx, cx, cz, w, d, H);
       if (r.kind === 'store') {
         // 冰箱（後牆）、貨架（中間）、櫃台（門口旁）
         box(.7, 2.1, d - 1.4, M('#dfe7ea', { m: .3 }), far - dir * .35, 1.05, cz, g); solid(far - dir * .35, cz, .7, d - 1.4);
@@ -408,6 +412,36 @@ const Station3D = (() => {
         box(.6, 1, 1.8, M('#d8d4cc'), fx(2.3), .5, r.z0 + 1.6, g); solid(fx(2.3), r.z0 + 1.6, .6, 1.8);
         box(.3, .25, .3, M('#30363c'), fx(2.3), 1.13, r.z0 + 1.2, g);
       }
+    }
+    // 湯之庭：大浴池（石頭池邊、會冒煙的熱水）、足湯、木頭長椅、石燈籠、竹籬笆、暖簾
+    function buildOnsen(r, dir, far, fx, cx, cz, w, d, H) {
+      const wood = M('#7a5a3a', { r: .7 }), stone = M('#6e6a64', { r: .95 }), dark = M('#3a2a1a', { r: .8 });
+      for (let i = 0; i < 6; i++) box(.18, .22, d, wood, r.x0 + 1 + i * (w - 2) / 5, H - .15, cz, g);   // 屋樑
+      box(w * .5, .03, d * .4, M('#ffffff', { e: '#fff6e0', ei: 1.1 }), cx, H - .03, cz, g);           // 天窗
+      // 大浴池：池邊是石頭，人可以坐進去（用互動）
+      const px = far - dir * 4.2, pz = r.z0 + 3.2, pw = 6, pd = 4.4;
+      L.onsen = { pool: { x: px, z: pz, w: pw, d: pd }, foot: { x: cx, z: r.z1 - 1.0 } };   // 足湯在房間中段靠牆，不擋門口
+      for (const [sx, sz, bw, bd] of [[px, pz - pd / 2, pw + .5, .5], [px, pz + pd / 2, pw + .5, .5], [px - pw / 2, pz, .5, pd], [px + pw / 2, pz, .5, pd]]) { box(bw, .45, bd, stone, sx, .225, sz, g); }
+      solid(px, pz, pw + .5, pd + .5);
+      const water = new T.Mesh(new T.PlaneGeometry(pw - .3, pd - .3), M('#8fc8d0', { t: true, o: .75, e: '#5a9aa8', ei: .25, r: .1 }));
+      water.rotation.x = -Math.PI / 2; water.position.set(px, .32, pz); water.userData.water = true; g.add(water);
+      for (let i = 0; i < 9; i++) { const rock = new T.Mesh(new T.DodecahedronGeometry(.22 + (i % 3) * .08), stone); rock.position.set(px - pw / 2 + .3 + (i * .73) % (pw - .6), .5, pz + pd / 2 - .1); rock.rotation.set(i, i * 2, 0); g.add(rock); }
+      // 足湯：長長的一條，旁邊是木頭長椅
+      const fz = L.onsen.foot.z, fxx = L.onsen.foot.x;
+      box(4.2, .3, .9, stone, fxx, .15, fz + .2, g); solid(fxx, fz + .2, 4.2, .9);
+      const fw = new T.Mesh(new T.PlaneGeometry(3.9, .6), M('#9fd0d6', { t: true, o: .8, e: '#5a9aa8', ei: .2 })); fw.rotation.x = -Math.PI / 2; fw.position.set(fxx, .31, fz + .2); g.add(fw);
+      box(4.2, .42, .4, wood, fxx, .21, fz - .45, g);
+      for (let i = 0; i < 4; i++) L.seats.push({ x: fxx - 1.5 + i, y: 0, z: fz - .45, face: 0, stand: { x: fxx - 1.5 + i, z: fz - 1.1 }, onsen: 'foot' });
+      // 竹籬笆（遠端的牆）
+      const bamboo = canvasTex(256, 256, x => { x.fillStyle = '#8a9a5a'; x.fillRect(0, 0, 256, 256); for (let i = 0; i < 256; i += 22) { x.fillStyle = i % 44 ? '#9aaa62' : '#7a8a4a'; x.fillRect(i, 0, 18, 256); x.fillStyle = 'rgba(0,0,0,.25)'; for (let y = 30; y < 256; y += 70) x.fillRect(i, y, 18, 4); } });
+      const fence = plane(d - .4, H - .4, M('#ffffff', { map: bamboo, r: .9 }), g); fence.position.set(far - dir * .02, (H - .4) / 2, cz); fence.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+      // 石燈籠
+      for (const z of [r.z0 + .8, r.z1 - .8]) { const lx = far - dir * .8; box(.4, .9, .4, stone, lx, .45, z, g); box(.55, .35, .55, stone, lx, 1.07, z, g); box(.3, .2, .3, M('#fff2c0', { e: '#ffd98a', ei: .9 }), lx, 1.07, z, g); box(.7, .12, .7, stone, lx, 1.3, z, g); solid(lx, z, .55, .55); }
+      // 櫃台與招牌
+      box(.6, 1, 2, wood, fx(1.6), .5, r.z0 + 4.6, g); solid(fx(1.6), r.z0 + 4.6, .6, 2);
+      sign(plainSign('湯之庭', '新北投溫泉 Hot Spring', '#3a2a1a', '#f6e8c8', { bg: '#c4512a', fg: '#fff', text: '♨' }), 2.6, .65, fx(.9), 2.6, r.door.z - 2.2, g, dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+      // 暖簾（門口，掛在頭頂上方）
+      for (const dz of [-.55, 0, .55]) { const n = plane(.5, .7, M('#2a4a7a', { r: .9, side: T.DoubleSide }), g); n.position.set(r.door.wx + dir * .4, 2.1, r.door.z + dz); n.rotation.y = Math.PI / 2; }
     }
     function stall(x, z, dir) {   // 廁所隔間（門朝向房門）
       const pm = M('#b9c4cc', { r: .4 });
@@ -1015,6 +1049,23 @@ const Station3D = (() => {
         hand.position.set(cx, cy + .97, lz + sz * w); hand.rotation.z = m.rotation.z; pg.add(hand);
       }
     });
+    // 電扶梯井：上下樓層之間（下層天花板到上層地板）用牆圍起來，看不到外面
+    {
+      const under = P.y < 0, low = under ? 3.4 : y1 + 4.2, high = under ? y1 : 0;
+      const rampY = x => y0 + (y1 - y0) * Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
+      const wm = M('#e3e3df', { r: .8, side: T.DoubleSide }), W = 1.95, N = 16, pos = [];
+      for (let i = 0; i < N; i++) {
+        const xa = x0 + (x1 - x0) * i / N, xb = x0 + (x1 - x0) * (i + 1) / N;
+        const ba = Math.max(rampY(xa) + 1.15, low), bb = Math.max(rampY(xb) + 1.15, low);
+        if (ba >= high && bb >= high) continue;
+        for (const sz of [-W, W]) pos.push(xa, Math.min(ba, high), sz, xb, Math.min(bb, high), sz, xb, high, sz, xa, Math.min(ba, high), sz, xb, high, sz, xa, high, sz);
+      }
+      // 兩端的牆
+      const e0 = Math.min(x0, x1) - .25, e1 = Math.max(x0, x1) + .25;
+      for (const ex of [e0, e1]) pos.push(ex, low, -W, ex, low, W, ex, high, W, ex, low, -W, ex, high, W, ex, high, -W);
+      const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
+      pg.add(new T.Mesh(geo, wm));
+    }
     // 電扶梯方向指示（綠色箭頭＝可進入）
     const dirSign = (lz, toHall) => {
       const t = canvasTex(128, 128, g => { g.fillStyle = '#111'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#31d07a'; g.font = '700 96px sans-serif'; g.textAlign = 'center'; g.fillText(toHall === (P.y < 0) ? '↑' : '↓', 64, 98); });

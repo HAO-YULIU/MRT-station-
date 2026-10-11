@@ -96,7 +96,7 @@ const Progress = (() => {
   }
   function collection() {
     const s = S(), c = k => Object.keys((s.col || {})[k] || {}).length;
-    const named = Object.keys(NPCS).filter(id => !['eventstaff'].includes(id));
+    const named = Object.keys(NPCS).filter(id => !['eventstaff'].includes(id) && !NPCS[id].event);
     const parts = [
       ['成就', Object.keys(s.ach || {}).length, ACHIEVEMENTS.length],
       ['紀念章', c('stamps'), Object.keys(STATIONS).length],
@@ -145,7 +145,7 @@ const Progress = (() => {
       body = `<div class="rc-big">收藏完成度 <b>${c.pct}%</b></div>
         <ul class="rc-rows">${c.parts.map(([n, h, t]) => `<li><b>${n}</b><span class="rc-bar"><i style="width:${Math.min(100, h / t * 100)}%"></i></span><em>${h} / ${t}</em></li>`).join('')}</ul>
         <h4 class="bag-h">🚆 列車圖鑑</h4><div class="rc-titles">${Object.keys(LIVERIES).map(id => tr[id] ? `<span class="wd-chip" aria-pressed="${!!tr[id].rode}" title="${tr[id].rode ? '搭乘過' : '看過'}">${esc(LIVERIES[id].name)}</span>` : '<span class="wd-chip">？？？</span>').join('')}</div>
-        <p class="rc-note">亮起來的是搭乘過的列車。</p>`;
+        <p class="rc-note">亮起來的是搭乘過的列車。</p>${typeof ArtInstall !== 'undefined' ? ArtInstall.collectHtml() : ''}${typeof Festival !== 'undefined' ? Festival.collectHtml() : ''}`;
     }
     if (tab === 'rep') {
       body = `<p class="rc-note">幫某一區的居民完成委託，聲望就會上升。20：好感加成　50：店家 9 折　100：稱號</p>

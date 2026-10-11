@@ -507,3 +507,5 @@ button:disabled { cursor: not-allowed; }
 @media (orientation: portrait) and (pointer: coarse) {
   .run-btn { left: 50px; bottom: calc(196px + env(safe-area-inset-bottom)); width: 56px; height: 56px; font-size: 18px; }
 }
+.transfer-btn { top: calc(var(--hud-h, 70px) + 48px); background: rgba(31,111,184,.85); }
+.trip-badge { position: absolute; z-index: 6; right: 14px; top: calc(var(--hud-h, 70px) + 88px); padding: 4px 10px; border-radius: 12px; background: rgba(20,26,32,.65); color: #f2c200; font-size: 12px; }

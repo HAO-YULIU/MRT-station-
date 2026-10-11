@@ -383,6 +383,48 @@ const Human3D = (() => {
   }
 
   /* ── 一般人物（NPC）：依外觀參數組合 ── */
+  // 萬聖節裝扮（玩家的限定服裝與變裝路人共用）：H 頭部關節、S 脊椎關節、top0 頭頂高度
+  function costume(kind, H, S, root, top0) {
+    const add = (p, m, x, y, z) => { m.position.set(x, y, z); p.add(m); return m; };
+    if (kind === 'witch') {   // 魔女帽
+      const hm = mat('#2a1a3a', { rough: .8 });
+      add(H, new T.Mesh(new T.CylinderGeometry(.27, .27, .015, 28), hm), 0, top0 + .04, 0);
+      const cone = add(H, new T.Mesh(new T.ConeGeometry(.14, .36, 20), hm), 0, top0 + .22, -.02); cone.rotation.x = -.18; cone.rotation.z = .12;
+      add(H, new T.Mesh(new T.TorusGeometry(.142, .018, 6, 24), mat('#e8741c')), 0, top0 + .07, -.005).rotation.x = Math.PI / 2;
+    }
+    if (kind === 'pumpkin') {   // 南瓜頭
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+      const g = c.getContext('2d'); g.fillStyle = '#e8741c'; g.fillRect(0, 0, 256, 128);
+      g.strokeStyle = '#c45a10'; g.lineWidth = 6; for (let x = 0; x < 256; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 128); g.stroke(); }
+      g.fillStyle = '#2a1408';   // 臉在 u=.25 的位置（正前方）
+      g.beginPath(); g.moveTo(48, 52); g.lineTo(60, 34); g.lineTo(72, 52); g.fill(); g.beginPath(); g.moveTo(56 + 32, 52); g.lineTo(68 + 32, 34); g.lineTo(80 + 32, 52); g.fill();
+      g.beginPath(); g.moveTo(44, 72); for (let i = 0; i <= 8; i++) g.lineTo(44 + i * 9.5, 72 + (i % 2 ? 14 : 4)); g.lineTo(120, 72); g.quadraticCurveTo(82, 98, 44, 72); g.fill();
+      const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace;
+      const pk = add(H, new T.Mesh(new T.SphereGeometry(.2, 24, 16), mat('#ffffff', { map: tex, rough: .6 })), 0, .1, .01); pk.scale.set(1.08, .92, 1.02);
+      add(H, new T.Mesh(new T.CylinderGeometry(.018, .025, .07, 8), mat('#3a6a2a')), 0, .3, 0);
+    }
+    if (kind === 'vampire') {   // 吸血鬼披風（外黑內紅）＋立領
+      const cape = add(S, new T.Mesh(new T.CylinderGeometry(.2, .36, .95, 20, 1, true, Math.PI * .55, Math.PI * .9), mat('#140c10', { rough: .7, side: T.DoubleSide })), 0, .02, -.02);
+      cape.rotation.y = Math.PI;
+      for (const sx of [-1, 1]) { const col = add(S, new T.Mesh(new T.BoxGeometry(.13, .2, .02), mat('#8a1020', { rough: .6 })), sx * .1, .58, -.06); col.rotation.y = sx * .5; col.rotation.x = -.25; }
+    }
+    if (kind === 'ghost') {   // 白床單幽靈
+      const sh = add(root, new T.Mesh(new T.CylinderGeometry(.22, .4, 1.45, 18, 1, true), mat('#f4f4f2', { rough: .9, side: T.DoubleSide })), 0, .74, 0);
+      add(root, new T.Mesh(new T.SphereGeometry(.24, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat('#f4f4f2', { rough: .9 })), 0, 1.46, 0);
+      for (const sx of [-1, 1]) add(root, new T.Mesh(new T.SphereGeometry(.035, 10, 8), mat('#151515')), sx * .07, 1.5, .21);
+      void sh;
+    }
+    if (kind === 'bats') {   // 身邊繞著飛的小蝙蝠
+      const bm = new T.MeshBasicMaterial({ color: '#1a1420', side: T.DoubleSide });
+      const grp = new T.Group(); grp.userData.spin = 1.2; root.add(grp);
+      for (let i = 0; i < 4; i++) {
+        const b = new T.Group(); b.position.set(Math.cos(i * 1.57) * .55, 1.5 + (i % 2) * .35, Math.sin(i * 1.57) * .55);
+        for (const sx of [-1, 1]) { const w = new T.Mesh(new T.CircleGeometry(.07, 3), bm); w.position.x = sx * .06; w.rotation.y = Math.PI / 2; b.add(w); }
+        b.add(new T.Mesh(new T.SphereGeometry(.03, 8, 6), bm)); grp.add(b);
+      }
+    }
+  }
+
   function person(look) {
     const L = look, girl = !!L.girl;
     const skinM = mat(L.skin, { rough: .65 });
@@ -447,6 +489,7 @@ const Human3D = (() => {
       const gm = mat('#1a1a1a', { rough: .3 });
       for (const sx of [-1, 1]) { const r = new T.Mesh(new T.TorusGeometry(.026, .004, 6, 16), gm); r.position.set(sx * .045, .105, .118); headJ.add(r); }
     }
+    if (L.costume) costume(L.costume, headJ, spine, root, .17);
     // 手臂與腿
     const arms = [];
     for (const sd of [-1, 1]) {
@@ -492,6 +535,7 @@ const Human3D = (() => {
     let phase = 0, amt = 0;
     rig.sit = 0;
     rig.update = (dt, speed, t) => {
+      for (const c of rig.root.children) if (c.userData.spin) c.rotation.y += dt * c.userData.spin;   // 繞著飛的蝙蝠
       const target = Math.min(1, speed / 1.6);
       amt += (target - amt) * Math.min(1, dt * 8);
       phase += dt * (4 + speed * 3.2);
@@ -645,6 +689,16 @@ const Human3D = (() => {
       const ln = new T.Mesh(new T.SphereGeometry(.035, 12, 10), new T.MeshBasicMaterial({ color: '#e0302a' })); ln.scale.y = .8; add(H, ln, .11, top0 + .03, .04);
       add(H, new T.Mesh(new T.CylinderGeometry(.012, .012, .015, 8), mat('#d8a830', { metal: .6 })), .11, top0 + .065, .04);
     }
+    // 其他節慶的限定飾品
+    if (aid === 'acc_rabbit') for (const sx of [-1, 1]) { const e = new T.Mesh(new T.CapsuleGeometry(.03, .16, 4, 8), mat('#f6f6f4', { rough: .9 })); e.position.set(sx * .06, top0 + .16, -.02); e.rotation.z = -sx * .2; H.add(e); const n = new T.Mesh(new T.CapsuleGeometry(.015, .1, 4, 6), mat('#f2b8c8')); n.position.set(sx * .06, top0 + .16, .008); n.rotation.z = -sx * .2; H.add(n); }
+    if (aid === 'acc_heart') for (const sx of [-1, 1]) { const b = new T.Mesh(new T.SphereGeometry(.025, 10, 8), mat('#e0447a', { rough: .4 })); b.position.set(.1 + sx * .018, top0 + .02, .05); H.add(b); }
+    if (aid === 'acc_flagpin') { const f = new T.Mesh(new T.BoxGeometry(.07, .05, .006), mat('#c4162a')); f.position.set(.11, top0 + .02, .05); f.rotation.y = .4; H.add(f); const b = new T.Mesh(new T.BoxGeometry(.03, .025, .007), mat('#1f3a8a')); b.position.set(.095, top0 + .03, .056); b.rotation.y = .4; H.add(b); }
+    if (aid === 'acc_party') { const c = new T.Mesh(new T.ConeGeometry(.08, .22, 16), mat('#f2c200', { rough: .6 })); c.position.set(.05, top0 + .13, 0); c.rotation.z = -.25; H.add(c); const p = new T.Mesh(new T.SphereGeometry(.025, 8, 6), mat('#e0447a')); p.position.set(.08, top0 + .24, 0); H.add(p); }
+    // 萬聖節限定
+    if (aid === 'acc_witch') costume('witch', H, S, rig.root, top0);
+    if (aid === 'acc_pumpkinhead') costume('pumpkin', H, S, rig.root, top0);
+    if (W.top === 'top_vampire') costume('vampire', H, S, rig.root, top0);
+    if (W.fx === 'fx_bats') costume('bats', H, S, rig.root, top0);
     // 特效
     if (W.fx === 'fx_mist') {
       const c = document.createElement('canvas'); c.width = c.height = 64;

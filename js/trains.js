@@ -28,7 +28,7 @@ const LIVERIES = {
   // 季節限定
   se_sakura: { name: '櫻花列車', kind: 'season', season: [[2, 15], [3, 31]], wrap: { type: 'icons', bg: '#f8dce4', icons: ['🌸', '🌸', '🌷'] } },
   se_double10: { name: '國慶列車', kind: 'season', season: [[10, 8], [10, 12]], wrap: { type: 'flags', colors: ['#c4162a', '#1f3a8a', '#ffffff'] } },
-  se_halloween: { name: '萬聖節南瓜列車', kind: 'season', season: [[10, 15], [10, 30]], body: '#2a2a32', stripe: '#e8741c', wrap: { type: 'icons', bg: '#3a2a4a', icons: ['🎃', '🦇', '👻', '🕸️'] } },
+  se_halloween: { name: '萬聖節南瓜列車', kind: 'season', season: [[10, 15], [10, 31]], body: '#2a2a32', stripe: '#e8741c', wrap: { type: 'icons', bg: '#3a2a4a', icons: ['🎃', '🦇', '👻', '🕸️'] } },
   se_xmas: { name: '聖誕列車', kind: 'season', season: [[12, 15], [12, 26]], wrap: { type: 'icons', bg: '#2a6a3a', icons: ['🎄', '🎁', '⛄', '❄️'] } },
   se_newyear: { name: '新春紅包列車', kind: 'season', season: [[1, 20], [2, 20]], body: '#c4162a', stripe: '#f2c200', wrap: { type: 'icons', bg: '#c4162a', icons: ['🧧', '🏮', '🍊'] } },
   // 特別班車（只在特定地方或時段出現）

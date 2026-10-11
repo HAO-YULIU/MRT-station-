@@ -157,6 +157,7 @@ Game.onQuestChange = (what, id, o, k) => {
     Life.log(`完成「${q.title}」${k ? `（${(o && o.name) || Quests.OUTCOME_NAME[k] || ''}）` : ''}`);
     SideQuests.onDone(id);
     Progress.onQuestDone(id, o, k);
+    Festival.onQuestDone(id);
     if (o && o.text) setTimeout(() => Dialog.info(`${q.title}——${o.name || Quests.OUTCOME_NAME[k] || ''}`, o.text), 700);
   }
   if (what === 'accept') toast(`<b>接下任務</b><span>${q.title}</span>`);
@@ -209,7 +210,7 @@ const fmtLeft = t => { const sec = Math.max(0, Math.round((t - Date.now()) / 100
 function stepNote(q, st, step) {
   const g = step.goal;
   if (g.kind === 'puzzles') {
-    const all = Puzzles.stations(g.line), left = all.filter(x => !(st.solved && st.solved[x]));
+    const all = Puzzles.mainStations(g.line), left = all.filter(x => !(st.solved && st.solved[x]));
     const doing = Object.keys(st.ch || {}).map(x => `${esc(x)}（${esc((Puzzles.challenge(g.line, x).giver || {}).name || '')}）`);
     return `<small class="q-note">${Challenges.storyNote(g.line)}<br>已完成 ${all.length - left.length} / ${all.length} 站　還沒完成：${left.slice(0, 8).map(esc).join('、')}${left.length > 8 ? `…等 ${left.length} 站` : ''}${doing.length ? `<br>進行中的委託：${doing.join('、')}` : ''}</small>`;
   }
@@ -240,25 +241,61 @@ function checkSecrets() {
   if (['sec_ghost', 'sec_room', 'sec_midnight'].every(id => Quests.isDone(id))) Quests.secret('sec_story');
 }
 
-/* ── 車資：上車時記錄起站，下車時依距離自動扣款（轉乘只補差額）；閘門可以自由進出 ──
- * 一趟行程在走出閘門、傳送到別站、或下車超過 15 分鐘沒有再搭車時結束
+/* ── 車資：上車時記錄起站，下捷運時扣款 ──
+ *  - 下車的站不能轉乘：馬上依距離扣款
+ *  - 下車的站可以轉乘：10 分鐘內再搭上列車，就等最後下車時一起算；10 分鐘內沒有上車就扣款
+ *  - 在轉乘站等待時走出閘門、或傳送到別站，就馬上結算
  */
-function onGate() { endTrip(); return true; }
-function endTrip() { const s = Game.state; if (s.trip) { s.trip = null; saveState(); } }
+const TRANSFER_WINDOW = 10 * 60000;
+const isTransferStation = st => MRT.linesAt(st).length > 1;
+function chargeTrip(to, why) {
+  const s = Game.state, t = s.trip; if (!t) return;
+  const fare = Economy.fare(t.from, to);
+  s.money -= fare; s.trip = null; saveState(); updateHud();
+  if (fare >= 65) Quests.secret('sec_maxfare');
+  toast(`<b>扣款 NT$ ${fare}</b><span>${esc(t.from)} → ${esc(to)}${why ? '（' + why + '）' : ''}　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
+}
+// 轉乘等待超過 10 分鐘：結算
+function settleTrip(force) {
+  const t = Game.state.trip;
+  if (t && t.wait && (force || Date.now() - t.wait.t > TRANSFER_WINDOW)) chargeTrip(t.wait.station, force ? '已出站' : '10 分鐘內沒有轉乘');
+}
+function onGate() { settleTrip(true); return true; }
+function endTrip() { settleTrip(true); const s = Game.state; if (s.trip) { s.trip = null; saveState(); } }
 function onBoard(from) {
   const s = Game.state;
-  if (s.trip && s.trip.paid != null && s.trip.last && Date.now() - s.trip.last > 15 * 60000) s.trip = null;
-  if (s.trip && s.trip.paid != null) return;
-  s.trip = { from, paid: 0 }; saveState();
+  if (s.trip && s.trip.paid != null) s.trip = null;   // 舊版存檔的行程格式
+  settleTrip();
+  if (s.trip && s.trip.wait) { delete s.trip.wait; saveState(); toast(`<b>轉乘</b><span>從 ${esc(s.trip.from)} 出發的行程繼續計算，下車時一起扣款</span>`); return; }
+  if (s.trip) return;   // 同一趟車繼續坐
+  s.trip = { from }; saveState();
   toast(`<b>嗶！上車</b><span>${esc(from)} 上車，下車時自動扣款${s.money < 20 ? '（餘額不足，記得加值）' : ''}</span>`, s.money < 20 ? 'warn' : '');
 }
 function onAlight(here) {
-  const s = Game.state; if (!s.trip || s.trip.paid == null) return;
-  const total = Economy.fare(s.trip.from, here), fare = Math.max(0, total - s.trip.paid);
-  s.trip.paid += fare; s.trip.last = Date.now();
-  s.money -= fare; saveState(); updateHud();
-  if (total >= 65) Quests.secret('sec_maxfare');
-  toast(`<b>下車扣款 NT$ ${fare}</b><span>${esc(s.trip.from)} → ${esc(here)}${s.trip.paid > fare ? '（轉乘補差額）' : ''}　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
+  const s = Game.state; if (!s.trip || s.trip.paid != null) return;
+  if (!isTransferStation(here)) return chargeTrip(here);
+  s.trip.wait = { station: here, t: Date.now() }; saveState();
+  toast(`<b>轉乘站：${esc(here)}</b><span>10 分鐘內搭上其他列車，就等最後下車再一起計費；沒有轉乘的話 10 分鐘後扣 NT$ ${Economy.fare(s.trip.from, here)}</span>`);
+}
+// 快速轉乘：在轉乘站直接到另一條線的月台
+function transferMenu() {
+  const L = World.layout, here = ctl ? ctl.stationId : Game.state.current, z = World.zone();
+  const opts = L.platforms.filter(P => !(z.P && z.P === P));
+  Dialog.show({ name: `${here} 轉乘`, role: '快速轉乘' }, '要去哪一條線的月台？', opts.map(P => {
+    const terms = [...new Set([...P.sides[1], ...P.sides[-1]].map(d => MRT.label(d.terminal, P.line).zh))];
+    return { label: `${LINES[P.line].zh}　往 ${terms.join('／')}`, primary: true, run: () => {
+      Dialog.close(); Sound.teleport && Sound.click();
+      const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
+      setTimeout(() => { World.placePlayer(P.x + 3, P.y, P.z, 0); World.lookToward(P.x - 10, P.z); setTimeout(() => { fx.classList.add('out'); setTimeout(() => { fx.hidden = true; }, 500); }, 150); tickStation(); }, 250);
+    } };
+  }).concat([{ label: '取消', run: () => Dialog.close() }]));
+}
+function updateTransferBtn() {
+  const b = $('#transferBtn'); if (!b) return;
+  const show = !!ctl && !Game.ride && World.layout && World.layout.platforms.length > 1;
+  b.hidden = !show;
+  const t = Game.state.trip;
+  const tb = $('#tripBadge'); if (tb) { tb.hidden = !t || t.paid != null; if (t && t.paid == null) tb.textContent = t.wait ? `🚇 轉乘中 ${Math.max(0, Math.ceil((TRANSFER_WINDOW - (Date.now() - t.wait.t)) / 60000))} 分` : `🚇 ${t.from} 上車`; }
 }
 
 /* ── 標題畫面 ── */
@@ -326,7 +363,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Crowd.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Onsen.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -397,6 +434,9 @@ function startStation(stationId, carry) {
   Secrets.spawn(stationId);
   Achievements.spawn(stationId);
   Life.spawn(stationId);
+  Festival.spawn(stationId);
+  ArtInstall.spawn(stationId);
+  Onsen.spawn(stationId);
   Daily.refresh();
   Phone.deliverFollowups();
   arriveChecks(stationId);
@@ -434,6 +474,7 @@ function sideDirs(P, side) {
 
 function tickStation() {
   if (!ctl) return;
+  settleTrip(); updateTransferBtn();
   Station3D.tickClocks();
   const id = ctl.id, L = World.layout, z = World.zone();
   const open = TaipeiTime.state() === 'open';
@@ -513,7 +554,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
+  list.push(exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, ArtInstall.interaction, Onsen.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -560,7 +601,7 @@ async function dwell(tr, dir, id, ride) {
     const r = ride || { line: dir.line, terminal: dir.terminal, stops: dir.stops, idx: 0, from: ctl.stationId };
     return doRide(tr, r);
   }
-  if (ride) { onAlight(ctl.stationId); Game.ride = null; }   // 下車：扣款
+  if (ride && Game.ride === ride) { onAlight(ctl.stationId); Game.ride = null; }   // 下車：扣款（已經轉搭別班車就不算）
   if (Passengers.train === tr) Passengers.clear();
   if (!World.isInside(tr) && World.zone().P === tr.P) Sound.trainDepart();
   await World.trainDepart(tr);
@@ -677,7 +718,7 @@ const dropInteraction = {
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
   guide: '路線指南', cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
-  timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
+  onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
 const SPOT_VERB = { stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
@@ -706,6 +747,7 @@ const FACILITY = {
   fountain: () => { Sound.click(); toast(['<b>喝了幾口水</b><span>冰冰涼涼的。</span>', '<b>喝了幾口水</b><span>出水有點小，要湊很近。</span>', '<b>喝了幾口水</b><span>精神好一點了。</span>'][(Math.random() * 3) | 0]); },
   aed: () => Dialog.info('AED', '自動體外心臟電擊去顫器。打開箱門會有警報聲，裡面的機器會用語音一步一步教你怎麼用。<br>旁邊貼著站務員的分機號碼。'),
   art: (sp, st) => Dialog.info('公共藝術', `這幅作品叫《${esc(st)}・${['晨光', '流動', '交會', '回聲', '城市的呼吸', '月台之間'][st.length % 6]}》。<br>藝術家用${esc(LINES[MRT.linesAt(st)[0].line].zh)}的顏色畫了一條穿過城市的線。${TaipeiTime.state() !== 'open' ? '' : TaipeiTime.now().hour >= 23 ? '<br>……夜深了，畫裡好像多了一個戴紅色貝雷帽的小人影。' : ''}`),
+  onsen: () => Dialog.info('湯之庭・大浴池', `池水是淡淡的乳白色，從地熱谷引過來，帶一點硫磺味。池子上方的牆面有兩個舊釘孔，好像以前掛過什麼東西。${Quests.isDone('sq_onsen') ? '<br>現在那裡掛著一塊擦得發亮的木頭招牌。' : ''}<br><small>靠近池邊可以「泡湯」，坐在長椅上可以泡腳。</small>`),
   nursing: () => Dialog.info('哺集乳室', '給需要哺乳、集乳的人使用。門口有按鈕，使用中會亮紅燈。裡面有沙發、尿布台和洗手台。'),
   office: (sp, st) => (st === '小南門' && TaipeiTime.now().hour >= 21) ? Dialog.info('那扇開著的門', '站務室旁邊那扇平常鎖著的門，今天晚上是開著的。<br>裡面是一間小房間，牆上靠著一排沒用過的站名牌——每一塊都寫著同一個字：「霧」。角落有一張攤位，一個提燈的人抬頭看你：「你終於來了。」<br><small>（記下了特殊地點：小南門・霧的檔案室）</small>') : Dialog.info('站務室', '門上寫著「非工作人員請勿進入」。<br>門縫底下透出一點光，裡面的螢幕牆顯示著每一座月台的監視畫面。'),
   women: () => Dialog.info('夜間婦女候車區', '晚上 10 點到隔天早上 6 點，女性旅客可以在這一區候車。這裡在監視器拍得到的範圍，旁邊就有緊急對講機。'),
@@ -791,7 +833,7 @@ function elevatorMenu(sp) {
 // 售票機：從這站到各大站的票價
 function fareTable(st) {
   const dests = ['台北車站', '西門', '市政府', '南港展覽館', '淡水', '動物園', '新店', '頂埔', '蘆洲', '大坪林'].filter(d => d !== st);
-  return `<table class="fares">${dests.map(d => `<tr><td>${esc(d)}</td><td>NT$ ${Economy.fare(st, d)}</td></tr>`).join('')}</table><small>依台北捷運計費規則估算。上車時記錄、下車時自動扣款，轉乘只補差額。</small>`;
+  return `<table class="fares">${dests.map(d => `<tr><td>${esc(d)}</td><td>NT$ ${Economy.fare(st, d)}</td></tr>`).join('')}</table><small>依台北捷運計費規則估算。上車時記錄，下車時扣款；在轉乘站 10 分鐘內轉乘，就等最後下車再一起算。</small>`;
 }
 async function restroom() {
   const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
@@ -1074,7 +1116,7 @@ async function teleport(id) {
   await sleep(450);
   World.loadStation(id);
   World.spawnInConcourse();
-  s.current = id; s.trip = null; saveState(); updateHud();
+  settleTrip(true); s.current = id; s.trip = null; saveState(); updateHud();
   startStation(id);
   fx.classList.add('out');
   await sleep(600);
@@ -1105,6 +1147,7 @@ function init() {
   Phone.init();
   $('#btnRecord').onclick = () => Progress.open();
   $('#btnQuest').onclick = openQuests;
+  $('#transferBtn').onclick = transferMenu;
   $('#viewBtn').onclick = () => { const n = World.cycleView(); toast(`<b>視角：${n}</b><span>拖曳畫面轉動、雙指或滾輪縮放；按 V 也可以切換</span>`); };
   $('#runBtn').onclick = () => { const on = !World.running; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
   $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').textContent = on ? '音效 開' : '音效 關'; };
