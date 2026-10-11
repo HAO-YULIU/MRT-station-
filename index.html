@@ -48,13 +48,17 @@
         <span class="hud-stats" id="hudStats"></span>
       </div>
       <nav class="hud-btns">
-        <button id="btnMap">路網圖</button>
-        <button id="btnQuest">任務 <span id="hudQuests">0</span></button>
-        <button id="btnRecord">紀錄</button>
-        <button id="btnPhone">手機 <span id="hudPhone"></span></button>
-        <button id="btnBag">背包 <span id="hudItems">0/6</span></button>
-        <button id="btnSound" aria-pressed="true">音效 開</button>
+        <button id="btnMap"><i aria-hidden="true">🗺️</i>地圖</button>
+        <button id="btnQuest"><i aria-hidden="true">📋</i>任務 <span id="hudQuests">0</span></button>
+        <button id="btnBag"><i aria-hidden="true">🎒</i>背包 <span id="hudItems">0/6</span></button>
+        <button id="btnMenu" aria-haspopup="true" aria-expanded="false"><i aria-hidden="true">☰</i>選單<span class="menu-dot" id="menuDot" hidden></span></button>
       </nav>
+      <div class="hud-menu" id="hudMenu" hidden role="menu">
+        <button id="btnPhone" role="menuitem"><i aria-hidden="true">📱</i>手機 <span id="hudPhone"></span></button>
+        <button id="btnRecord" role="menuitem"><i aria-hidden="true">📖</i>紀錄</button>
+        <button id="btnSound" role="menuitem" aria-pressed="true"><i aria-hidden="true">🔊</i>音效 開</button>
+        <button id="btnHome" role="menuitem"><i aria-hidden="true">🏠</i>回到標題</button>
+      </div>
     </header>
     <div class="panel" id="panel"></div>
     <button class="action-btn" id="actionBtn" hidden></button>

@@ -95,7 +95,7 @@ function updateHud() {
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
   $('#hudWhere').textContent = s.current ? s.current : '尚未出發';
-  $('#hudItems').textContent = `${Object.keys(s.items).length}/${LINE_ORDER.length}`;
+  $('#hudItems').textContent = `${Teleporter.total()}/6`;   // 主線寶物（傳送裝置零件）
   $('#hudQuests').textContent = Object.keys(s.quests.active).length;
 }
 
@@ -1190,7 +1190,14 @@ function init() {
   $('#transferBtn').onclick = transferMenu;
   $('#viewBtn').onclick = () => { const n = World.cycleView(); toast(`<b>視角：${n}</b><span>拖曳畫面轉動、雙指或滾輪縮放；按 V 也可以切換</span>`); };
   $('#runBtn').onclick = () => { const on = !World.running; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
-  $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').textContent = on ? '音效 開' : '音效 關'; };
+  $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').innerHTML = `<i aria-hidden="true">${on ? '🔊' : '🔇'}</i>音效 ${on ? '開' : '關'}`; };
+  // 選單：手機、紀錄、音效、回到標題
+  const menu = $('#hudMenu'), menuBtn = $('#btnMenu');
+  const setMenu = open => { menu.hidden = !open; menuBtn.setAttribute('aria-expanded', open); $('.hud').classList.toggle('menu-open', open); };
+  menuBtn.onclick = e => { e.stopPropagation(); setMenu(menu.hidden); Sound.click(); };
+  menu.addEventListener('click', e => { if (e.target.closest('button')) setMenu(false); });
+  document.addEventListener('pointerdown', e => { if (!menu.hidden && !e.target.closest('#hudMenu, #btnMenu')) setMenu(false); });
+  $('#btnHome').onclick = () => { newSession(); Game.ride = null; Dialog.close(); renderTitle(); showScreen('title'); };
   document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { $('#' + b.dataset.close).hidden = true; });
   $('#closedMap').onclick = openMap;
   $('#closedTitleBtn').onclick = () => { $('#closedOverlay').hidden = true; newSession(); Game.ride = null; renderTitle(); showScreen('title'); };

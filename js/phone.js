@@ -105,7 +105,7 @@ const Phone = (() => {
     if (keep.length !== p.follow.length) { p.follow = keep; saveState(); toast('<b>📱 有新訊息</b><span>昨天幫過的人傳了後續消息</span>'); }
   }
   function unread() { return S().msgs.filter(m => m.unread).length; }
-  function badge() { const b = document.getElementById('hudPhone'); if (b) b.textContent = unread() ? unread() : ''; }
+  function badge() { const b = document.getElementById('hudPhone'), n = unread(); if (b) b.textContent = n ? n : ''; const d = document.getElementById('menuDot'); if (d) d.hidden = !n; }
 
   /* ── 任務的下一步在哪裡 ── */
   function whereOf(g, st) {
