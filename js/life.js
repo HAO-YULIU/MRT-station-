@@ -203,3 +203,12 @@ ACHIEVEMENTS.push(
   { id: 'a_patron', name: '街頭藝術的支持者', desc: '打賞過五組不同的街頭表演。' },
   { id: 'a_posters', name: '海報圖鑑', desc: '看過所有種類的廣告海報。' },
 );
+
+ACHIEVEMENTS.push(
+  { id: 'a_train5', name: '鐵道迷入門', desc: '看過 5 種不同外觀的列車。', check: s => Object.keys((s.col || {}).trains || {}).length >= 5 },
+  { id: 'a_train15', name: '列車攝影師', desc: '看過 15 種不同外觀的列車。', check: s => Object.keys((s.col || {}).trains || {}).length >= 15, gold: 1 },
+  { id: 'a_trainall', name: '列車圖鑑完成', desc: '看過所有外觀的列車。', check: s => Object.keys((s.col || {}).trains || {}).length >= Object.keys(LIVERIES).length, gold: 5 },
+  { id: 'a_special', name: '特別班車', desc: '搭上一班特別班車。', check: s => Object.entries((s.col || {}).trains || {}).some(([id, v]) => v.rode && LIVERIES[id] && LIVERIES[id].kind === 'special'), gold: 1 },
+  { id: 'a_special5', name: '追車達人', desc: '看過五種特別班車。', check: s => Object.keys((s.col || {}).trains || {}).filter(id => LIVERIES[id] && LIVERIES[id].kind === 'special').length >= 5, gold: 2 },
+  { id: 'a_misttrain', name: '霧之列車', desc: '看見霧之列車。', check: s => !!((s.col || {}).trains || {}).sp_mist, gold: 3 },
+);

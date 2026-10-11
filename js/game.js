@@ -481,9 +481,11 @@ function renderPanel(z, L) {
 
 // 一班列車：進站 → 開門停站 → 關門 → 玩家在車上就出發，不在就離站
 async function trainCycle(k, side, dir, id) {
-  const tr = World.spawnTrain(k, side, dir.line, dir.travel);
+  const livery = Liveries.pick(dir.line, ctl.stationId);
+  const tr = World.spawnTrain(k, side, dir.line, dir.travel, livery);
   await World.trainArrive(tr);
   if (!alive(id)) return;
+  Liveries.seen(livery);
   await dwell(tr, dir, id, null);
 }
 
@@ -560,6 +562,7 @@ function setLcd(head, stationId, line) {
   World.setLcd(head, n.zh, n.en, L.color, L.text);
 }
 async function doRide(tr, ride) {
+  if (tr.livery) Liveries.rode(tr.livery);
   newSession(); clearInterval(Game.ctlTimer);
   Game.ride = ride; ride.moving = true;
   World.setInteractions([]);

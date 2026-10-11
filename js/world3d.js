@@ -407,9 +407,9 @@ const World = (() => {
     get player() { return pstate(); },
     zone,
     // 列車
-    spawnTrain(k, side, line, travel) {
+    spawnTrain(k, side, line, travel, livery) {
       const P = layout.platforms[k];
-      const tr = { P, side, travel, line, x: -travel * 170, doorAmt: 0, group: S.makeTrain(line) };
+      const tr = { P, side, travel, line, livery, x: -travel * 170, doorAmt: 0, group: S.makeTrain(line, livery) };
       tr.group.traverse(o => { if (o.geometry) o.userData.shared = true; });
       scene.add(tr.group); placeTrain(tr); trains.add(tr);
       return tr;

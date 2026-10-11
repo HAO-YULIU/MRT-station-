@@ -949,17 +949,20 @@ const Station3D = (() => {
     stripCanvas = document.createElement('canvas'); stripCanvas.width = 1024; stripCanvas.height = 128;
     stripTex = new T.CanvasTexture(stripCanvas); stripTex.colorSpace = T.SRGBColorSpace;
   }
-  function trainTemplate(lineId) {
-    if (trainCache[lineId]) return trainCache[lineId];
+  function trainTemplate(lineId, livId) {
+    const lv = (typeof LIVERIES !== 'undefined' && LIVERIES[livId]) || {};
+    const key = lineId + '|' + (livId || 'std');
+    if (trainCache[key]) return trainCache[key];
     textures(); sharedScreens();
     const g = new T.Group();
     const L = LINES[lineId];
-    const body = M('#e6e9ec', { r: .35, m: .35 });
+    const body = M(lv.body || '#e6e9ec', { r: .35, m: .35 });
+    const wrapM = lv.wrap ? M('#ffffff', { map: canvasTex(512, 96, x => Liveries.paint(x, 512, 96, lv.wrap)), r: .5 }) : null;
     const inner = M('#eceeec', { r: .8 });
     const glassM = M('#24313a', { t: true, o: .35, r: .05, m: .3 });
-    const stripe = M(L.color, { r: .5 });
+    const stripe = M(lv.stripe || L.color, { r: .5 });
     const doorM = M('#ffffff', { map: TEX.door, r: .5, m: .2 });
-    const seatM = M(lineId === 'BR' ? '#5a6b7b' : '#2f5d9e', { r: .6 });
+    const seatM = M(lv.seat || (lineId === 'BR' ? '#5a6b7b' : '#2f5d9e'), { r: .6 });
     const steel = M('#c8cdd2', { r: .25, m: .9 });
     const lightM = M('#ffffff', { e: '#fffbea', ei: 1.6 });
     const floorM = M('#8f9498', { r: .8 });
@@ -985,6 +988,7 @@ const Station3D = (() => {
           box(w, .95, .08, body, c, .475, z, car);
           box(w, .4, .08, body, c, 2.1, z, car);
           box(w, .12, .085, stripe, c, .82, z, car);
+          if (wrapM) { const wp = plane(w - .05, .62, wrapM, car); wp.position.set(c, .44, z + side * .046); wp.rotation.y = side > 0 ? 0 : Math.PI; }   // 車身彩繪
           box(w - .3, .95, .03, glassM, c, 1.42, z, car).renderOrder = 1;
           box(.15, .95, .08, body, a + .075, 1.42, z, car); box(.15, .95, .08, body, b - .075, 1.42, z, car);
           const sl = w - .6;
@@ -1031,15 +1035,15 @@ const Station3D = (() => {
     }
     mergeStatic(g);
     g.userData.lightM = lightM;
-    trainCache[lineId] = g;
+    trainCache[key] = g;
     return g;
   }
   // 每次進站複製一列（共用幾何與材質）
-  function makeTrain(lineId) {
-    const tpl = trainTemplate(lineId), g = tpl.clone(true);
+  function makeTrain(lineId, livId) {
+    const tpl = trainTemplate(lineId, livId), g = tpl.clone(true);
     const leaves = [];
     g.traverse(o => { if (o.userData && o.userData.leaf) leaves.push(o); });
-    g.userData = { leaves, line: lineId, lightM: tpl.userData.lightM };
+    g.userData = { leaves, line: lineId, lightM: tpl.userData.lightM, livery: livId };
     return g;
   }
 

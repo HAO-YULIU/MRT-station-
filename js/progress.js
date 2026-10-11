@@ -105,6 +105,7 @@ const Progress = (() => {
       ['人物檔案', named.filter(id => s.met[id]).length, named.length],
       ['路線收藏', Object.keys(s.items).length, LINE_ORDER.length],
       ['海報圖鑑', c('posters'), Station3D.ADS.length],
+      ['列車圖鑑', c('trains'), Object.keys(LIVERIES).length],
     ];
     const pct = Math.round(parts.reduce((a, [, h, n]) => a + Math.min(1, h / n), 0) / parts.length * 100);
     return { parts, pct };
@@ -140,8 +141,11 @@ const Progress = (() => {
     }
     if (tab === 'collect') {
       const c = collection();
+      const tr = (s.col || {}).trains || {};
       body = `<div class="rc-big">收藏完成度 <b>${c.pct}%</b></div>
-        <ul class="rc-rows">${c.parts.map(([n, h, t]) => `<li><b>${n}</b><span class="rc-bar"><i style="width:${Math.min(100, h / t * 100)}%"></i></span><em>${h} / ${t}</em></li>`).join('')}</ul>`;
+        <ul class="rc-rows">${c.parts.map(([n, h, t]) => `<li><b>${n}</b><span class="rc-bar"><i style="width:${Math.min(100, h / t * 100)}%"></i></span><em>${h} / ${t}</em></li>`).join('')}</ul>
+        <h4 class="bag-h">🚆 列車圖鑑</h4><div class="rc-titles">${Object.keys(LIVERIES).map(id => tr[id] ? `<span class="wd-chip" aria-pressed="${!!tr[id].rode}" title="${tr[id].rode ? '搭乘過' : '看過'}">${esc(LIVERIES[id].name)}</span>` : '<span class="wd-chip">？？？</span>').join('')}</div>
+        <p class="rc-note">亮起來的是搭乘過的列車。</p>`;
     }
     if (tab === 'rep') {
       body = `<p class="rc-note">幫某一區的居民完成委託，聲望就會上升。20：好感加成　50：店家 9 折　100：稱號</p>
