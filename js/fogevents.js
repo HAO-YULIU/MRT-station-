@@ -46,7 +46,7 @@ const FogEvents = (() => {
     });
     const need = d.need ?? (d.clues || []).length;
     function resolve(o, npc) {
-      if (ev.resolved) return; ev.resolved = o.result; K.choice(o.id || o.label); saveState();
+      if (ev.resolved) return; ev.resolved = o.result; K.choice(o.id || o.label); K.pend(o.result, { gold: o.gold, items: o.items, title: d.title, col: o.col }); saveState();
       if (o.hurt) K.hurt(o.hurt, o.why || '霧裡有什麼東西撲了過來');
       K.say(npc, o.text, [{ label: o.ok || '……', run: () => {
         Dialog.close();
@@ -132,6 +132,7 @@ const FogEvents = (() => {
       ev.solved = 1; saveState(); if (timer) K.cancel(timer);
       K.sound('good');
       const res = ev.wrong ? 'good' : 'perfect';
+      K.pend(res, { title: d.title });
       const after = d.after;
       if (!after) { K.say({ name: dev.name || '裝置', role: '' }, d.openText, [{ label: '好', run: () => { Dialog.close(); K.done(res, { title: d.title }); } }]); return; }
       K.say({ name: dev.name || '裝置', role: '' }, after.text, after.options.map(o => ({ label: o.label, run: () => {
@@ -154,9 +155,9 @@ const FogEvents = (() => {
     const finish = () => {
       if (ev.done) return; ev.done = 1; saveState();
       const taken = K.r.dmg - ev.hit0;
-      if (d.noHit && taken > 0) return K.done('bad', { title: d.title, text: '完成了，但你被碰到了——這不算完美。' });
       for (const c of [...K.chasers]) K.removeChaser(c);
       if (d.dark) K.setMood(K.phase === 'fade' ? 'fade' : 'fog');
+      if (d.noHit && taken > 0) return K.done('bad', { title: d.title, text: '完成了，但你被碰到了——這不算完美。' });
       K.done(taken === 0 ? 'perfect' : taken < 40 ? 'good' : 'bad', { title: d.title, text: d.doneText });
     };
     if (d.noHit) K.onHurt = () => { if (!ev.done && !ev.warned) { ev.warned = 1; K.toast('<b>被碰到了</b><span>無傷挑戰失敗，但還是可以把事情做完。</span>', 'warn'); } };
@@ -243,6 +244,7 @@ const FogEvents = (() => {
       if (ev['k' + i]) return;
       const p = K.prop(it.kind || d.kind || 'note', pts[i], { label: it.label || d.label || '撿起', hidden: it.hidden, tag: 'collect', use: () => {
         ev['k' + i] = 1; const dup = !!set[it.name]; set[it.name] = K.r.night; saveState(); K.removeProp(p); K.sound('bell');
+        if (d.items.every((x, j) => ev['k' + j])) K.pend('good', { title: d.setName });
         K.say({ name: `${d.icon || '📦'} ${it.name}`, role: `${d.setName}（${Object.keys(set).length} / ${d.items.length}）${dup ? '・已經有了' : ''}` }, it.text, [{ label: '收進圖鑑', run: () => {
           Dialog.close(); K.clue(`${d.setName}：${it.name}`);
           if (dup) { S().flags.fogDup = (S().flags.fogDup || 0) + 1; saveState(); }
@@ -263,7 +265,7 @@ const FogEvents = (() => {
     const ev = K.ev;
     K.hint('……');
     const trigger = () => {
-      if (ev.triggered) return; ev.triggered = 1; saveState(); K.sound('sting');
+      if (ev.triggered) return; ev.triggered = 1; K.pend('perfect', { title: d.title, gold: d.gold || 0, col: [['hidden', d.title]] }); saveState(); K.sound('sting');
       const steps = d.story.slice(); let i = 0;
       const next = () => { if (i >= steps.length) { Dialog.close(); return K.done('perfect', { title: d.title, text: d.doneText || '有什麼東西被你看見了。', gold: d.gold || 0, col: [['hidden', d.title]] }); } const st = steps[i++]; K.say({ name: st.who || '？？？', role: st.role || '隱藏任務' }, st.text, [{ label: i >= steps.length ? '……' : '繼續', run: next }]); };
       if (d.onTrigger) d.onTrigger(K);

@@ -169,7 +169,7 @@ Game.onQuestChange = (what, id, o, k) => {
     const it = ITEMS['treasure_' + q.line];
     setTimeout(() => {
       if (!Quests.isActive('final') && !Quests.isDone('final')) Quests.accept('final');
-      toast(`<b>秀蔅：「是${it.name}！」</b><span>傳送裝置的${TELE_PARTS[q.line]}。帶去小碧潭月台放上去吧（不用等六個都找齊）。</span>`, 'level');
+      toast(`<b>秀蔅：「是${it.name}！」</b><span>傳送裝置的${TELE_PARTS[q.line]}。帶去小碧潭站裡的研究室放上去吧（不用等六個都找齊）。</span>`, 'level');
     }, 1500);
   }
   // 主線完成：揭曉這條線的結局
@@ -385,8 +385,12 @@ function enterGame(stationId) {
   World.spawnInConcourse();
   Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
   startStation(stationId);
-  // 開場：先收到委託（序章），再由秀蔅說明；一定要選板南線或文湖線
-  if (!Game.state.flags.prologue && !Game.state.flags.xiuyuIntro && !FogCity.locked()) {
+  opening();
+}
+// 開場：先收到委託（序章），再由秀蔅說明；一定要選板南線或文湖線（迷霧時段先跳過，天亮後再補）
+function opening() {
+  if (FogCity.locked()) return;
+  if (!Game.state.flags.prologue && !Game.state.flags.xiuyuIntro) {
     Teleporter.prologue().then(() => { const xy = NPCManager.list.find(n => n.id === 'xiuyu'); if (xy) { const p = World.player; xy.x = p.x - 1.6; xy.z = p.z; xy.y = p.y; setTimeout(() => Dialog.open(xy), 500); } });
   } else if (!Game.state.flags.xiuyuIntro) {
     const xy = NPCManager.list.find(n => n.id === 'xiuyu');
@@ -669,6 +673,7 @@ async function doRide(tr, ride) {
   Sound.ambience(null);
   Sound.startRumble();
   await World.ride(tr, { toId: to, duration: reduceMotion() ? 4 : 22, onSpeed: v => Sound.setSpeed(v), skip: () => skip, anomaly });
+  if (Game.ride !== ride) { Sound.stopRumble(); return; }   // 搭車途中回到標題：不再到站
   if (anomaly && MRT.undergroundOn(to, line)) {
     toast('<b>剛剛窗外……</b><span>好像有一座綠色的月台，站名寫著「霧」。</span>');
     questEvent({ kind: 'anomaly' });
@@ -1200,7 +1205,7 @@ function init() {
   menuBtn.onclick = e => { e.stopPropagation(); setMenu(menu.hidden); Sound.click(); };
   menu.addEventListener('click', e => { if (e.target.closest('button')) setMenu(false); });
   document.addEventListener('pointerdown', e => { if (!menu.hidden && !e.target.closest('#hudMenu, #btnMenu')) setMenu(false); });
-  $('#btnHome').onclick = () => { newSession(); Game.ride = null; Dialog.close(); renderTitle(); showScreen('title'); };
+  $('#btnHome').onclick = () => { newSession(); Game.ride = null; Sound.stopRumble(); Dialog.close(); renderTitle(); showScreen('title'); };
   document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { $('#' + b.dataset.close).hidden = true; });
   $('#closedMap').onclick = openMap;
   $('#closedTitleBtn').onclick = () => { $('#closedOverlay').hidden = true; newSession(); Game.ride = null; renderTitle(); showScreen('title'); };

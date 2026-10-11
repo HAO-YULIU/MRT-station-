@@ -366,6 +366,7 @@ button:disabled { cursor: not-allowed; }
 /* ── 對話 ── */
 .dialog { position: fixed; z-index: 18; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(560px, calc(100% - 24px)); }
 .dlg { padding: 14px 16px; border-radius: 14px; background: rgba(14,19,24,.95); box-shadow: 0 16px 40px rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.12); }
+.dialog .dlg { max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }   /* 橫屏／矮螢幕上長對話可以捲動，按鈕不會跑出畫面 */
 .dlg-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .dlg-head b { font-size: 18px; }
 .dlg-head span { color: var(--fog); font-size: 13px; }

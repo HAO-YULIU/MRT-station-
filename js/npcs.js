@@ -230,7 +230,7 @@ const NPCS = {
   ferryman: {
     name: '擺渡人', role: '小碧潭的渡口', station: '小碧潭', spot: 'platform', speed: 0,
     look: { old: true, skin: '#d8b8a8', hair: 'short', hairColor: '#e8e8e4', top: '#4a5a6a', pattern: 'knit', bottom: '#2a2a30', coat: true, hat: 'cap', hatColor: '#2a2a30', lantern: true },
-    lines: ['這條支線只有一站。很多人以為這裡是終點。', '月台盡頭那台機器？秀蔅說那是傳送裝置。我替她顧了很久了。', '找到零件就放上去吧，一個一個來也可以。'],
+    lines: ['這條支線只有一站。很多人以為這裡是終點。', '大廳牆後那間「時空研究室」？秀蔅說裡面是傳送裝置。我替她顧了很久了。', '找到零件就放上去吧，一個一個來也可以。'],
     rumors: [],
   },
   eventstaff: {
