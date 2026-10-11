@@ -591,11 +591,14 @@ async function dwell(tr, dir, id, ride) {
   const mustAlight = ride && (isTerminal || ride.mustAlight || TaipeiTime.state() !== 'open');
   const t = MRT.label(dir.terminal, dir.line);
   const end = performance.now() + DWELL * 1000;
+  let prepped = false;
   // 停站：倒數，或（終點站）等玩家下車
   for (;;) {
     await sleep(250);
     if (!alive(id)) return;
     const inside = World.isInside(tr), left = Math.max(0, Math.ceil((end - performance.now()) / 1000));
+    // 玩家走進車廂：趁車門還開著，先把下一站建好（出發時不卡）
+    if (inside && !prepped && !mustAlight) { prepped = true; const nx = ride ? ride.stops[ride.idx] : dir.stops && dir.stops[0]; if (nx) setTimeout(() => { if (alive(id) && World.isInside(tr)) World.prepareRide(nx); }, 60); }
     const near = inside || (World.zone().P === tr.P);
     if (!near && ctl.doorHint === tr) { ctl.doorHint = false; setPart('pHint', ''); }
     if (near) {
