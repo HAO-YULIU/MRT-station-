@@ -757,7 +757,7 @@ const SideQuests = (() => {
     if (t.kind === 'pa') Sound.announce(t.text.replace(/^[^：]*：/, ''), '', { chime: true });
     if (t.kind === 'phone') { Sound.itemGet(); toast('<b>📱 收到一則訊息</b>'); }
     const full = q.type === 'side' && Quests.sideCount() >= SIDE_LIMIT;
-    Dialog.show({ name: t.from || KIND[t.kind] || '委託', role: KIND[t.kind] || '' }, `${t.text || q.desc}<br><small>${esc(q.desc)}</small>`, [
+    Dialog.show({ name: t.from || KIND[t.kind] || '委託', role: t.from ? (KIND[t.kind] || '') : '' }, `${t.text || q.desc}<br><small>${esc(q.desc)}</small>`, [
       { label: full ? `支線已滿（${SIDE_LIMIT}/${SIDE_LIMIT}）` : `接下：${q.title}`, primary: !full, disabled: full, run: () => { Quests.accept(id); Dialog.close(); } },
       { label: '不理會', run: () => Dialog.close() },
     ]);
@@ -818,8 +818,9 @@ const SideQuests = (() => {
     const q = QUESTS[want.id], g = want.step.goal;
     if (g.kind === 'decide') {
       const d = q.decide;
-      const clues = (q.clues || []).length ? `<br><small>（線索 ${(q.clues || []).filter(c => (Quests.state(want.id).clues || {})[c.id]).length} / ${q.clues.length}）</small>` : '';
-      return Dialog.show({ name: npc.name, role: q.title }, `${d.prompt}${clues}`, d.options.map(o => ({ label: o.label, run: () => { Dialog.close(); Quests.resolve(want.id, o.outcome); } })).concat([{ label: '等一下再說', run: () => Dialog.close() }]));
+      const nHave = (q.clues || []).filter(c => (Quests.state(want.id).clues || {})[c.id]).length, nAll = (q.clues || []).length;
+      const clues = nAll ? `<br><small>（線索 ${nHave} / ${nAll}）</small>${Progress.deduceHint(nHave >= nAll, nHave, nAll)}` : '';
+      return Dialog.show({ name: npc.name, role: q.title }, `${d.prompt}${clues}`, d.options.map(o => ({ label: (nAll && o.correct && Progress.markAnswer(nHave >= nAll) ? '★ ' : '') + o.label, run: () => { Dialog.close(); Quests.resolve(want.id, o.outcome); } })).concat([{ label: '等一下再說', run: () => Dialog.close() }]));
     }
     if (g.kind === 'work') {
       const w = q.work; let k = 0, score = 0;

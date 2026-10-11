@@ -246,8 +246,8 @@ const Achievements = (() => {
     if (sp.kind === 'breakfast') {
       const s = S(), list = ['soymilk', 'turnipcake', 'danbing', 'bread'];
       const menu = () => Dialog.show({ name: '阿桃早餐', role: '只賣到上午 10 點' }, `餘額 NT$ ${s.money}。`, list.map(id => ({
-        label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}`, disabled: s.money < ITEMS[id].price,
-        run: () => { s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); questEvent({ kind: 'buy', item: id }); unlock('a_breakfast'); menu(); },
+        label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Progress.price(ITEMS[id].price)}`, disabled: s.money < Progress.price(ITEMS[id].price),
+        run: () => { s.money -= Progress.price(ITEMS[id].price); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); questEvent({ kind: 'buy', item: id }); unlock('a_breakfast'); menu(); },
       })).concat([{ label: '離開', run: () => Dialog.close() }]));
       menu(); return true;
     }
@@ -264,5 +264,6 @@ const Achievements = (() => {
       ${stats.length ? `<p class="q-note" style="margin:6px 18px">${stats.map(([k, v]) => `${k}：${v}`).join('　')}</p>` : ''}
       ${msgs.length ? `<h4 class="q-done-h">✉️ 留言本</h4><ul class="q-done">${msgs.map(m => `<li><small>${m}</small></li>`).join('')}</ul>` : ''}`;
   }
-  return { spawn, clear, tick, near, take, onInspect, onTalk, onPhoto, onSecret, onPassage, noticeExtra, spot, html, check, unlock };
+  const count = () => items.filter(it => it.kind !== 'drop').length;
+  return { count, spawn, clear, tick, near, take, onInspect, onTalk, onPhoto, onSecret, onPassage, noticeExtra, spot, html, check, unlock };
 })();

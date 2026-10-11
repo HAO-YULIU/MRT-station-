@@ -16,7 +16,7 @@ const World = (() => {
   let interactions = [];
   let last = 0, shake = 0, lastGateSide = 0;
   let onZoneChange = null, lastZoneKey = '';
-  let gateCheck = null, blocked = null;
+  let gateCheck = null, blocked = null, speedMul = 1;
   // 車站裡的固定設施（柱子、椅子、櫃台……）
   const hitObstacle = (x, z, y) => !!(layout && layout.obstacles && layout.obstacles.some(o => Math.abs(y - o.y) < 1 && x > o.x0 - .28 && x < o.x1 + .28 && z > o.z0 - .28 && z < o.z1 + .28));
   const tickers = [], recenterHooks = [];
@@ -234,7 +234,7 @@ const World = (() => {
         const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
         let mx = rx * ix + fx * iy, mz = rz * ix + fz * iy;
         const n = Math.hypot(mx, mz); mx /= n; mz /= n;
-        const v = (keys.run || runToggle ? 5.2 : 2.6) * mag;   // 跑步 5.2 m/s、走路 2.6 m/s
+        const v = (keys.run || runToggle ? 5.2 : 2.6) * mag * speedMul;   // 跑步 5.2 m/s、走路 2.6 m/s（體力越高越快）
         const sp = v * dt;
         const bx = player.x, bz = player.z;
         tryMove(player.x + mx * sp, player.z + mz * sp);
@@ -358,6 +358,7 @@ const World = (() => {
     set onZone(fn) { onZoneChange = fn; lastZoneKey = ''; },
     set onGate(fn) { gateCheck = fn; },
     set blocker(fn) { blocked = fn; },
+    setSpeedMul(v) { speedMul = v; },
     get scene() { return scene; },
     get env() { return env; },
     get camera() { return camera; },

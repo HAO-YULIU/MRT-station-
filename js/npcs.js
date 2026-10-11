@@ -514,6 +514,7 @@ const Dialog = (() => {
     }
     const s = Game.state, f = s.friends[npc.id] || 0;
     if (typeof Achievements !== 'undefined') Achievements.onTalk(npc.id);
+    if (typeof Progress !== 'undefined') Progress.onTalk(npc.id);
     // 需要做選擇或打工的任務步驟
     const want = Quests.wants('decide', g => g.npc === npc.id) || Quests.wants('work', g => g.npc === npc.id);
     if (want) {
@@ -558,7 +559,7 @@ const Dialog = (() => {
   }
   function chat(npc) {
     const s = Game.state, f = s.friends[npc.id] || 0;
-    s.friends[npc.id] = f + 2; saveState();
+    s.friends[npc.id] = f + 2 + Math.ceil(Progress.friendBonus(npc.id) / 2); saveState();
     let pool = [...npc.lines];
     if (f >= 50 && npc.knows) pool = pool.concat(npc.knows.map(k => k.text));
     if (f >= 80 && npc.rumors) pool = pool.concat(npc.rumors.map(r => '（小聲）' + r));
@@ -574,7 +575,7 @@ const Dialog = (() => {
           s.inv[id]--;
           const done = Quests.emit({ kind: 'give', npc: npc.id, item: id });
           const liked = (npc.likes || []).includes(id);
-          s.friends[npc.id] = (s.friends[npc.id] || 0) + (done.length ? 10 : liked ? 15 : 5);
+          s.friends[npc.id] = (s.friends[npc.id] || 0) + (done.length ? 10 : liked ? 15 : 5) + Progress.friendBonus(npc.id);
           saveState(); updateHud();
           const text = (npc.give && npc.give[id]) || (liked ? '這個我很喜歡！謝謝你。' : '謝謝，你人真好。');
           if (done.length) toast(`<b>${QUESTS[done[0].id].title}</b><span>✓ ${done[0].text}</span>`);
@@ -620,7 +621,9 @@ const Dialog = (() => {
     s.linesMet.BL = { station: START_STATION, found: true };
     s.linesMet.BR = { station: START_STATION, found: true };
     Quests.accept('main_' + line);
+    s.inv.notebook = 1;
     saveState();
+    setTimeout(() => { Game.reward({ money: 150, xp: 80 }, '秀蔅送你一本調查筆記本'); toast('<b>📓 小提示</b><span>背包裡有物品和換裝；「紀錄」裡有你的能力、探索、案件評價和人物檔案</span>'); }, 1200);
     const other = line === 'BL' ? 'BR' : 'BL';
     show(NPCS.xiuyu, `好。我會在這裡等你。如果你也想走${LINES[other].zh}，再來找我。<br>之後每到一條新的路線，我都會在那裡——不過，你要自己找到我。`, [{ label: '出發', primary: true, run: close }]);
     current = null;
@@ -823,8 +826,14 @@ const Challenges = (() => {
   function finishChapter(line, station, i, ev, msg) {
     const so = storyOf(line);
     storyReward(line, so, null, ev);
-    so.ch = Math.max(so.ch, i + 1); saveState();
-    solve(line, station, { xp: 40, money: 60 }, msg || `劇情：第 ${i + 1} 章`);
+    so.ch = Math.max(so.ch, i + 1);
+    const first = ev && !S().flags.firstEvidence;
+    if (first) S().flags.firstEvidence = true;
+    saveState();
+    const [m, x] = MAIN_REWARD[STORY[line].chapters[i].kind] || [200, 110];
+    Progress.addRep(station, 5);
+    solve(line, station, { money: m, xp: x }, msg || `劇情：第 ${i + 1} 章`);
+    if (first) setTimeout(() => toast('<b>📓 第一件關鍵證據</b><span>證據和人物都記在「紀錄」裡了</span>', 'level'), 1500);
   }
   function pages(e, list, k, done) {
     const c = e.sc, who = { name: c.npc.name, role: c.npc.role };
@@ -838,7 +847,7 @@ const Challenges = (() => {
       return Dialog.show({ name: '……', role: e.station }, c.hidden.text, [{ label: '記下來', primary: true, run: () => { Dialog.close(); finishChapter(line, e.station, e.i, c.evidence, '找到隱藏的線索！'); } }]);
     }
     if (e.type === 'suspect') {
-      return Dialog.show({ name: c.chase.suspect.name, role: '' }, c.chase.caught, [{ label: '收下', primary: true, run: () => { Dialog.close(); so.chase = null; storyReward(line, so, null, c.evidence); so.ch = Math.max(so.ch, e.i + 1); saveState(); Game.reward({ xp: 50, money: 60 }, '追到了！'); spawn(World.layout.stationId); } }]);
+      return Dialog.show({ name: c.chase.suspect.name, role: '' }, c.chase.caught, [{ label: '收下', primary: true, run: () => { Dialog.close(); so.chase = null; storyReward(line, so, null, c.evidence); so.ch = Math.max(so.ch, e.i + 1); saveState(); Game.reward({ money: MAIN_REWARD.chase[0], xp: MAIN_REWARD.chase[1] }, '追到了！'); spawn(World.layout.stationId); } }]);
     }
     pages(e, c.pages, 0, (who, text) => {
       if (c.kind === 'evidence') return Dialog.show(who, text, [{ label: '收下', primary: true, run: () => { Dialog.close(); finishChapter(line, e.station, e.i, c.evidence); } }]);
@@ -846,8 +855,10 @@ const Challenges = (() => {
       if (c.kind === 'choice' || c.kind === 'rescue' || c.kind === 'deduce') {
         const opts = (c.choice || c.rescue || c.deduce).options;
         const prompt = (c.choice || c.rescue || c.deduce).prompt;
-        return Dialog.show(who, `${text}<br><b>${prompt}</b>`, opts.map(o => ({
-          label: o.label, run: () => {
+        const allEv = Object.keys(so.ev).length >= evTotal(line);
+        const hint = c.kind === 'deduce' ? Progress.deduceHint(allEv, Object.keys(so.ev).length, evTotal(line)) : '';
+        return Dialog.show(who, `${text}<br><b>${prompt}</b>${hint}`, opts.map(o => ({
+          label: (c.kind === 'deduce' && o.correct && Progress.markAnswer(allEv) ? '★ ' : '') + o.label, run: () => {
             let ev = null;
             if (c.kind === 'choice') { so.choice[c.choice.key] = o.value; ev = o.evidence || null; if (o.friend) for (const [k, v] of Object.entries(o.friend)) S().friends[k] = (S().friends[k] || 0) + v; }
             if (c.kind === 'rescue') ev = o.ok ? c.evidence : null;
@@ -883,7 +894,7 @@ const Challenges = (() => {
     if (safe) storyReward(line, so, null, c.evidence);
     saveState();
     Dialog.show({ name: safe ? '甩掉了' : '……', role: '' }, safe ? c.escape.safe : c.escape.caught, [{ label: '繼續', primary: true, run: () => Dialog.close() }]);
-    if (safe) Game.reward({ xp: 50, money: 60 }, '成功甩掉跟蹤者！');
+    if (safe) Game.reward({ money: MAIN_REWARD.escape[0], xp: MAIN_REWARD.escape[1] }, '成功甩掉跟蹤者！');
     if (World.layout) spawn(World.layout.stationId);
   }
   // 每秒檢查：追捕、逃脫的時間
@@ -1049,6 +1060,7 @@ const Challenges = (() => {
   }
   function solve(line, station, rw, msg) {
     setCh(line, station, null);
+    Progress.addRep(station, 3);
     const f = S().flags.follow;
     if (f && f.line === line && f.station === station) { S().flags.follow = null; dropFollower(); }
     saveState();
@@ -1234,7 +1246,8 @@ const Secrets = (() => {
     saveState();
     Dialog.info(s.sc.name, s.sc.text + extra);
   }
-  return { spawn, clear, tick, near, look };
+  const count = () => { const f = Game.state.flags.found || {}; return list.filter(s => !f[s.station + ':' + s.sc.id]).length; };
+  return { spawn, clear, tick, near, look, count };
 })();
 
 /* ── 車廂裡的乘客：不同車廂遇到不同的人；可以聊天、聽傳聞，撿到遺落的東西 ── */

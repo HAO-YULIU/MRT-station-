@@ -89,7 +89,7 @@ function updateHud() {
   const dl = Object.values(s.quests.active).map(q => q.deadline).filter(Boolean).sort()[0];
   $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
-    $('#hudName').textContent = CHARACTERS[s.char].name;
+    $('#hudName').innerHTML = `${esc(CHARACTERS[s.char].name)} <small class="hud-title">${esc(Progress.titleName())}</small>`;
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
@@ -141,13 +141,14 @@ Game.reward = (r = {}, label = '') => {
   saveState(); updateHud();
   if (label || parts.length) { toast(`<b>${label}</b>${parts.length ? `<span>${parts.join('　')}</span>` : ''}`, 'reward'); Sound.itemGet(); }
   const after = Economy.levelInfo(s.xp).lv;
-  if (after > before) setTimeout(() => { toast(`<b>升級！Lv ${after}</b>`, 'level'); Sound.itemGet(); }, 900);
+  if (after > before) setTimeout(() => { toast(`<b>升級！Lv ${after}</b>`, 'level'); Sound.itemGet(); Progress.onLevel(before, after); }, 900);
 };
 Game.onQuestChange = (what, id, o, k) => {
   const q = QUESTS[id];
   if (what === 'next') toast(`<b>收到後續委託</b><span>${q.title}</span>`, 'level');
   if (what === 'done') {
     SideQuests.onDone(id);
+    Progress.onQuestDone(id, o, k);
     if (o && o.text) setTimeout(() => Dialog.info(`${q.title}——${o.name || Quests.OUTCOME_NAME[k] || ''}`, o.text), 700);
   }
   if (what === 'accept') toast(`<b>接下任務</b><span>${q.title}</span>`);
@@ -389,6 +390,7 @@ function startStation(stationId, carry) {
 // 到站時：支線秘密任務、寶物感應
 function arriveChecks(stationId) {
   SideQuests.onArrive(stationId);
+  Progress.onArrive(stationId);
   const other = { 新北投: '小碧潭', 小碧潭: '新北投' }[stationId];
   if (other) Quests.secret('sec_branch', { target: other });
   const act = Game.state.quests.active;
@@ -704,15 +706,15 @@ const FACILITY = {
 function cafeMenu() {
   const s = Game.state, items = ['coffee', 'bread', 'greentea'].concat(Quests.eventsNow().includes('event_halloween') ? ['pumpkinlatte'] : []);
   Dialog.show({ name: 'Leo 咖啡', role: '吧台' }, `餘額 NT$ ${s.money}。今天想喝什麼？`, items.map(id => ({
-    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}`, disabled: s.money < ITEMS[id].price,
-    run: () => { s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); cafeMenu(); },
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Progress.price(ITEMS[id].price)}`, disabled: s.money < Progress.price(ITEMS[id].price),
+    run: () => { s.money -= Progress.price(ITEMS[id].price); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); cafeMenu(); },
   })).concat([{ label: '離開', run: () => Dialog.close() }]));
 }
 function vendMenu() {
   const s = Game.state;
   Dialog.show({ name: '自動販賣機', role: '嗶一下悠遊卡' }, `餘額 NT$ ${s.money}。`, ['water', 'greentea', 'sportdrink'].map(id => ({
-    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}`, disabled: s.money < ITEMS[id].price,
-    run: () => { s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>咚！${ITEMS[id].icon} ${ITEMS[id].name} 掉下來了</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); vendMenu(); },
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Progress.price(ITEMS[id].price)}`, disabled: s.money < Progress.price(ITEMS[id].price),
+    run: () => { s.money -= Progress.price(ITEMS[id].price); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>咚！${ITEMS[id].icon} ${ITEMS[id].name} 掉下來了</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); vendMenu(); },
   })).concat([{ label: '離開', run: () => Dialog.close() }]));
 }
 function spotText(sp, st, questHit) {
@@ -786,9 +788,9 @@ function foodMenu(st) {
   const shop = Station3D.SHOPS[st];
   const s = Game.state;
   Dialog.show({ name: shop.name, role: '歡迎光臨' }, `悠遊卡餘額 NT$ ${s.money}。要買什麼？`, shopItems(shop).map(id => ({
-    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${ITEMS[id].price}${ITEMS[id].event ? '（限定）' : ''}`, disabled: s.money < ITEMS[id].price,
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Progress.price(ITEMS[id].price)}${ITEMS[id].event ? '（限定）' : ''}`, disabled: s.money < Progress.price(ITEMS[id].price),
     run: () => {
-      s.money -= ITEMS[id].price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud();
+      s.money -= Progress.price(ITEMS[id].price); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud();
       Sound.gate();
       toast(`<b>買了 ${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`);
       questEvent({ kind: 'buy', item: id });
@@ -803,10 +805,10 @@ function wearMenu(st) {
   Dialog.show({ name: shop.name, role: '服飾、配件' }, `悠遊卡餘額 NT$ ${s.money}。買了可以在「背包 → 換裝」隨時換。`, ids.map(id => {
     const o = OUTFITS[id], own = !!s.wardrobe.own[id];
     return {
-      label: own ? `${slotName[o.slot]}｜${o.name}　已擁有` : `${slotName[o.slot]}｜${o.name}　NT$ ${o.price}`,
-      disabled: own || s.money < o.price,
+      label: own ? `${slotName[o.slot]}｜${o.name}　已擁有` : `${slotName[o.slot]}｜${o.name}　NT$ ${Progress.price(o.price)}`,
+      disabled: own || s.money < Progress.price(o.price),
       run: () => {
-        s.money -= o.price; s.wardrobe.own[id] = true; saveState(); updateHud();
+        s.money -= Progress.price(o.price); s.wardrobe.own[id] = true; saveState(); updateHud();
         Sound.gate();
         questEvent({ kind: 'buy', item: id });
         Dialog.show({ name: shop.name, role: '服飾、配件' }, `買了「${esc(o.name)}」。要現在換上嗎？`, [
@@ -1042,6 +1044,7 @@ function init() {
 
   $('#btnMap').onclick = openMap;
   $('#btnBag').onclick = openBag;
+  $('#btnRecord').onclick = () => Progress.open();
   $('#btnQuest').onclick = openQuests;
   $('#runBtn').onclick = () => { const on = !World.running; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
   $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').textContent = on ? '音效 開' : '音效 關'; };

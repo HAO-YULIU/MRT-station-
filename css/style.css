@@ -428,3 +428,26 @@ button:disabled { cursor: not-allowed; }
 
 /* 任務：謎題進度、寶物感應、秘密任務 */
 .q-note { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* 紀錄 */
+.rc-tabs { display: flex; gap: 6px; padding: 0 18px 10px; flex-wrap: wrap; }
+.rc-tabs button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.05); color: inherit; cursor: pointer; }
+.rc-tabs button.on { background: #f2c200; color: #1a1a1a; border-color: #f2c200; font-weight: 700; }
+.rc-hero { margin: 0 18px 10px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.06); }
+.rc-hero b { font-size: 18px; } .rc-title { margin-left: 8px; color: #f2c200; font-size: 13px; }
+.rc-hero p { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.rc-stats, .rc-rows, .rc-people { list-style: none; margin: 0; padding: 0 18px 8px; display: grid; gap: 8px; }
+.rc-stats li, .rc-rows li { display: grid; grid-template-columns: 6.5em 1fr auto auto; align-items: center; column-gap: 8px; }
+.rc-stats small, .rc-rows small { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.rc-bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
+.rc-bar i { display: block; height: 100%; background: linear-gradient(90deg, #2a9d8f, #f2c200); }
+.rc-stats em, .rc-rows em { font-style: normal; font-size: 13px; min-width: 3em; text-align: right; }
+.rc-titles { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 12px; }
+.rc-big { margin: 0 18px 10px; font-size: 15px; } .rc-big b { font-size: 26px; color: #f2c200; margin-left: 6px; } .rc-big small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.rc-note { margin: 0 18px 10px; font-size: 12px; color: var(--muted); }
+.rc-people li { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); }
+.rc-people small { display: block; color: var(--muted); font-size: 12px; } .rc-people p { margin: 4px 0 0; font-size: 13px; } .rc-people .rc-note { margin: 4px 0 0; }
+.grade { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; font-weight: 900; }
+.grade.gS { background: #f2c200; color: #1a1a1a; } .grade.gA { background: #2a9d8f; color: #fff; } .grade.gB { background: #5d6b7a; color: #fff; } .grade.gC { background: #7a3a3a; color: #fff; }
+.rc-rows li:has(.grade) { grid-template-columns: 30px 1fr; }
+.hud-title { font-size: 11px; color: #f2c200; font-weight: 500; margin-left: 4px; }

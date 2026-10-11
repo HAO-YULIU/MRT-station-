@@ -525,6 +525,8 @@ const Quests = (() => {
       st.step++;
       if (step.gain) for (const [it, n] of Object.entries(step.gain)) S().inv[it] = (S().inv[it] || 0) + n;
       done.push({ id, text: step.text });
+      // 人物故事：每完成一個階段就有獎勵
+      if (q.stepReward && st.step < q.steps.length) { const [a, b] = q.stepReward; setTimeout(() => Game.reward({ money: Math.round(a + Math.random() * (b - a)), xp: 40 }, `故事進展：${q.title}`), 600); }
       if (st.step >= q.steps.length) finish(id);
     }
     if (done.length) saveState();
