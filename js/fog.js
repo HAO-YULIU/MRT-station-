@@ -778,6 +778,7 @@ const FogCity = (() => {
       const key = r.ghostAt ? 'ghost_station' : eventKey(stationId);
       K = kit(stationId, r, rnd);
       try { FogEvents.start(key, K); } catch (e) { console.error('fog event', key, e); }
+      if (!r.ghostAt && typeof Kaicheng !== 'undefined') Kaicheng.fogSpawn(stationId);
       if (phase() === 'fade' && !r.result) fadeExit();
     } else spawnAmbient(stationId, rnd);
     if (!r.seenIntro) { r.seenIntro = true; saveState(); intro(); }
