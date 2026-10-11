@@ -1078,7 +1078,7 @@ function openMap() {
   const s = Game.state;
   $('#mapStats').textContent = `已走過 ${Object.keys(s.visited).length} / ${Object.keys(STATIONS).length} 站　搭乘 ${s.rides} 次`;
   $('#mapCard').hidden = true;
-  $('#mapLines').innerHTML = LINE_ORDER.map(l => `<button class="ml" data-l="${l}" style="--c:${LINES[l].color};--t:${LINES[l].text}" aria-pressed="false">${l}<span>${LINES[l].zh}</span></button>`).join('');
+  $('#mapLines').innerHTML = LINE_ORDER.map(l => `<button class="ml" data-l="${l}" style="--c:${LINES[l].color};--t:${LINES[l].text}" aria-pressed="false"><span>${LINES[l].zh}</span></button>`).join('');
   $('#mapLines').onclick = e => {
     const b = e.target.closest('.ml'); if (!b) return;
     const solo = Map3D.focusLine(b.dataset.l);
@@ -1124,7 +1124,22 @@ async function teleport(id) {
 }
 
 /* ── 初始化 ── */
+// 手機：擋掉瀏覽器自己的手勢（雙指縮放網頁、雙擊放大、長按選單、下拉重新整理），只留可捲動清單的捲動
+function lockPageGestures() {
+  const scrollable = el => {
+    for (; el && el !== document.body; el = el.parentElement) {
+      const cs = getComputedStyle(el);
+      if (/(auto|scroll)/.test(cs.overflowY + cs.overflowX) && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) return true;
+    }
+    return false;
+  };
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1 || !scrollable(e.target)) e.preventDefault(); }, { passive: false });
+  for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+  document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
+}
+
 function init() {
+  lockPageGestures();
   renderTitle();
   showScreen('title');
   updateHud();

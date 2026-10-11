@@ -84,6 +84,8 @@ const Station3D = (() => {
   };
   const M0 = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: o.r ?? .7, metalness: o.m ?? 0, map: o.map || null, transparent: !!o.t, opacity: o.o ?? 1, side: o.side || T.FrontSide, emissive: o.e || '#000', emissiveIntensity: o.ei ?? 1, emissiveMap: o.em || null, depthWrite: o.dw ?? true });
   function box(w, h, d, mat, x, y, z, parent) { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); parent && parent.add(m); return m; }
+  // 貼在地上的標記：用 polygonOffset 拉開深度，避免和地板互相閃爍
+  function decal(mat, n) { mat = mat.clone(); mat.polygonOffset = true; mat.polygonOffsetFactor = -n; mat.polygonOffsetUnits = -n * 2; return mat; }
   function plane(w, h, mat, parent) { const m = new T.Mesh(new T.PlaneGeometry(w, h), mat); parent && parent.add(m); return m; }
   // 兩面都看得到的看板
   function sign(tex, w, h, x, y, z, parent, rotY = 0) {
@@ -195,8 +197,9 @@ const Station3D = (() => {
       g.fillStyle = '#23272b'; g.fillRect(0, 0, 1024, 256);
       let x = 34;
       for (const l of lineIds) { lineBlock(g, l, x, 52, 150); x += 166; }
-      g.fillStyle = '#fff'; g.font = `700 ${zh.length > 9 ? 64 : 84}px "Noto Sans TC", sans-serif`; g.fillText(zh, x + 18, 134);
-      g.fillStyle = '#c8cdd2'; g.font = '500 42px "Barlow Semi Condensed", sans-serif'; g.fillText(en, x + 22, 200);
+      g.fillStyle = '#fff'; g.font = `700 ${zh.length > 9 ? 64 : 84}px "Noto Sans TC", sans-serif`; const maxW = (arrow ? 890 : 1000) - x - 22;   // 文字不要壓到箭頭
+      g.fillText(zh, x + 18, 134, maxW);
+      g.fillStyle = '#c8cdd2'; g.font = '500 42px "Barlow Semi Condensed", sans-serif'; g.fillText(en, x + 22, 200, maxW);
       if (arrow) {
         g.save(); g.translate(950, 128); g.rotate({ up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0, upleft: -Math.PI * .75, upright: -Math.PI / 4 }[arrow] || 0);
         g.fillStyle = '#fff'; g.beginPath(); g.moveTo(-44, -16); g.lineTo(6, -16); g.lineTo(6, -44); g.lineTo(52, 0); g.lineTo(6, 44); g.lineTo(6, 16); g.lineTo(-44, 16); g.fill(); g.restore();
@@ -208,8 +211,8 @@ const Station3D = (() => {
       g.fillStyle = bg; g.fillRect(0, 0, 1024, 256);
       let x = 50;
       if (icon) { g.fillStyle = icon.bg; roundRect(g, 36, 52, 150, 150, 26); g.fill(); g.fillStyle = icon.fg; g.font = '700 92px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillText(icon.text, 111, 160); g.textAlign = 'left'; x = 220; }
-      g.fillStyle = fg; g.font = `700 ${zh.length > 9 ? 66 : 86}px "Noto Sans TC", sans-serif`; g.fillText(zh, x, 136);
-      g.globalAlpha = .75; g.font = '500 42px "Barlow Semi Condensed", sans-serif'; g.fillText(en, x + 4, 200); g.globalAlpha = 1;
+      g.fillStyle = fg; g.font = `700 ${zh.length > 9 ? 66 : 86}px "Noto Sans TC", sans-serif`; g.fillText(zh, x, 136, 990 - x);
+      g.globalAlpha = .75; g.font = '500 42px "Barlow Semi Condensed", sans-serif'; g.fillText(en, x + 4, 200, 990 - x); g.globalAlpha = 1;
     });
   }
   // 路網圖看板
@@ -331,7 +334,7 @@ const Station3D = (() => {
     if (big) { spots.push({ kind: 'locker', x: U.x0 + 1.3, y: 0, z: U.z0 + 10.1 }); spots.push({ kind: 'atm', x: U.x1 - 1.3, y: 0, z: U.z0 + 4.7 }); }
     for (const P of platforms) {
       spots.push({ kind: 'fountain', x: P.x + 26.4, y: P.y, z: P.z + .9 });
-      spots.push({ kind: 'women', x: P.x - 12, y: P.y, z: P.z + 2.2, line: P.line });
+      spots.push({ kind: 'women', x: P.x - 10.25, y: P.y, z: P.z + 2.2, line: P.line });
     }
     // 可以走進去的房間：廁所（男、女、無障礙）、哺集乳室、站務室、大站的便利商店
     // door：門在哪一面牆（wx 是牆的 x）、門的中心 z 與寬度
@@ -479,12 +482,12 @@ const Station3D = (() => {
         const bed = plane(LEN + 400, 3.4, M('#ffffff', { map: tiled(TEX.gravel, 40, 1) }), pg); bed.rotation.x = -Math.PI / 2; bed.position.set(0, -1.15, s * TRACK);
         for (const rz of [-.72, .72]) box(LEN + 400, .14, .08, M('#8d9196', { m: .8, r: .35 }), 0, -1.05, s * TRACK + rz, pg);
         box(LEN, 1.2, .2, M('#8a8883', { map: TEX.concrete }), 0, -.6, s * 3.05, pg);
-        const tac = plane(LEN, .3, M('#ffffff', { map: tiled(TEX.tactile, LEN / 1.2, 1) }), pg); tac.rotation.x = -Math.PI / 2; tac.position.set(0, .004, s * 2.7);
+        const tac = plane(LEN, .3, decal(M('#ffffff', { map: tiled(TEX.tactile, LEN / 1.2, 1) }), 1), pg); tac.rotation.x = -Math.PI / 2; tac.position.set(0, .01, s * 2.7);
         for (const d of DOORS) for (const sx of [-1, 1]) {
-          const mk = plane(.32, .8, M('#2f9e5a'), pg); mk.rotation.x = -Math.PI / 2; mk.rotation.z = sx * .35; mk.position.set(d + sx * 1.05, .005, s * 2.15);
+          const mk = plane(.32, .6, decal(M('#2f9e5a'), 2), pg); mk.rotation.x = -Math.PI / 2; mk.rotation.z = sx * .35; mk.position.set(d + sx * 1.1, .014, s * 2.15);
         }
         // 博愛候車區
-        const prio = plane(1.2, .7, M('#2a5fb0', { o: .9, t: true }), pg); prio.rotation.x = -Math.PI / 2; prio.position.set(DOORS[0], .006, s * 2.2);
+        const prio = plane(1.2, .6, decal(M('#2a5fb0', { o: .9, t: true }), 2), pg); prio.rotation.x = -Math.PI / 2; prio.position.set((DOORS[0] + DOORS[1]) / 2, .014, s * 2.15);
         // 月台門
         const psdH = fullPSD ? 2.3 : 1.45;
         psd[`${P.k}:${s}`] = [];
@@ -521,7 +524,7 @@ const Station3D = (() => {
           const st = M('#ffffff', { map: stationSignTex(L.stationId, P.line) });
           for (let x = -30; x <= 30; x += 12) { const p = plane(2.6, .65, st, pg); p.position.set(x, 2.9, s * 6.86); p.rotation.y = s > 0 ? Math.PI : 0; }
         } else {
-          box(LEN + 300, .8, 2.6, M('#77736d', { map: TEX.concrete }), 0, -1.6, s * TRACK, pg);
+          box(LEN + 300, .6, 2.6, M('#77736d', { map: TEX.concrete }), 0, -1.65, s * TRACK, pg);   // 頂面比道床低，避免閃爍
           box(LEN, 1.1, .05, M('#cfe3ec', { t: true, o: .3 }), 0, .55 - 1.15 + 1.15, s * 6.9, pg);
         }
       }
@@ -590,7 +593,7 @@ const Station3D = (() => {
     const ceilHoles = L.platforms.filter(P => !P.under).flatMap(P => P.ramps.map(r => ({ x0: Math.min(r.xa, r.xb) - .2, x1: Math.max(r.xa, r.xb) + .2, z0: r.z - 1.9, z1: r.z + 1.9 })));
     slab(rectsMinus({ x0: C.x0, x1: C.x1, z0: C.z0, z1: L.unpaid.z1 }, ceilHoles), hallH, M('#e3e3df', { r: .9 }), g, .2, false);
     for (let x = C.x0 + 3; x < C.x1 - 2; x += 6) for (let z = C.z0 + 3; z < L.unpaid.z1 - 1; z += 5) {
-      if (ceilHoles.some(h => x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1)) continue;
+      if (ceilHoles.some(h => x > h.x0 - 2.6 && x < h.x1 + 2.6 && z > h.z0 - .4 && z < h.z1 + .4)) continue;   // 電扶梯口上方不放燈，免得擋到指標
       box(1.6, .04, .4, lightM, x, hallH - .03, z, g);
     }
     // 大廳站名牆
@@ -986,7 +989,7 @@ const Station3D = (() => {
     const exitSign = plainSign('出口 Exit ↓', '往閘門 To fare gates', '#f2c200', '#1c2126');
     for (const x of [-8, 8]) { box(.04, .5, .04, darkM, x, hallH - .25, L.gateZ - 4, g); sign(exitSign, 2.4, .55, x, hallH - .8, L.gateZ - 4, g); }
     // ── 月台 ──
-    const gapM = M('#ffffff', { t: true, map: canvasTex(256, 74, x => { x.fillStyle = '#f2c200'; x.fillRect(0, 0, 256, 74); x.fillStyle = '#1c2126'; x.font = 'bold 28px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('小心月台間隙', 128, 34); x.font = '18px "Barlow Semi Condensed", sans-serif'; x.fillText('Mind the gap', 128, 62); }) });
+    const gapM = decal(M('#ffffff', { t: true, map: canvasTex(256, 74, x => { x.fillStyle = '#f2c200'; x.fillRect(0, 0, 256, 74); x.fillStyle = '#1c2126'; x.font = 'bold 28px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('小心月台間隙', 128, 34); x.font = '18px "Barlow Semi Condensed", sans-serif'; x.fillText('Mind the gap', 128, 62); }) }), 3);
     for (const P of L.platforms) {
       const pg = new T.Group(); pg.position.set(P.x, P.y, P.z); g.add(pg);
       const top = P.under ? 3.4 : 3.8;
@@ -1001,19 +1004,20 @@ const Station3D = (() => {
       if (P.under) for (const ex of [-1, 1]) { const h = box(.2, 1.2, .7, red, ex * (LEN / 2 - .05), .9, -1.6, pg); void h; }
       // 垃圾桶、地上的「小心月台間隙」貼紙
       for (const ex of [-1, 1]) bin(P.x + ex * 29.4, P.y, P.z - .9);
-      for (const s of [-1, 1]) for (const d of DOORS) { const st = plane(1.1, .32, gapM, pg); st.rotation.x = -Math.PI / 2; st.rotation.z = s > 0 ? 0 : Math.PI; st.position.set(d, .006, s * 2.45); }
+      for (const s of [-1, 1]) for (const d of DOORS) { const st = plane(1.1, .32, gapM, pg); st.rotation.x = -Math.PI / 2; st.rotation.z = s > 0 ? 0 : Math.PI; st.position.set(d, .018, s * 2.32); }
       if (!P.under) for (const s of [-1, 1]) for (const [k, x] of [-15, 15].entries()) {   // 高架月台：屋簷下的廣告看板
         const p = plane(2.4, 1.2, M('#ffffff', { map: adTex(k + s + 3), e: '#ffffff', ei: .2 }), pg); p.position.set(x, 2.9, s * 2.75); p.rotation.y = s > 0 ? Math.PI : 0;
       }
       // 時鐘
       const pct = M('#ffffff', { map: clockTex() });
-      for (const x of [-10, 10]) { box(.04, .35, .04, darkM, x, top - .17, 0, pg); for (const s of [-1, 1]) { const c = plane(.6, .6, pct, pg); c.position.set(x, top - .65, s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
+      const signXs = P.ramps.map(r => r.xa - P.x - r.b * 1.2);   // 電扶梯口吊牌的位置，時鐘要避開
+      for (let x of [-10, 10]) { while (signXs.some(sx => Math.abs(sx - x) < 1.8)) x += Math.sign(x) * 1.5; box(.04, .35, .04, darkM, x, top - .17, 0, pg); for (const s of [-1, 1]) { const c = plane(.6, .6, pct, pg); c.position.set(x, top - .65, s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
       // 監視器、喇叭
       for (const x of [-30, -16, 2, 16, 30]) { cam(P.x + x, P.y + top, P.z + 1.4); cam(P.x + x + 2, P.y + top, P.z - 1.4); }
       for (const x of [-20, 0, 20]) speaker(P.x + x + 4, P.y + top, P.z);
       // 夜間婦女候車區（+1 側地面＋吊牌）
-      const wz = plane(3, .9, M('#d870a0', { t: true, o: .55 }), pg); wz.rotation.x = -Math.PI / 2; wz.position.set(-12, .007, 2.2);
-      sign(plainSign('夜間婦女候車區', 'Women\'s waiting zone (night)', '#d870a0', '#fff'), 2, .45, -12, 2.4, 2.35, pg);
+      const wz = plane(2.2, .6, decal(M('#d870a0', { t: true, o: .55 }), 2), pg); wz.rotation.x = -Math.PI / 2; wz.position.set(-10.25, .014, 2.15);
+      sign(plainSign('夜間婦女候車區', 'Women\'s waiting zone (night)', '#d870a0', '#fff'), 2, .45, -10.25, 2.4, 2.35, pg);
       // 軌道外牆的廣告燈箱（地下月台）
       if (P.under) for (const s of [-1, 1]) for (const [k, x] of [-24, -12, 0, 12, 24].entries()) {
         const p = plane(3.2, 1.6, M('#ffffff', { map: adTex(k + s + P.k), e: '#ffffff', ei: .2 }), pg); p.position.set(x, 1.4, s * 6.86); p.rotation.y = s > 0 ? Math.PI : 0;
@@ -1269,7 +1273,7 @@ const Station3D = (() => {
         const wallM = M('#3a3b3c', { map: tiled(TEX.concrete, len / 4, 1), r: .95 });
         for (const s of [-1, 1]) { const w = plane(len, 5, wallM, g); w.position.set(cx, y + 1, zc + s * 2.4); w.rotation.y = s > 0 ? Math.PI : 0; }
         const top = plane(len, 4.8, wallM, g); top.rotation.x = Math.PI / 2; top.position.set(cx, y + 3.2, zc);
-        const bed = plane(len, 4.8, M('#2a2a28'), g); bed.rotation.x = -Math.PI / 2; bed.position.set(cx, y - 1.15, zc);
+        const bed = plane(len, 4.8, M('#2a2a28'), g); bed.rotation.x = -Math.PI / 2; bed.position.set(cx, y - 1.25, zc);
         const n = Math.floor(len / 9);
         const hue = (seed % 360) / 360;   // 每段隧道的燈色略有不同
         const tc = new T.Color().setHSL(.1 + Math.sin(hue * 6.28) * .06, .55, .75);
@@ -1281,7 +1285,7 @@ const Station3D = (() => {
         for (let x = a + 30; x < b; x += 60) box(.3, .15, .05, M('#31d07a', { e: '#31d07a', ei: 2 }), x, y + .6, zc - 2.35, g);
         if (parts.length > 1) box(1.2, 6, 6, M('#55585b'), ug === ugLow ? b : a, y + 1.4, zc, g);
       } else {
-        box(len, .8, 6, M('#77736d', { map: TEX.concrete }), cx, y - 1.6, zc, g);
+        box(len, .6, 6, M('#77736d', { map: TEX.concrete }), cx, y - 1.65, zc, g);
         for (const s of [-1, 1]) box(len, .9, .2, M('#8c8a85', { map: TEX.concrete }), cx, y - .7, zc + s * 2.3, g);
         for (let x = a; x < b; x += 30) box(2, 11, 2, M('#77736d'), x, y - 7, zc, g);
         if (lineId !== 'BR') for (let x = a + 10; x < b; x += 40) { box(.18, 5, .18, M('#4c5258', { m: .5 }), x, y + 1.2, zc - 2.2, g); box(.1, .1, 2.4, M('#4c5258'), x, y + 3.4, zc - 1.1, g); }

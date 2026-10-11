@@ -429,7 +429,7 @@ const World = (() => {
       renderer.domElement.className = 'world-canvas';
       el.appendChild(renderer.domElement);
       scene = new T.Scene();
-      camera = new T.PerspectiveCamera(55, 1, .05, 700);
+      camera = new T.PerspectiveCamera(55, 1, .1, 700);
       hemi = new T.HemisphereLight('#ffffff', '#8a8c90', 1.7); scene.add(hemi);
       sun = new T.DirectionalLight('#fff4e0', 1); sun.position.set(20, 40, 25); scene.add(sun);
       env = new T.Group(); scene.add(env);

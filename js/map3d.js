@@ -18,15 +18,26 @@ const Map3D = (() => {
   // 車站在某線的高度：高架或地下
   const hOn = (id, line) => (MRT.undergroundOn(id, line) ? H_UG : H_EL);
 
-  function textSprite(text, { size = 46, color = '#1c2126', bg = 'rgba(255,255,255,.88)', bold = 700 } = {}) {
+  function textSprite(text, { size = 46, color = '#1c2126', bg = 'rgba(255,255,255,.88)', bold = 700, dots = null, border = null } = {}) {
     const c = document.createElement('canvas'), g = c.getContext('2d');
-    g.font = `${bold} ${size}px "Noto Sans TC", sans-serif`;
-    const w = Math.ceil(g.measureText(text).width) + size * .8, h = Math.ceil(size * 1.5);
+    const font = `${bold} ${size}px "Noto Sans TC", sans-serif`;
+    g.font = font;
+    const dw = dots ? dots.length * size * .5 + size * .25 : 0;
+    const pad = 8, w = Math.ceil(g.measureText(text).width + size * .8 + dw) + pad * 2, h = Math.ceil(size * 1.5) + pad * 2;
     c.width = w; c.height = h;
-    g.font = `${bold} ${size}px "Noto Sans TC", sans-serif`;
-    g.fillStyle = bg; const r = h / 2.6;
-    g.beginPath(); g.moveTo(r, 0); g.arcTo(w, 0, w, h, r); g.arcTo(w, h, 0, h, r); g.arcTo(0, h, 0, 0, r); g.arcTo(0, 0, w, 0, r); g.fill();
-    g.fillStyle = color; g.textBaseline = 'middle'; g.textAlign = 'center'; g.fillText(text, w / 2, h / 2 + 1);
+    g.font = font;
+    const r = (h - pad * 2) / 2.2, x0 = pad, y0 = pad, x1 = w - pad, y1 = h - pad;
+    const path = () => { g.beginPath(); g.moveTo(x0 + r, y0); g.arcTo(x1, y0, x1, y1, r); g.arcTo(x1, y1, x0, y1, r); g.arcTo(x0, y1, x0, y0, r); g.arcTo(x0, y0, x1, y0, r); g.closePath(); };
+    if (bg !== 'rgba(255,255,255,0)') { g.shadowColor = 'rgba(30,40,50,.28)'; g.shadowBlur = 8; g.shadowOffsetY = 2; }
+    g.fillStyle = bg; path(); g.fill();
+    g.shadowColor = 'transparent';
+    if (border) { g.lineWidth = 4; g.strokeStyle = border; path(); g.stroke(); }
+    let tx = x0 + size * .4;
+    if (dots) dots.forEach((d, i) => { g.fillStyle = d; g.beginPath(); g.arc(tx + size * .22 + i * size * .5, h / 2, size * .2, 0, 7); g.fill(); });
+    tx += dw;
+    g.fillStyle = color; g.textBaseline = 'middle'; g.textAlign = 'left';
+    if (bg === 'rgba(255,255,255,0)') { g.lineWidth = size * .16; g.strokeStyle = 'rgba(255,255,255,.85)'; g.strokeText(text, tx, h / 2 + 1); }
+    g.fillText(text, tx, h / 2 + 1);
     const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 4;
     const sp = new T.Sprite(new T.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
     sp.userData.aspect = w / h;
@@ -48,47 +59,104 @@ const Map3D = (() => {
     [980, 560, 10, 6], [960, 690, 9, 5],                                                              // 東邊（南港山）
   ];
 
+  // 沿曲線做一條平貼地面的帶子
+  function ribbon(curve, width, y, n = 120) {
+    const pos = [], idx = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, p = curve.getPoint(t), tg = curve.getTangent(t);
+      const nx = -tg.z, nz = tg.x, l = Math.hypot(nx, nz) || 1, w = width / 2 * (0.85 + 0.15 * Math.sin(t * 17));
+      pos.push(p.x + nx / l * w, y, p.z + nz / l * w, p.x - nx / l * w, y, p.z - nz / l * w);
+      if (i < n) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    return geo;
+  }
+  const curveOf = pts => new T.CatmullRomCurve3(pts.map(([x, y]) => new T.Vector3(x / S, 0, y / S)), false, 'centripetal');
+  // 公園綠地（示意座標，半徑）
+  const PARKS = [[505, 470, 38], [585, 520, 26], [455, 395, 22], [430, 140, 30], [690, 450, 22], [345, 260, 26], [800, 640, 30], [255, 150, 26], [615, 690, 24]];
+
   function buildTerrain() {
     const g = new T.Group();
-    // 地面：半透明，看得到下面的地下段
+    // 地面：暖色紙張感，帶公園綠地、街廓細紋，邊緣淡出到天色
     const groundTex = (() => {
-      const c = document.createElement('canvas'); c.width = c.height = 512;
+      const N = 1024, c = document.createElement('canvas'); c.width = c.height = N;
       const x = c.getContext('2d');
-      x.fillStyle = '#d8dcd2'; x.fillRect(0, 0, 512, 512);
-      x.strokeStyle = 'rgba(120,130,120,.18)'; x.lineWidth = 1;
-      for (let i = 0; i < 512; i += 32) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, 512); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(512, i); x.stroke(); }
-      const t = new T.CanvasTexture(x.canvas); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(8, 8); t.colorSpace = T.SRGBColorSpace;
+      const toPx = v => (v / S + 30) / 160 * N, rPx = r => r / S / 160 * N;   // 地面涵蓋 −30..130
+      x.fillStyle = '#ece8da'; x.fillRect(0, 0, N, N);
+      // 街廓格紋
+      x.strokeStyle = 'rgba(160,150,125,.16)'; x.lineWidth = 1;
+      for (let i = 0; i < N; i += 12) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, N); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(N, i); x.stroke(); }
+      x.strokeStyle = 'rgba(255,255,255,.7)'; x.lineWidth = 2.2;
+      for (let i = 0; i < N; i += 60) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, N); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(N, i); x.stroke(); }
+      // 公園
+      for (const [px, py, r] of PARKS) {
+        const gr = x.createRadialGradient(toPx(px), toPx(py), 0, toPx(px), toPx(py), rPx(r) * 1.2);
+        gr.addColorStop(0, 'rgba(150,190,130,.9)'); gr.addColorStop(.75, 'rgba(160,198,140,.75)'); gr.addColorStop(1, 'rgba(160,198,140,0)');
+        x.fillStyle = gr; x.beginPath(); x.arc(toPx(px), toPx(py), rPx(r) * 1.2, 0, 7); x.fill();
+      }
+      // 外圍淡出成丘陵綠
+      const ed = x.createRadialGradient(N / 2, N / 2, N * .36, N / 2, N / 2, N * .72);
+      ed.addColorStop(0, 'rgba(196,212,180,0)'); ed.addColorStop(1, 'rgba(196,212,180,1)');
+      x.fillStyle = ed; x.fillRect(0, 0, N, N);
+      const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8;
       return t;
     })();
-    const ground = new T.Mesh(new T.PlaneGeometry(220, 150), new T.MeshStandardMaterial({ map: groundTex, transparent: true, opacity: .72, roughness: .95, depthWrite: false }));
-    ground.rotation.x = -Math.PI / 2; ground.position.set(20, H_GROUND, 47); ground.renderOrder = 1;
+    const ground = new T.Mesh(new T.PlaneGeometry(160, 160), new T.MeshStandardMaterial({ map: groundTex, transparent: true, opacity: .66, roughness: .95, depthWrite: false }));
+    ground.rotation.x = -Math.PI / 2; ground.position.set(50, H_GROUND, 50); ground.renderOrder = 1;
     g.add(ground);
-    // 河流
-    const water = new T.MeshStandardMaterial({ color: '#7fb2cf', roughness: .3, metalness: .1, transparent: true, opacity: .9 });
+    // 更外圈：一大片低矮綠地，讓鏡頭怎麼轉都不會看到地圖邊緣
+    // 內緣做成漸層透明，和中間的地面自然接起來
+    const ringTex = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 4; const x = c.getContext('2d'); const gr = x.createLinearGradient(0, 0, 256, 0); gr.addColorStop(0, 'rgba(196,212,180,0)'); gr.addColorStop(.06, 'rgba(196,212,180,1)'); gr.addColorStop(1, 'rgba(196,212,180,1)'); x.fillStyle = gr; x.fillRect(0, 0, 256, 4); const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t; })();
+    const rg = new T.RingGeometry(64, 420, 64, 1), uv = rg.attributes.uv, rp = rg.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (Math.hypot(rp.getX(i), rp.getY(i)) - 64) / 356, .5);
+    const outer = new T.Mesh(rg, new T.MeshStandardMaterial({ map: ringTex, transparent: true, roughness: 1, depthWrite: false }));
+    outer.rotation.x = -Math.PI / 2; outer.position.set(50, H_GROUND + .01, 50); outer.renderOrder = 1;
+    g.add(outer);
+    // 河流：平滑曲線＋淺色河岸
+    const bankM = new T.MeshStandardMaterial({ color: '#cfe3e6', roughness: .9, transparent: true, opacity: .95, depthWrite: false, side: T.DoubleSide });
+    const waterM = new T.MeshStandardMaterial({ color: '#5fa6cf', roughness: .2, metalness: .15, emissive: '#2c6e95', emissiveIntensity: .15, transparent: true, opacity: .95, depthWrite: false, side: T.DoubleSide });
     for (const r of RIVERS) {
-      for (let i = 0; i < r.pts.length - 1; i++) {
-        const a = new T.Vector3(r.pts[i][0] / S, .02, r.pts[i][1] / S), b = new T.Vector3(r.pts[i + 1][0] / S, .02, r.pts[i + 1][1] / S);
-        const len = a.distanceTo(b);
-        const m = new T.Mesh(new T.PlaneGeometry(len + r.w * .9, r.w), water);
-        m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan2(b.z - a.z, b.x - a.x);
-        m.position.copy(a.clone().add(b).multiplyScalar(.5)); m.renderOrder = 2;
-        g.add(m);
-      }
-      const mid = r.pts[Math.floor(r.pts.length / 2)];
-      const lab = textSprite(r.name, { size: 34, color: '#2f6f93', bg: 'rgba(255,255,255,0)', bold: 500 });
-      lab.position.set(mid[0] / S + 2, .4, mid[1] / S); lab.scale.set(3.2 * lab.userData.aspect / 3, 1.1, 1); lab.userData.river = true;
+      const cv = curveOf(r.pts);
+      const bank = new T.Mesh(ribbon(cv, r.w * 1.9, .025), bankM); bank.renderOrder = 2; g.add(bank);
+      const w = new T.Mesh(ribbon(cv, r.w * 1.15, .05), waterM); w.renderOrder = 3; g.add(w);
+      const mid = cv.getPoint(.5);
+      const lab = textSprite(r.name, { size: 34, color: '#1f5f86', bg: 'rgba(255,255,255,0)', bold: 700 });
+      lab.position.set(mid.x + 2, .5, mid.z); lab.scale.set(3.2 * lab.userData.aspect / 3, 1.1, 1); lab.userData.river = true;
       g.add(lab);
     }
-    // 山丘
-    const hillM = new T.MeshStandardMaterial({ color: '#9fb09a', roughness: 1, flatShading: true });
+    // 山丘：起伏的低多邊形，依高度上色（山腳綠→山頂淺）
     for (const [x, y, r, h] of HILLS) {
-      const m = new T.Mesh(new T.ConeGeometry(r, h, 7, 2), hillM);
-      m.position.set(x / S, h / 2 - .2, y / S); m.rotation.y = x;
+      const geo = new T.IcosahedronGeometry(1, 3);
+      const pos = geo.attributes.position, cols = [], c = new T.Color();
+      for (let i = 0; i < pos.count; i++) {
+        let vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+        const n = 1 + .18 * Math.sin(vx * 5 + x) * Math.cos(vz * 4 + y);
+        vy = Math.max(0, vy) * n;
+        pos.setXYZ(i, vx * r * .8 * n, vy * h * .8, vz * r * .65 * n);
+        const k = Math.min(1, vy);
+        c.setRGB(.36 + k * .2, .52 + k * .12, .32 + k * .14); cols.push(c.r, c.g, c.b);
+      }
+      geo.setAttribute('color', new T.Float32BufferAttribute(cols, 3)); geo.computeVertexNormals();
+      const m = new T.Mesh(geo, new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+      m.position.set(x / S, -.15, y / S); m.rotation.y = x;
       g.add(m);
     }
+    // 樹：公園與山腳
+    const trees = [];
+    let seed = 11; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    for (const [px, py, r] of PARKS) for (let i = 0; i < r / 2.2; i++) { const a = rnd() * 7, d = Math.sqrt(rnd()) * r * .85; trees.push([(px + Math.cos(a) * d) / S, (py + Math.sin(a) * d) / S, .5 + rnd() * .4]); }
+    for (const [x, y, r] of HILLS) for (let i = 0; i < r * 1.6; i++) { const a = rnd() * 7, d = r * (1 + rnd() * .5); trees.push([x / S + Math.cos(a) * d, y / S + Math.sin(a) * d * .8, .6 + rnd() * .5]); }
+    const treeM = new T.InstancedMesh(new T.ConeGeometry(.45, 1.3, 6), new T.MeshStandardMaterial({ color: '#ffffff', roughness: 1, flatShading: true }), trees.length);
+    const m4 = new T.Matrix4(), q = new T.Quaternion(), col = new T.Color();
+    trees.forEach(([tx, tz, s], i) => {
+      m4.compose(new T.Vector3(tx, .65 * s, tz), q, new T.Vector3(s, s, s)); treeM.setMatrixAt(i, m4);
+      treeM.setColorAt(i, col.setHSL(.27 + (i % 5) * .015, .38, .34 + (i % 4) * .04));
+    });
+    g.add(treeM);
     // 地底的深色底板，讓地下段看起來在土裡
-    const under = new T.Mesh(new T.PlaneGeometry(160, 150), new T.MeshBasicMaterial({ color: '#3a3f44' }));
-    under.rotation.x = -Math.PI / 2; under.position.set(50, H_UG - 1.2, 47);
+    const under = new T.Mesh(new T.PlaneGeometry(170, 170), new T.MeshBasicMaterial({ color: '#4a4640' }));
+    under.rotation.x = -Math.PI / 2; under.position.set(50, H_UG - 1.2, 50);
     g.add(under);
     return g;
   }
@@ -98,7 +166,7 @@ const Map3D = (() => {
     const g = new T.Group();
     const at = (id, dx = 0, dz = 0) => new T.Vector3(STATIONS[id].x / S + dx, 0, STATIONS[id].y / S + dz);
     const part = (parent, mesh, y) => { mesh.position.y = y; parent.add(mesh); return mesh; };
-    const add = (mesh, p, label) => { mesh.position.add(p); g.add(mesh); if (label) { const l = textSprite(label, { size: 38, color: '#3d454d', bg: 'rgba(255,255,255,.75)', bold: 700 }); l.position.copy(p); l.position.y = label.y || 0; l.scale.set(1 * l.userData.aspect, 1, 1); l.userData.landmark = true; g.add(l); return l; } };
+    const add = (mesh, p, label) => { mesh.position.add(p); g.add(mesh); if (label) { const l = textSprite(label, { size: 38, color: '#5a3d1e', bg: 'rgba(255,246,226,.92)', bold: 700, border: 'rgba(190,150,90,.6)' }); l.position.copy(p); l.position.y = label.y || 0; l.scale.set(1 * l.userData.aspect, 1, 1); l.userData.landmark = true; g.add(l); return l; } };
     // 台北 101：一節一節往上收
     const t101 = new T.Group(), glassM = new T.MeshStandardMaterial({ color: '#6f9f9a', roughness: .25, metalness: .5 });
     part(t101, new T.Mesh(new T.BoxGeometry(2.6, 3, 2.6), glassM), 1.5);
@@ -148,12 +216,12 @@ const Map3D = (() => {
       const h = .25 + Math.min(1.4, dens * .07) * (.4 + rnd());
       list.push([x + (rnd() - .5) * .6, z + (rnd() - .5) * .6, .8 + rnd() * .6, h]);
     }
-    const inst = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshStandardMaterial({ color: '#d4d6d0', roughness: .9, transparent: true, opacity: .85 }), list.length);
+    const inst = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshStandardMaterial({ color: '#ffffff', roughness: .8 }), list.length);
     const m4 = new T.Matrix4(), q = new T.Quaternion(), col = new T.Color();
     list.forEach(([x, z, w, h], i) => {
       m4.compose(new T.Vector3(x, h / 2, z), q, new T.Vector3(w, h, w * (.8 + (i % 3) * .15)));
       inst.setMatrixAt(i, m4);
-      inst.setColorAt(i, col.setHSL(.08 + (i % 5) * .02, .05, .72 + (i % 4) * .04));
+      inst.setColorAt(i, col.setHSL([.08, .58, .1, .55, .05][i % 5], .1 + (i % 3) * .05, .7 + (i % 4) * .04));
     });
     return inst;
   }
@@ -167,9 +235,10 @@ const Map3D = (() => {
     for (const lid of LINE_ORDER) {
       const L = LINES[lid];
       lineMeshes[lid] = [];
-      const mat = new T.MeshStandardMaterial({ color: L.color, roughness: .45, emissive: L.color, emissiveIntensity: .12 });
-      const ugMat = new T.MeshStandardMaterial({ color: L.color, roughness: .5, emissive: L.color, emissiveIntensity: .6 });
-      const pierM = new T.MeshStandardMaterial({ color: '#9a9a96', roughness: .9 });
+      const mat = new T.MeshStandardMaterial({ color: L.color, roughness: .35, metalness: .05, emissive: L.color, emissiveIntensity: .22 });
+      const ugMat = new T.MeshStandardMaterial({ color: L.color, roughness: .5, emissive: L.color, emissiveIntensity: .7 });
+      const pierM = new T.MeshStandardMaterial({ color: '#b9b6ad', roughness: .9 });
+      const deckM = new T.MeshStandardMaterial({ color: '#e9e6dd', roughness: .8 });
       for (const route of LINES[lid].routes) {
         for (let i = 0; i < route.length - 1; i++) {
           const a = route[i][0], b = route[i + 1][0];
@@ -190,18 +259,30 @@ const Map3D = (() => {
             const s0 = pts[k], s1 = pts[k + 1];
             const len = s0.distanceTo(s1);
             const ug = s0.y < 0 && s1.y < 0;
-            const tube = new T.Mesh(new T.CylinderGeometry(.45, .45, len, 12, 1), ug ? ugMat : mat);
-            tube.position.copy(s0.clone().add(s1).multiplyScalar(.5));
-            tube.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), s1.clone().sub(s0).normalize());
+            const mid = s0.clone().add(s1).multiplyScalar(.5), dir = s1.clone().sub(s0).normalize();
+            const tube = new T.Mesh(new T.CylinderGeometry(.55, .55, len, 14, 1), ug ? ugMat : mat);
+            tube.position.copy(mid); tube.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), dir);
             g.add(tube);
             lineMeshes[lid].push(tube);
+            // 關節圓球，讓轉彎處圓滑
+            const joint = new T.Mesh(new T.SphereGeometry(.55, 14, 10), ug ? ugMat : mat); joint.position.copy(s1); g.add(joint); lineMeshes[lid].push(joint);
+            if (!ug) {
+              // 高架：白色軌道梁墊在下面，像真的高架橋
+              const deck = new T.Mesh(new T.BoxGeometry(1.5, .22, len + .4), deckM);
+              deck.position.copy(mid).add(new T.Vector3(0, -.55, 0));
+              deck.lookAt(s1.clone().add(new T.Vector3(0, -.55, 0)));
+              g.add(deck); lineMeshes[lid].push(deck);
+            } else {
+              const halo = new T.Mesh(new T.CylinderGeometry(.85, .85, len, 12, 1, true), new T.MeshBasicMaterial({ color: L.color, transparent: true, opacity: .16, depthWrite: false }));
+              halo.position.copy(mid); halo.quaternion.copy(tube.quaternion); g.add(halo); lineMeshes[lid].push(halo);
+            }
             // 高架段的橋墩
             if (s0.y > 0 && s1.y > 0) {
               const n = Math.max(1, Math.floor(len / 2.2));
               for (let j = 1; j <= n; j++) {
                 const p = s0.clone().lerp(s1, j / (n + 1));
-                const pier = new T.Mesh(new T.CylinderGeometry(.12, .16, p.y, 6), pierM);
-                pier.position.set(p.x, p.y / 2, p.z);
+                const pier = new T.Mesh(new T.CylinderGeometry(.16, .22, p.y - .6, 8), pierM);
+                pier.position.set(p.x, (p.y - .6) / 2, p.z);
                 g.add(pier);
               }
             }
@@ -242,10 +323,15 @@ const Map3D = (() => {
       const h = Math.max(...lines.map(l => hOn(id, l.line)));
       const grp = new T.Group(); grp.position.set(p.x, h, p.z);
       const r = transfer ? .95 : .62;
-      const body = new T.Mesh(new T.CylinderGeometry(r, r, .5, 24), new T.MeshStandardMaterial({ color: '#ffffff', roughness: .4 }));
-      const ring = new T.Mesh(new T.TorusGeometry(r, .14, 8, 28), new T.MeshStandardMaterial({ color: transfer ? '#1c2126' : LINES[lines[0].line].color, roughness: .4 }));
-      ring.rotation.x = Math.PI / 2; ring.position.y = .25;
+      const body = new T.Mesh(new T.CylinderGeometry(r, r * 1.08, .6, 28), new T.MeshStandardMaterial({ color: '#ffffff', roughness: .3, emissive: '#ffffff', emissiveIntensity: .15 }));
+      const ring = new T.Mesh(new T.TorusGeometry(r, .17, 10, 32), new T.MeshStandardMaterial({ color: transfer ? '#22282e' : LINES[lines[0].line].color, roughness: .35 }));
+      ring.rotation.x = Math.PI / 2; ring.position.y = .3;
       grp.add(body, ring);
+      // 轉乘站：上面一圈各線顏色的小點
+      if (transfer) lines.forEach((l, i) => {
+        const a = i / lines.length * Math.PI * 2, dot = new T.Mesh(new T.CylinderGeometry(.22, .22, .12, 14), new T.MeshStandardMaterial({ color: LINES[l.line].color, emissive: LINES[l.line].color, emissiveIntensity: .25 }));
+        dot.position.set(Math.cos(a) * .45, .34, Math.sin(a) * .45); grp.add(dot);
+      });
       body.userData.stationId = id;
       stationMeshes.push(body);
       // 地下站：往地面拉一根細柱（出入口）
@@ -254,7 +340,7 @@ const Map3D = (() => {
         shaft.position.y = -h / 2; grp.add(shaft);
       }
       const zh = lines.map(l => MRT.label(id, l.line).zh).filter((v, i, a) => a.indexOf(v) === i).join('/');
-      const lab = textSprite(zh, { size: transfer ? 50 : 42, bold: transfer ? 900 : 700 });
+      const lab = textSprite(zh, { size: transfer ? 50 : 42, bold: transfer ? 900 : 700, dots: [...new Set(lines.map(l => LINES[l.line].color))], border: id === opts.current ? '#ff4b6e' : null });
       lab.position.set(0, (h < 0 ? -h : 0) + 1.6, 0);
       const sh = transfer ? 1.35 : 1.05;
       lab.scale.set(sh * lab.userData.aspect, sh, 1);
@@ -298,6 +384,17 @@ const Map3D = (() => {
     marker.add(pin, ballM);
     marker.position.set(p.x, Math.max(h, 0) + 2.8, p.z);
     scene.add(marker);
+  }
+
+  let sky = null;
+  function skyTex() {
+    if (sky) return sky;
+    const c = document.createElement('canvas'); c.width = 4; c.height = 256;
+    const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#9cc6e4'); gr.addColorStop(.55, '#d7e8f1'); gr.addColorStop(1, '#f3efe4');
+    x.fillStyle = gr; x.fillRect(0, 0, 4, 256);
+    sky = new T.CanvasTexture(c); sky.colorSpace = T.SRGBColorSpace;
+    return sky;
   }
 
   /* ── 鏡頭與操作 ── */
@@ -408,10 +505,11 @@ const Map3D = (() => {
       // 每次打開都依目前進度重建（迷霧、位置）
       if (scene) scene.traverse(x => { if (x.geometry) x.geometry.dispose(); });
       scene = new T.Scene();
-      scene.background = new T.Color('#eef1f2');
-      scene.fog = new T.Fog('#eef1f2', 120, 260);
-      scene.add(new T.HemisphereLight('#ffffff', '#8a8f86', 1.5));
-      const d = new T.DirectionalLight('#fff6e8', 1.6); d.position.set(30, 80, 40); scene.add(d);
+      scene.background = skyTex();
+      scene.fog = new T.Fog('#dfeaf0', 140, 300);
+      scene.add(new T.HemisphereLight('#f4fbff', '#9a9580', 1.35));
+      const d = new T.DirectionalLight('#fff2dc', 1.9); d.position.set(-40, 90, 30); scene.add(d);
+      const d2 = new T.DirectionalLight('#cfe2ff', .5); d2.position.set(60, 40, -50); scene.add(d2);
       scene.add(buildTerrain());
       scene.add(cityBlocks());
       scene.add(landmarks());
