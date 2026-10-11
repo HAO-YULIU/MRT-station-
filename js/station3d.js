@@ -36,7 +36,7 @@ const Station3D = (() => {
 
   const TEX = {};
   function textures() {
-    if (TEX.floor) return;
+    if (TEX.tactile) { if (!TEX.floor) applyStyle(null); return; }
     // 花崗石地磚：每塊磚的色調略有不同，有細小的斑點與深色磚縫
     const granite = (g, w, h, n, base, grout) => {
       const s = w / n;
@@ -48,26 +48,7 @@ const Station3D = (() => {
       g.strokeStyle = grout; g.lineWidth = 2.5;
       for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo(i * s, 0); g.lineTo(i * s, h); g.stroke(); g.beginPath(); g.moveTo(0, i * s); g.lineTo(w, i * s); g.stroke(); }
     };
-    TEX.floor = canvasTex(512, 512, (g, w, h) => granite(g, w, h, 4, [40, 8, 76], '#8e897f'));
-    TEX.hall = canvasTex(512, 512, (g, w, h) => granite(g, w, h, 4, [38, 7, 80], '#9c968b'));
-    // 天花板：金屬格柵（細長的鋁條）
-    TEX.ceil = canvasTex(256, 256, (g, w, h) => {
-      g.fillStyle = '#b9bec4'; g.fillRect(0, 0, w, h);
-      for (let x = 0; x < w; x += 16) { g.fillStyle = '#cdd2d8'; g.fillRect(x, 0, 10, h); g.fillStyle = '#8f959c'; g.fillRect(x + 10, 0, 2, h); }
-      g.fillStyle = '#7d838a'; g.fillRect(0, 0, w, 3); g.fillRect(0, h / 2, w, 2);
-    });
-    // 柱子：石材面板
-    TEX.col = canvasTex(128, 512, (g, w, h) => {
-      g.fillStyle = '#e9e5dc'; g.fillRect(0, 0, w, h); noise(g, w, h, 10);
-      g.strokeStyle = '#c8c1b4'; g.lineWidth = 2; for (let y = 0; y <= h; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-      g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke();
-    });
-    TEX.wall = canvasTex(256, 256, (g, w, h) => {
-      g.fillStyle = '#e4e0d6'; g.fillRect(0, 0, w, h); noise(g, w, h, 8);
-      g.strokeStyle = '#c9c3b6'; g.lineWidth = 3;
-      for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(0, i * 64); g.lineTo(w, i * 64); g.stroke(); }
-      for (let i = 0; i <= 2; i++) { g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, h); g.stroke(); }
-    });
+    TEX.granite = granite;
     TEX.tactile = canvasTex(128, 64, (g, w, h) => {
       g.fillStyle = '#e8b800'; g.fillRect(0, 0, w, h); g.fillStyle = '#c99c00';
       for (let x = 8; x < w; x += 16) for (let y = 8; y < h; y += 16) { g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); }
@@ -88,6 +69,100 @@ const Station3D = (() => {
       g.fillStyle = 'rgba(255,255,255,.15)'; roundRect(g, 22, 44, 20, 140, 8); g.fill();
       g.strokeStyle = '#9aa3aa'; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
     });
+  }
+  /* ── 每站不同的風格（StationStyle）：地磚、牆磚、柱子、天花板 ── */
+  let STY = null;
+  const styleCache = new Map();
+  function applyStyle(id) {
+    textures();
+    const st = (typeof StationStyle !== 'undefined' && StationStyle.of(id)) || null;
+    STY = st || { floor: [40, 8, 76], grout: '#8e897f', hall: [38, 7, 80], floorPat: 'grid', hallPat: 'grid', tiles: 4, wall: '#e4e0d6', wallGrout: '#c9c3b6', wallTile: 'square', col: '#e9e5dc', colLine: '#c8c1b4', ceil: 'grid', ceilC: '#b9bec4', light: '#fff6e0', dado: '#8f887b', trim: '#3c4249', accent: '#2a7de1' };
+    const key = st ? st.key : '_';
+    if (!styleCache.has(key)) {
+      const set = {
+        floor: canvasTex(512, 512, (g, w, h) => floorPaint(g, w, h, STY.floor, STY.floorPat)),
+        hall: canvasTex(512, 512, (g, w, h) => floorPaint(g, w, h, STY.hall, STY.hallPat)),
+        ceil: canvasTex(256, 256, (g, w, h) => ceilPaint(g, w, h)),
+        col: canvasTex(128, 512, (g, w, h) => colPaint(g, w, h)),
+        wall: canvasTex(256, 256, (g, w, h) => wallPaint(g, w, h)),
+      };
+      for (const t of Object.values(set)) t.userData.keep = true;   // 換站時不要被丟掉，回來可以直接用
+      styleCache.set(key, set);
+      if (styleCache.size > 6) { const [k0, old] = styleCache.entries().next().value; styleCache.delete(k0); for (const t of Object.values(old)) t.dispose(); }
+    }
+    Object.assign(TEX, styleCache.get(key));
+    return STY;
+  }
+  const hsl = (c, dl = 0) => `hsl(${c[0]}, ${c[1]}%, ${Math.max(0, Math.min(100, c[2] + dl))}%)`;
+  function floorPaint(g, w, h, base, pat) {
+    const n = STY.tiles, s = w / n;
+    if (pat === 'plank') {   // 木地板：長條、錯縫、木紋
+      const rows = n * 2, rh = h / rows;
+      for (let j = 0; j < rows; j++) {
+        const off = (j % 3) * w / 3;
+        for (let x = -off; x < w; x += w / 1.5) {
+          const k = ((j * 7 + Math.round(x)) % 5) - 2;
+          g.fillStyle = hsl(base, k * 2); g.fillRect(x, j * rh, w / 1.5, rh);
+          g.strokeStyle = 'rgba(60,40,20,.18)'; g.lineWidth = 1;
+          for (let q = 0; q < 4; q++) { g.beginPath(); g.moveTo(x, j * rh + rh * (q + .5) / 4); g.bezierCurveTo(x + 60, j * rh + rh * (q + .3) / 4, x + 140, j * rh + rh * (q + .8) / 4, x + w / 1.5, j * rh + rh * (q + .5) / 4); g.stroke(); }
+          g.fillStyle = STY.grout; g.fillRect(x, j * rh, 2, rh);
+        }
+        g.fillStyle = STY.grout; g.fillRect(0, j * rh, w, 2);
+      }
+      return;
+    }
+    if (pat === 'terrazzo') {   // 磨石子：底色＋彩色碎石
+      g.fillStyle = hsl(base); g.fillRect(0, 0, w, h);
+      for (let k = 0; k < 1400; k++) { const r = Math.random(); g.fillStyle = r < .3 ? hsl(base, -18) : r < .55 ? hsl(base, 12) : r < .75 ? `hsl(${(base[0] + 180) % 360}, 25%, 60%)` : r < .9 ? '#f4f0e8' : 'rgba(40,36,32,.6)'; const sz = 1.5 + Math.random() * 4; g.beginPath(); g.ellipse(Math.random() * w, Math.random() * h, sz, sz * (.5 + Math.random() * .5), Math.random() * 3, 0, 7); g.fill(); }
+      g.strokeStyle = STY.grout; g.lineWidth = 3; g.strokeRect(1, 1, w - 2, h - 2);
+      return;
+    }
+    TEX.granite(g, w, h, n, base, STY.grout);
+    if (pat === 'checker') {   // 兩色相間
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if ((i + j) % 2) { g.fillStyle = STY.pop ? 'rgba(30,30,40,.55)' : 'rgba(0,0,0,.13)'; g.fillRect(i * s + 2, j * s + 2, s - 4, s - 4); }
+    } else if (pat === 'border') {   // 大磚、外圈深色鑲邊
+      g.strokeStyle = hsl(base, -16); g.lineWidth = s * .08;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) g.strokeRect(i * s + s * .12, j * s + s * .12, s * .76, s * .76);
+    } else if (pat === 'diagonal') {   // 斜向菱形拼花
+      g.strokeStyle = hsl(base, -12); g.lineWidth = 2;
+      for (let i = -n; i < n * 2; i++) { g.beginPath(); g.moveTo(i * s, 0); g.lineTo(i * s + h, h); g.stroke(); g.beginPath(); g.moveTo(i * s, h); g.lineTo(i * s + h, 0); g.stroke(); }
+    }
+    if (STY.vein) {   // 大理石紋
+      g.strokeStyle = 'rgba(120,120,130,.22)'; g.lineWidth = 1.4;
+      for (let k = 0; k < 14; k++) { let x = Math.random() * w, y = Math.random() * h; g.beginPath(); g.moveTo(x, y); for (let q = 0; q < 6; q++) { x += (Math.random() - .3) * 50; y += (Math.random() - .5) * 40; g.lineTo(x, y); } g.stroke(); }
+    }
+  }
+  function wallPaint(g, w, h) {
+    g.fillStyle = STY.wall; g.fillRect(0, 0, w, h); noise(g, w, h, STY.concrete ? 22 : 8);
+    g.strokeStyle = STY.wallGrout; g.lineWidth = 3;
+    const line = (x0, y0, x1, y1) => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
+    const t = STY.wallTile;
+    if (t === 'brick') { for (let i = 0; i <= 8; i++) { line(0, i * 32, w, i * 32); for (let x = (i % 2) * 32; x < w; x += 64) line(x, i * 32, x, i * 32 + 32); } }
+    else if (t === 'vertical') { for (let x = 0; x <= w; x += 32) line(x, 0, x, h); line(0, 0, w, 0); }
+    else if (t === 'mosaic') { g.lineWidth = 1.5; for (let i = 0; i <= 16; i++) { line(0, i * 16, w, i * 16); line(i * 16, 0, i * 16, h); } for (let k = 0; k < 40; k++) { g.fillStyle = `hsla(${200 + Math.random() * 30}, 40%, ${55 + Math.random() * 25}%, .5)`; g.fillRect(((Math.random() * 16) | 0) * 16 + 1, ((Math.random() * 16) | 0) * 16 + 1, 14, 14); } }
+    else if (t === 'panel') { g.lineWidth = 2; line(0, 0, w, 0); line(0, h / 2, w, h / 2); line(0, 0, 0, h); line(w / 2, 0, w / 2, h); if (STY.concrete) { g.fillStyle = 'rgba(60,60,64,.35)'; for (const [x, y] of [[20, 20], [w / 2 - 20, 20], [20, h / 2 - 20], [w / 2 - 20, h / 2 - 20]]) for (const [dx, dy] of [[0, 0], [w / 2, 0], [0, h / 2], [w / 2, h / 2]]) { g.beginPath(); g.arc(x + dx, y + dy, 4, 0, 7); g.fill(); } } }
+    else if (t === 'stripe') { for (let i = 0; i <= 4; i++) line(0, i * 64, w, i * 64); g.fillStyle = STY.trim; g.fillRect(0, h * .62, w, 10); g.fillStyle = STY.accent; g.fillRect(0, h * .62 + 14, w, 5); }
+    else if (t === 'color') { const C = STY.pop || ['#e0447a', '#f2c200', '#2a9de1']; for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { if ((i * 3 + j * 5) % 7 < 2) { g.fillStyle = C[(i + j) % C.length]; g.fillRect(i * 64 + 2, j * 64 + 2, 60, 60); } } for (let i = 0; i <= 4; i++) { line(0, i * 64, w, i * 64); line(i * 64, 0, i * 64, h); } }
+    else { for (let i = 0; i <= 4; i++) line(0, i * 64, w, i * 64); for (let i = 0; i <= 2; i++) line(i * 128, 0, i * 128, h); }
+  }
+  function colPaint(g, w, h) {
+    g.fillStyle = STY.col; g.fillRect(0, 0, w, h); noise(g, w, h, STY.concrete ? 20 : 10);
+    g.strokeStyle = STY.colLine; g.lineWidth = 2;
+    if (STY.wood) { g.strokeStyle = 'rgba(40,24,10,.25)'; for (let x = 6; x < w; x += 12) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 3, h); g.stroke(); } return; }
+    if (STY.colShape === 'clad') { g.lineWidth = 6; for (let y = 64; y < h; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } return; }
+    for (let y = 0; y <= h; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke();
+    if (STY.theme === 'temple') { g.fillStyle = STY.colLine; g.fillRect(0, 0, w, 24); g.fillRect(0, h - 40, w, 16); }
+  }
+  function ceilPaint(g, w, h) {
+    const c = STY.ceilC, k = STY.ceil;
+    g.fillStyle = c; g.fillRect(0, 0, w, h);
+    if (k === 'slats') { for (let x = 0; x < w; x += 21) { g.fillStyle = 'rgba(255,240,210,.18)'; g.fillRect(x, 0, 14, h); g.fillStyle = 'rgba(30,18,8,.55)'; g.fillRect(x + 14, 0, 7, h); } }
+    else if (k === 'coffer') { for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(i * 128 + 12, j * 128 + 12, 104, 104); g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(i * 128 + 24, j * 128 + 24, 80, 80); g.strokeStyle = STY.trim; g.lineWidth = 3; g.strokeRect(i * 128 + 12, j * 128 + 12, 104, 104); } }
+    else if (k === 'panel') { g.strokeStyle = 'rgba(0,0,0,.2)'; g.lineWidth = 2; for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(0, i * 64); g.lineTo(w, i * 64); g.stroke(); g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, h); g.stroke(); } for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) if ((i + j) % 3 === 0) { g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.arc(i * 64 + 32, j * 64 + 32, 5, 0, 7); g.fill(); } }
+    else if (k === 'wave') { for (let y = 0; y < h; y += 16) { g.strokeStyle = y % 32 ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.18)'; g.lineWidth = 6; g.beginPath(); for (let x = 0; x <= w; x += 8) g.lineTo(x, y + Math.sin(x / w * Math.PI * 2) * 6); g.stroke(); } }
+    else if (k === 'beam') { g.fillStyle = 'rgba(0,0,0,.3)'; for (let y = 0; y < h; y += 64) g.fillRect(0, y, w, 16); g.fillStyle = 'rgba(255,230,190,.12)'; for (let y = 16; y < h; y += 64) g.fillRect(0, y, w, 4); }
+    else { for (let x = 0; x < w; x += 16) { g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(x, 0, 10, h); g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(x + 10, 0, 2, h); } g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, 0, w, 3); g.fillRect(0, h / 2, w, 2); }
   }
   function tiled(tex, rx, ry) { const t = tex.clone(); t.needsUpdate = true; t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(rx, ry); return t; }
 
@@ -492,7 +567,7 @@ const Station3D = (() => {
     }
   }
   function build(L, skyName) {
-    textures();
+    applyStyle(L.stationId);   // 這一站的風格
     clocks.length = 0;
     curL = L; L.obstacles = []; L.seats = []; L.ads = [];
     const g = new T.Group();
@@ -500,7 +575,7 @@ const Station3D = (() => {
     const frame = M('#4a5259', { r: .5, m: .4 });
     const steel = M('#c8cdd2', { r: .25, m: .9 });
     const glass = M('#cfe3ec', { t: true, o: .16, r: .05, m: .1, dw: false });
-    const lightM = M('#ffffff', { e: '#fff6e0', ei: 1.4 });
+    const lightM = M('#ffffff', { e: STY.light, ei: 1.4 });
     const red = M('#c8202a', { r: .5 });
     const psd = {};
 
@@ -568,7 +643,7 @@ const Station3D = (() => {
       if (P.under) {
         for (const ex of [-1, 1]) box(.3, 3.4, 6.2, M('#ffffff', { map: tiled(TEX.wall, 5, 3) }), ex * (LEN / 2 + .15), 1.7, 0, pg);
         const ceilHoles = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return { x0: a - .2, x1: b + .2, z0: -1.9, z1: 1.9 }; });
-        slab(rectsMinus({ x0: -LEN / 2 - 150, x1: LEN / 2 + 150, z0: -7, z1: 7 }, ceilHoles), 3.4, M('#d9d9d4', { r: .9 }), pg, .2, false);
+        slab(rectsMinus({ x0: -LEN / 2 - 150, x1: LEN / 2 + 150, z0: -7, z1: 7 }, ceilHoles), 3.4, M('#ffffff', { map: TEX.ceil, r: .7, m: .15 }), pg, .2, false);
         for (const z of [-4.6, -2, 2, 4.6]) for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) if (!(Math.abs(z) < 2.1 && P.ramps.some(r => (x + P.x - r.xa) * (x + P.x - r.xb) < 0))) box(2.2, .04, .14, lightM, x, 3.37, z, pg);
       } else {
         box(LEN + 4, .18, 14.5, M(night ? '#2a2f35' : '#5b6168'), 0, 3.9, 0, pg);
@@ -613,8 +688,9 @@ const Station3D = (() => {
     // 側牆：房間的門留開口（門上方補一段牆）
     // 牆面裝飾：下半段深色石材護牆板＋上緣一條路線色飾帶
     const lineC = LINES[L.platforms[0].line].color;
-    const bandM = M(lineC, { r: .4, m: .2 }), trimM = M('#3c4249', { r: .4, m: .5 });
-    const dadoM = len => M('#ffffff', { map: tiled(TEX.floor, Math.max(1, len / 2.4), .5), r: .3 });
+    const bandM = M(lineC, { r: .4, m: .2 }), trimM = M(STY.trim, { r: .4, m: .5 });
+    const dadoC = '#' + new T.Color('#ffffff').lerp(new T.Color(STY.dado), .55).getHexString();
+    const dadoM = len => M(dadoC, { map: tiled(TEX.floor, Math.max(1, len / 2.4), .5), r: .3 });
     const dado = (x0, z0, x1, z1, inward) => {   // inward：牆面朝向的法線（往房間內）
       const len = Math.hypot(x1 - x0, z1 - z0); if (len < .3) return;
       const along = Math.abs(x1 - x0) > Math.abs(z1 - z0);
