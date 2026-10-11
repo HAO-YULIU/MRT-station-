@@ -1015,6 +1015,23 @@ const Station3D = (() => {
         hand.position.set(cx, cy + .97, lz + sz * w); hand.rotation.z = m.rotation.z; pg.add(hand);
       }
     });
+    // 電扶梯井：上下樓層之間（下層天花板到上層地板）用牆圍起來，看不到外面
+    {
+      const under = P.y < 0, low = under ? 3.4 : y1 + 4.2, high = under ? y1 : 0;
+      const rampY = x => y0 + (y1 - y0) * Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
+      const wm = M('#e3e3df', { r: .8, side: T.DoubleSide }), W = 1.95, N = 16, pos = [];
+      for (let i = 0; i < N; i++) {
+        const xa = x0 + (x1 - x0) * i / N, xb = x0 + (x1 - x0) * (i + 1) / N;
+        const ba = Math.max(rampY(xa) + 1.15, low), bb = Math.max(rampY(xb) + 1.15, low);
+        if (ba >= high && bb >= high) continue;
+        for (const sz of [-W, W]) pos.push(xa, Math.min(ba, high), sz, xb, Math.min(bb, high), sz, xb, high, sz, xa, Math.min(ba, high), sz, xb, high, sz, xa, high, sz);
+      }
+      // 兩端的牆
+      const e0 = Math.min(x0, x1) - .25, e1 = Math.max(x0, x1) + .25;
+      for (const ex of [e0, e1]) pos.push(ex, low, -W, ex, low, W, ex, high, W, ex, low, -W, ex, high, W, ex, high, -W);
+      const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
+      pg.add(new T.Mesh(geo, wm));
+    }
     // 電扶梯方向指示（綠色箭頭＝可進入）
     const dirSign = (lz, toHall) => {
       const t = canvasTex(128, 128, g => { g.fillStyle = '#111'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#31d07a'; g.font = '700 96px sans-serif'; g.textAlign = 'center'; g.fillText(toHall === (P.y < 0) ? '↑' : '↓', 64, 98); });

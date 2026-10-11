@@ -306,7 +306,17 @@ const World = (() => {
     } else if (z.kind === 'concourse') {
       const C = layout.concourse;
       px = Math.min(C.x1 - .5, Math.max(C.x0 + .5, px)); pz = Math.min(layout.gateZ - .3, Math.max(C.z0 + .5, pz)); py = Math.min(3.9, py);
-    } else py = Math.min(player.y + 3, py);
+    } else {   // 手扶梯／樓梯：鏡頭留在電扶梯井裡面，不穿過牆和樓板
+      const rr = rampAt(player.x, player.z);
+      if (rr) {
+        const { P, r } = rr, a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
+        px = Math.min(b + 3, Math.max(a - 3, px)); pz = Math.min(r.z + 1.6, Math.max(r.z - 1.6, pz));
+        const t = Math.min(1, Math.max(0, (px - r.xa) / (r.xb - r.xa))), floor = r.ya + (r.yb - r.ya) * t;
+        const dir = Math.sign(r.xb - r.xa), outA = (px - r.xa) * dir < 0, outB = (px - r.xb) * dir > 0;   // 超出月台端／大廳端
+        const top = outA ? P.y + 3.2 : outB ? 3.9 : (P.y < 0 ? 3.9 : P.y + 3.2);
+        py = Math.min(top, Math.max(floor + .7, py));
+      } else py = Math.min(player.y + 3, py);
+    }
     const k = Math.min(1, dt * 7);
     cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * k; cam.pos.z += (pz - cam.pos.z) * k;
     camera.position.copy(cam.pos);
@@ -356,6 +366,12 @@ const World = (() => {
     if (!free && !talk) return;
     if (yaw != null) cam.yaw = lerpAngle(cam.yaw, yaw, Math.min(1, dt * rate));
     if (pitch != null && !VIEWS[cam.mode].fp) cam.pitch += (pitch - cam.pitch) * Math.min(1, dt * rate);
+  }
+  // 玩家所在的電扶梯（含兩端一點點）
+  function rampAt(x, z) {
+    if (!layout) return null;
+    for (const P of layout.platforms) for (const r of P.ramps) if (Math.abs(z - r.z) < 2 && x > Math.min(r.xa, r.xb) - 1 && x < Math.max(r.xa, r.xb) + 1) return { P, r };
+    return null;
   }
   // 電扶梯斜率：往 +x 走時高度增加為正
   function rampSlope(x, z) {
