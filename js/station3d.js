@@ -558,6 +558,7 @@ const Station3D = (() => {
           wall.position.set(0, 1.0, s * 6.9); wall.rotation.y = s > 0 ? Math.PI : 0;
           const st = M('#ffffff', { map: stationSignTex(L.stationId, P.line) });
           for (let x = -30; x <= 30; x += 12) { const p = plane(2.6, .65, st, pg); p.position.set(x, 2.9, s * 6.86); p.rotation.y = s > 0 ? Math.PI : 0; }
+          box(LEN + 300, .14, .03, M(Lc, { r: .4, m: .2 }), 0, 3.32, s * 6.88, pg);   // 軌道牆上緣的路線色飾帶
         } else {
           box(LEN + 300, .6, 2.6, M('#77736d', { map: TEX.concrete }), 0, -1.65, s * TRACK, pg);   // 頂面比道床低，避免閃爍
           box(LEN, 1.1, .05, M('#cfe3ec', { t: true, o: .3 }), 0, .55 - 1.15 + 1.15, s * 6.9, pg);
@@ -610,18 +611,38 @@ const Station3D = (() => {
     const hallH = 4.2;
     box(C.x1 - C.x0, hallH, .3, wallM, (C.x0 + C.x1) / 2, hallH / 2, C.z0 - .15, g);
     // 側牆：房間的門留開口（門上方補一段牆）
+    // 牆面裝飾：下半段深色石材護牆板＋上緣一條路線色飾帶
+    const lineC = LINES[L.platforms[0].line].color;
+    const bandM = M(lineC, { r: .4, m: .2 }), trimM = M('#3c4249', { r: .4, m: .5 });
+    const dadoM = len => M('#ffffff', { map: tiled(TEX.floor, Math.max(1, len / 2.4), .5), r: .3 });
+    const dado = (x0, z0, x1, z1, inward) => {   // inward：牆面朝向的法線（往房間內）
+      const len = Math.hypot(x1 - x0, z1 - z0); if (len < .3) return;
+      const along = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+      const cx = (x0 + x1) / 2 + (along ? 0 : inward * .02), cz = (z0 + z1) / 2 + (along ? inward * .02 : 0);
+      box(along ? len : .04, 1.05, along ? .04 : len, dadoM(len), cx, .525, cz, g);
+      box(along ? len : .05, .05, along ? .05 : len, trimM, cx, 1.07, cz, g);
+    };
+    const band = (x0, z0, x1, z1, inward) => {
+      const len = Math.hypot(x1 - x0, z1 - z0), along = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+      const cx = (x0 + x1) / 2 + (along ? 0 : inward * .02), cz = (z0 + z1) / 2 + (along ? inward * .02 : 0);
+      box(along ? len : .04, .16, along ? .04 : len, bandM, cx, 3.62, cz, g);
+      box(along ? len : .045, .03, along ? .045 : len, trimM, cx, 3.5, cz, g);
+    };
     const sideWall = (x, z0, z1) => {
       const gaps = L.rooms.filter(r => r.door.wx === x).map(r => r.door).sort((a, b) => a.z - b.z);
-      let z = z0; const wx = x + (x > 0 ? .15 : -.15);
+      let z = z0; const wx = x + (x > 0 ? .15 : -.15), inn = x > 0 ? -1 : 1;
+      band(x, z0, x, z1, inn);
       for (const d of gaps) {
         const a = d.z - d.w / 2, b = d.z + d.w / 2;
+        if (a > z) dado(x, z, x, a, inn);
         if (a > z) box(.3, hallH, a - z, wallM, wx, hallH / 2, (z + a) / 2, g);
         box(.3, hallH - 2.3, d.w, wallM, wx, 2.3 + (hallH - 2.3) / 2, d.z, g);
         box(.34, .08, d.w + .1, M('#8a9097', { m: .5 }), wx, 2.3, d.z, g);   // 門框
         z = b;
       }
-      if (z1 > z) box(.3, hallH, z1 - z, wallM, wx, hallH / 2, (z + z1) / 2, g);
+      if (z1 > z) { box(.3, hallH, z1 - z, wallM, wx, hallH / 2, (z + z1) / 2, g); dado(x, z, x, z1, inn); }
     };
+    dado(C.x0, C.z0, C.x1, C.z0, 1); band(C.x0, C.z0, C.x1, C.z0, 1);
     for (const x of [C.x0, C.x1]) sideWall(x, C.z0, L.gateZ);
     for (const x of [L.unpaid.x0, L.unpaid.x1]) sideWall(x, L.gateZ, L.unpaid.z1);
     buildRooms(L, g);
@@ -630,7 +651,7 @@ const Station3D = (() => {
     slab(rectsMinus({ x0: C.x0, x1: C.x1, z0: C.z0, z1: L.unpaid.z1 }, ceilHoles), hallH, M('#ffffff', { map: TEX.ceil, r: .55, m: .25 }), g, .2, false);
     // 牆腳的深色踢腳板
     const skirt = M('#4a4f55', { r: .4, m: .3 });
-    box(C.x1 - C.x0, .16, .04, skirt, (C.x0 + C.x1) / 2, .08, C.z0 + .02, g);
+    box(C.x1 - C.x0, .16, .07, skirt, (C.x0 + C.x1) / 2, .08, C.z0 + .035, g);   // 比護牆板凸出一點，兩個面不重疊
     for (let x = C.x0 + 3; x < C.x1 - 2; x += 6) for (let z = C.z0 + 3; z < L.unpaid.z1 - 1; z += 5) {
       if (ceilHoles.some(h => x > h.x0 - 2.6 && x < h.x1 + 2.6 && z > h.z0 - .4 && z < h.z1 + .4)) continue;   // 電扶梯口上方不放燈，免得擋到指標
       box(1.6, .04, .4, lightM, x, hallH - .03, z, g);
