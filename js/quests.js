@@ -483,7 +483,8 @@ const Quests = (() => {
     switch (g.kind) {
       case 'reach': return match(where(g.station), ev.station);
       case 'ride': return (g.line == null || g.line === ev.line) && (g.station == null || match(where(g.station), ev.station));
-      case 'terminal': case 'anomaly': case 'sit': case 'handin': return true;
+      case 'terminal': case 'anomaly': case 'sit': case 'handin': case 'ghost': return true;
+      case 'costume': return g.station == null || match(g.station, ev.station);
       case 'talk': return g.npc === ev.npc;
       case 'inspect': return g.spot === ev.spot && (g.station == null || match(g.station, ev.station));
       case 'find': return g.item === ev.item && (g.station == null || match(where(g.station), ev.station));

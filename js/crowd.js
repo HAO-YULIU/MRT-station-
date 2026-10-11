@@ -5,7 +5,7 @@
  */
 const Crowd = (() => {
   const T = THREE;
-  const PARTS = ['torso', 'head', 'hair', 'back', 'legL', 'legR', 'armL', 'armR', 'bag'];
+  const PARTS = ['torso', 'head', 'hair', 'back', 'legL', 'legR', 'armL', 'armR', 'bag', 'hat', 'brim', 'phead'];   // hat／brim／phead：萬聖節變裝
   const SKIN = ['#f2d0bc', '#e8bca4', '#d9a98e', '#c99278', '#f5dccf', '#b7856a'];
   const HAIR = ['#151515', '#2a1d18', '#3a2a1a', '#4a2a1a', '#6a4a30', '#8a7458', '#cfcfcf'];
   const TOPS = ['#f4f4f2', '#2a2a2a', '#3a4250', '#d8c3a5', '#4a5a7a', '#a33a3a', '#3d6b5a', '#e07a3a', '#3aa0c0', '#f2c200', '#7a5a7a', '#85888d', '#1f2d55', '#c8a888', '#e9edf2'];
@@ -28,6 +28,9 @@ const Crowd = (() => {
       armL: new T.BoxGeometry(.08, .6, .09).translate(0, -.3, 0),
       armR: new T.BoxGeometry(.08, .6, .09).translate(0, -.3, 0),
       bag: new T.BoxGeometry(.26, .32, .12).translate(0, 1.15, -.2),
+      hat: new T.ConeGeometry(.13, .34, 12).translate(0, 1.9, -.01),
+      brim: new T.CylinderGeometry(.24, .24, .015, 16).translate(0, 1.73, 0),
+      phead: new T.SphereGeometry(.19, 14, 10).scale(1.08, .92, 1.02).translate(0, 1.62, 0),
     };
     root = new T.Group();
     meshes = {};
@@ -104,6 +107,7 @@ const Crowd = (() => {
         ...pos, area, face: Math.random() * 6.28, speed: (kid ? 1.4 : old ? .8 : 1.1) + Math.random() * .5, speedNow: 0, phase: Math.random() * 6,
         h: kid ? .62 : (girl ? .93 : 1) * (.95 + Math.random() * .1), girl, wait: Math.random() * 3,
         bag: Math.random() < .45, phoneLook: Math.random() < .25,
+        cost: typeof Festival !== 'undefined' && Festival.on() && Math.random() < .3 ? (Math.random() < .6 ? 'witch' : 'pumpkin') : null,
       };
       people.push(p);
       const k = people.length - 1;
@@ -114,6 +118,7 @@ const Crowd = (() => {
       meshes.hair.setColorAt(k, col.set(hc)); meshes.back.setColorAt(k, col);
       meshes.legL.setColorAt(k, col.set(BOTS[(Math.random() * BOTS.length) | 0])); meshes.legR.setColorAt(k, col);
       meshes.bag.setColorAt(k, col.set(BAGS[(Math.random() * BAGS.length) | 0]));
+      meshes.hat.setColorAt(k, col.set('#2a1a3a')); meshes.brim.setColorAt(k, col); meshes.phead.setColorAt(k, col.set('#e8741c'));
     }
     for (const k of PARTS) { meshes[k].count = people.length; if (meshes[k].instanceColor) meshes[k].instanceColor.needsUpdate = true; }
     draw();
@@ -155,7 +160,8 @@ const Crowd = (() => {
       const sw = p.speedNow > 0 ? Math.sin(p.phase) * .5 : 0, bob = p.speedNow > 0 ? Math.abs(Math.cos(p.phase)) * .03 : Math.sin(now * 1.3 + k) * .006;
       const up = tmp.makeTranslation(0, bob, 0), B = part.copy(base).multiply(up), Bc = B.clone();
       meshes.torso.setMatrixAt(k, Bc); meshes.head.setMatrixAt(k, p.phoneLook && !p.speedNow ? part.copy(Bc).multiply(rot.makeTranslation(0, 1.6, 0)).multiply(tmp.makeRotationX(.35)).multiply(rot.makeTranslation(0, -1.6, 0)) : Bc);
-      meshes.hair.setMatrixAt(k, Bc);
+      meshes.hair.setMatrixAt(k, p.cost === 'pumpkin' ? ZERO : Bc);
+      meshes.hat.setMatrixAt(k, p.cost === 'witch' ? Bc : ZERO); meshes.brim.setMatrixAt(k, p.cost === 'witch' ? Bc : ZERO); meshes.phead.setMatrixAt(k, p.cost === 'pumpkin' ? Bc : ZERO);
       meshes.back.setMatrixAt(k, p.girl ? Bc : ZERO);
       meshes.bag.setMatrixAt(k, p.bag ? Bc : ZERO);
       for (const [m, sx, a] of [[meshes.legL, -.085, sw], [meshes.legR, .085, -sw]]) m.setMatrixAt(k, part.copy(Bc).multiply(tmp.makeTranslation(sx, .82, 0)).multiply(rot.makeRotationX(a)));

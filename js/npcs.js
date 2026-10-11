@@ -240,7 +240,7 @@ const NPCS = {
     get lines() {
       const T = {
         event_double10: '國慶日快樂！中正紀念堂、台北車站、市政府都藏了小國旗喔！',
-        event_halloween: 'Trick or treat！西門、中山、公館都藏了南瓜，找齊有南瓜髮箍可以拿。',
+        event_halloween: 'Trick or treat！西門、中山、公館都藏了南瓜。變裝的路人會分你糖果，晚上月台還會出現幽靈喔。糖果可以拿來找我換限定服裝！',
         event_xmas: '聖誕快樂！板橋車站前面的聖誕城你去過了嗎？',
         event_newyear: '今天晚上捷運會延長營運……開玩笑的，這裡還是 00:30 收班。',
         event_lunar: '新年快樂！走春記得去廟裡拜拜，紅包就藏在附近。',
@@ -395,6 +395,7 @@ const NPCManager = (() => {
       const look = { skin: SKINS[(rnd() * SKINS.length) | 0], hairColor: HAIRS[(rnd() * HAIRS.length) | 0], height: .94 + rnd() * .12, ...C.gen(rnd) };
       look.hair = look.girl ? ['long', 'bob', 'bun'][(rnd() * 3) | 0] : ['short', 'mush', 'short'][(rnd() * 3) | 0];
       if (look.old) look.hairColor = '#cfcfcf';
+      if (typeof Festival !== 'undefined') Festival.dress(look, rnd);   // 萬聖節：路人變裝
       if (look.foreign) { look.skin = ['#f2d6c8', '#f5dccf', '#8a5a40'][(rnd() * 3) | 0]; look.hairColor = ['#c8a060', '#8a5a30', '#1a1a1a'][(rnd() * 3) | 0]; }
       if (look.girl && type !== 'student' && type !== 'kid' && rnd() < .4) look.skirt = true;
       const area = rnd() < .5 ? { kind: 'concourse' } : { kind: 'platform', P: L.platforms[(rnd() * L.platforms.length) | 0] };
@@ -597,6 +598,7 @@ const Dialog = (() => {
       return show(npc, pick(npc.lines), [{ label: '看看商品', primary: true, run: () => Gold.shop() }, { label: '聊天', run: () => chat(npc) }, { label: '再見', run: close }]);
     }
     if (!npc.named) {
+      if (typeof Festival !== 'undefined' && Festival.treat(npc, show, close)) return;
       const pool = npc.role === '乘客' ? (TRAIN_TALK[npc.type] || TRAIN_TALK.office) : (CROWD_TALK[npc.type] || CROWD_TALK.casual);
       return show(npc, pick(pool), [{ label: '再聊一下', run: () => open(npc) }, { label: '再見', run: close }]);
     }
