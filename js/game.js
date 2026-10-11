@@ -492,6 +492,7 @@ function renderPanel(z, L) {
 async function trainCycle(k, side, dir, id) {
   const livery = Liveries.pick(dir.line, ctl.stationId);
   const tr = World.spawnTrain(k, side, dir.line, dir.travel, livery);
+  if (!Game.ride && World.zone().P === tr.P) Sound.trainArrive();   // 在月台上：聽到列車進站
   await World.trainArrive(tr);
   if (!alive(id)) return;
   Liveries.seen(livery);
@@ -561,6 +562,7 @@ async function dwell(tr, dir, id, ride) {
   }
   if (ride) { onAlight(ctl.stationId); Game.ride = null; }   // 下車：扣款
   if (Passengers.train === tr) Passengers.clear();
+  if (!World.isInside(tr) && World.zone().P === tr.P) Sound.trainDepart();
   await World.trainDepart(tr);
   if (!alive(id)) return;
   ctl.busy.delete(key); ctl.chimed.delete(key);

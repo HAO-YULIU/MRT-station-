@@ -5,6 +5,9 @@
  *  - 月台環境音（地下站空調低鳴與人聲、高架站風聲）、車廂內行駛聲
  *  - 中英文到站廣播（瀏覽器語音合成）
  * 若 assets/sounds/arrive-<路線>.mp3 存在，進站音樂會優先播放音檔。
+ * 實際錄音（assets/sounds，來源見該資料夾的 README）：
+ *   station.mp3 台北捷運車站環境音（循環）、train-run.mp3 車廂行駛聲（循環，已濾掉廣播人聲）
+ *   arrive.mp3 列車進站、depart.mp3 列車離站。載入失敗時仍使用合成音。
  */
 const Sound = (() => {
   let ctx = null, master = null, pa = null, paDry = null, enabled = true;
@@ -145,7 +148,34 @@ const Sound = (() => {
   // 閘門刷卡「嗶」
   function gate() { tone(2350, 0, .09, 'square', .045); tone(2350, .13, .09, 'square', .045); }
 
-  /* ── 行駛聲：馬達變頻聲＋輪軌噪音＋接縫聲 ── */
+  /* ── 錄音檔：第一次用到才下載解碼 ── */
+  const bufs = {};
+  function sample(name) {
+    if (!bufs[name]) bufs[name] = fetch(`assets/sounds/${name}.mp3`).then(r => { if (!r.ok) throw new Error(name); return r.arrayBuffer(); })
+      .then(a => new Promise((res, rej) => ctx.decodeAudioData(a, res, rej))).catch(() => null);
+    return bufs[name];
+  }
+  // 播放一段錄音；loop 時回傳可以調音量／停止的控制
+  function playSample(name, vol, opts = {}) {
+    const c = ensure(); if (!c) return null;
+    const h = { g: c.createGain(), src: null, stopped: false };
+    h.g.gain.value = 0; h.g.connect(master);
+    sample(name).then(buf => {
+      if (!buf || h.stopped) return;
+      const s = c.createBufferSource(); s.buffer = buf; s.loop = !!opts.loop;
+      s.connect(h.g); s.start(0, opts.offset ? opts.offset * buf.duration : 0); h.src = s;
+      h.g.gain.setTargetAtTime(vol, now(), opts.fadeIn || .05);
+      if (opts.fadeOutAt) h.g.gain.setTargetAtTime(0, now() + opts.fadeOutAt, opts.fadeOut || 1);
+    });
+    h.set = (v, tc = .2) => h.g.gain.setTargetAtTime(v, now(), tc);
+    h.stop = (tc = .4) => { h.stopped = true; h.g.gain.setTargetAtTime(0, now(), tc); setTimeout(() => { try { h.src && h.src.stop(); } catch (e) { /* 已停止 */ } h.g.disconnect(); }, tc * 6000); };
+    return h;
+  }
+  // 月台上看到的列車：進站、離站
+  function trainArrive(vol = .9) { return playSample('arrive', vol, { fadeOutAt: 9, fadeOut: 1.2 }); }
+  function trainDepart(vol = .8) { return playSample('depart', vol, { fadeIn: .3, fadeOutAt: 8, fadeOut: 1.2 }); }
+
+  /* ── 行駛聲：馬達變頻聲＋輪軌噪音＋接縫聲（加上實際錄音的車廂聲） ── */
   let run = null, brownBuf = null;
   function startRumble() {
     const c = ensure(); if (!c || run) return;
@@ -160,12 +190,13 @@ const Sound = (() => {
     m1.type = 'sawtooth'; m2.type = 'sawtooth'; m2.detune.value = 8;
     bp.type = 'bandpass'; bp.Q.value = 6; bp.frequency.value = 600; mg.gain.value = 0;
     m1.connect(bp); m2.connect(bp); bp.connect(mg); mg.connect(master); m1.start(); m2.start();
-    run = { roar, lp, rg, m1, m2, bp, mg, v: 0, clackT: 0 };
+    run = { roar, lp, rg, m1, m2, bp, mg, v: 0, clackT: 0, rec: playSample('train-run', .15, { loop: true, offset: Math.random(), fadeIn: .4 }) };
   }
   function setSpeed(v) {
     if (!run || !ctx) return;
     const t = now(), accel = v >= run.v;
-    run.rg.gain.setTargetAtTime(.06 + v * .32, t, .15);
+    run.rg.gain.setTargetAtTime(.03 + v * .14, t, .15);
+    if (run.rec) run.rec.set(.15 + v * .55, .25);
     run.lp.frequency.setTargetAtTime(180 + v * 620, t, .15);
     // 起步時馬達音一階一階往上，進站時往下
     const step = Math.floor(v * 4) / 4, f = 220 + step * 260 + (v - step) * 900;
@@ -185,6 +216,7 @@ const Sound = (() => {
     if (!run) return;
     const r = run; run = null;
     r.rg.gain.setTargetAtTime(0, now(), .3); r.mg.gain.setTargetAtTime(0, now(), .2);
+    if (r.rec) r.rec.stop(.4);
     setTimeout(() => { try { r.roar.stop(); r.m1.stop(); r.m2.stop(); } catch (e) { /* 已停止 */ } }, 1500);
   }
 
@@ -193,7 +225,7 @@ const Sound = (() => {
   function ambience(kind) {   // 'underground' | 'elevated' | null
     const c = ensure(); if (!c) return;
     if (amb && amb.kind === kind) return;
-    if (amb) { const a = amb; a.g.gain.setTargetAtTime(0, now(), .5); setTimeout(() => a.nodes.forEach(n => { try { n.stop(); } catch (e) { /* */ } }), 2500); amb = null; }
+    if (amb) { const a = amb; a.g.gain.setTargetAtTime(0, now(), .5); if (a.rec) a.rec.stop(.6); setTimeout(() => a.nodes.forEach(n => { try { n.stop(); } catch (e) { /* */ } }), 2500); amb = null; }
     if (!kind) return;
     const g = c.createGain(); g.gain.value = 0; g.connect(master);
     const nodes = [];
@@ -205,7 +237,7 @@ const Sound = (() => {
     n1.connect(f1); f1.connect(g1); g1.connect(g); n1.start(); nodes.push(n1);
     // 人聲嘈雜（中頻噪音，緩慢起伏）
     const n2 = noiseSrc(), f2 = c.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 900; f2.Q.value = 1.2;
-    const g2 = c.createGain(); g2.gain.value = .05;
+    const g2 = c.createGain(); g2.gain.value = .015;   // 人聲主要來自錄音
     const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = .13; lg.gain.value = .03;
     lfo.connect(lg); lg.connect(g2.gain); lfo.start(); nodes.push(lfo);
     n2.connect(f2); f2.connect(g2); g2.connect(g); n2.start(1); nodes.push(n2);
@@ -214,7 +246,7 @@ const Sound = (() => {
       wl.connect(wg); wg.connect(g1.gain); wl.start(); nodes.push(wl);
     }
     g.gain.setTargetAtTime(.35, now(), 1);
-    amb = { kind, g, nodes };
+    amb = { kind, g, nodes, rec: playSample('station', kind === 'underground' ? .55 : .4, { loop: true, offset: Math.random(), fadeIn: 1.2 }) };
   }
 
   /* ── 廣播：叮咚 → 中文 → 英文 ── */
@@ -254,7 +286,7 @@ const Sound = (() => {
       }[kind] || [];
       for (const [f, t] of tunes) bell(f * (kind === 'violin' ? 1 : 2), t, vol, master, kind === 'violin' ? 2.4 : 1.0);
     },
-    doorClose, doorOpen, arrivalChime, onboardChime, itemGet, click, gate, teleport,
+    doorClose, doorOpen, arrivalChime, trainArrive, trainDepart, onboardChime, itemGet, click, gate, teleport,
     startRumble, setSpeed, stopRumble, ambience, announce,
     get enabled() { return enabled; },
     toggle() {
