@@ -179,12 +179,16 @@ const Station3D = (() => {
     g.fillStyle = L.text; g.textAlign = 'center'; g.font = `700 ${lineId.length > 1 ? s * .48 : s * .62}px "Barlow Semi Condensed", sans-serif`;
     g.fillText(lineId, x + s / 2, y + s * .7); g.textAlign = 'left';
   }
+  // 迷霧之城：鬼站把站名換掉（站碼變成問號）
+  let alias = null;
+  function setAlias(a) { alias = a; }
   function stationSignTex(stationId, lineId) {
-    const lines = MRT.linesAt(stationId), name = MRT.label(stationId, lineId);
+    const lines = alias ? [{ line: lineId, code: '??' }] : MRT.linesAt(stationId), name = alias || MRT.label(stationId, lineId);
     return canvasTex(1024, 256, (g) => {
-      g.fillStyle = '#f8f8f6'; g.fillRect(0, 0, 1024, 256);
-      g.fillStyle = LINES[lineId].color; g.fillRect(0, 0, 1024, 22);
-      lines.forEach((l, i) => drawBadge(g, l.line, l.code, 40 + i * 132, 66, 116));
+      g.fillStyle = alias ? '#d8d2c8' : '#f8f8f6'; g.fillRect(0, 0, 1024, 256);
+      g.fillStyle = alias ? '#5a1a1a' : LINES[lineId].color; g.fillRect(0, 0, 1024, 22);
+      if (alias) { g.fillStyle = '#3a3a3a'; roundRect(g, 40, 66, 116, 116, 18); g.fill(); g.fillStyle = '#d8d2c8'; g.font = '900 64px sans-serif'; g.textAlign = 'center'; g.fillText('?', 98, 146); g.textAlign = 'left'; }
+      else lines.forEach((l, i) => drawBadge(g, l.line, l.code, 40 + i * 132, 66, 116));
       const tx = 40 + lines.length * 132 + 24;
       g.fillStyle = '#1c2126'; g.font = `900 ${name.zh.length > 5 ? 84 : 104}px "Noto Sans TC", sans-serif`;
       g.fillText(name.zh, tx, 158);
@@ -1327,7 +1331,7 @@ const Station3D = (() => {
 
   return {
     CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS, tickClocks, placeAt, ADS,
-    layout, build, makeTrain, segment, surroundings, sides,
+    layout, build, makeTrain, segment, surroundings, sides, setAlias,
     drawLcd, drawStrip, drawLed, SKY_CITY,
   };
 })();

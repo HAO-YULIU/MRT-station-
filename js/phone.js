@@ -229,6 +229,7 @@ const Phone = (() => {
     }
     if (a === 'collect') return `<button class="btn primary small" data-record="collect">打開收藏圖鑑</button><button class="btn ghost small" data-record="explore">探索紀錄</button><button class="btn ghost small" data-record="case">案件評價</button>`;
     if (a === 'shop') {
+      if (FogCity.locked()) return `<div class="ph-card"><em class="ph-tag">迷霧之城</em><p>網路只剩一格訊號，頁面一直轉圈圈。<br>霧裡新台幣不能用。要買東西，去找大廳角落提燈的攤販（只收黃金）。</p></div>`;
       const t = TaipeiTime.now(), deals = Object.keys(Station3D.SHOPS || {}), deal = deals.length ? deals[(t.day * 3 + t.month) % deals.length] : null;
       const goods = ['magnifier', 'recorder', 'battery', 'firstaid'].map(id => ({ id, it: ITEMS[id] }));
       return `<div class="ph-card"><em class="ph-tag">商店通知</em><p>${deal ? `今天 ${esc(deal)} 站的商店有新貨上架，路過可以看看。` : '今天沒有特別的優惠。'}</p>${Quests.eventsNow().length ? '<p>節慶限定商品販售中！</p>' : ''}</div>
@@ -251,10 +252,10 @@ const Phone = (() => {
     if (t.dataset.app) { app = t.dataset.app; return render(); }
     if (t.dataset.openmap) { close(); return openMap(); }
     if (t.dataset.record) { close(); return Progress.open(t.dataset.record); }
-    if (t.dataset.buyf) { Furniture.buy(t.dataset.buyf); return render(); }
+    if (t.dataset.buyf) { if (FogCity.locked()) return; Furniture.buy(t.dataset.buyf); return render(); }
     if (t.dataset.buyi) {
       const id = t.dataset.buyi, s = Game.state, price = Progress.price(ITEMS[id].price);
-      if (s.money < price) return;
+      if (s.money < price || FogCity.locked()) return;
       s.money -= price; s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud();
       toast(`<b>${ITEMS[id].icon} ${ITEMS[id].name} 送到了</b><span>餘額 NT$ ${s.money}</span>`);
       return render();

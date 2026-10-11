@@ -8,7 +8,7 @@ const World = (() => {
   let renderer, scene, camera, container;
   let env, stationGroup, nextGroup, segGroup, surround;
   let layout = null;
-  let rig = null, charId = null, hemi, sun;
+  let rig = null, charId = null, hemi, sun, plight;
   const trains = new Set();   // 目前場上的列車
   let riding = null;          // 正在搭乘的列車
   const player = { x: 0, y: 0, z: 0, face: Math.PI, speed: 0, inputOn: true, auto: null, sitting: false };
@@ -29,8 +29,15 @@ const World = (() => {
     dawn: { bg: '#8f97ad', fog: '#a4a8b6', hemi: .8, sun: .7 },
     night: { bg: '#0d1626', fog: '#1a2436', hemi: .45, sun: .15 },
   };
+  let mood = null;   // 迷霧之城等特殊氣氛：覆蓋天色、霧、光
   function applySky(open) {
     const s = SKY[TaipeiTime.sky()];
+    if (mood) {
+      scene.background = new T.Color(mood.bg); scene.fog = new T.Fog(mood.fog, mood.near, mood.far);
+      hemi.intensity = mood.hemi; sun.intensity = mood.sun; hemi.color.set(mood.tint || '#ffffff');
+      return;
+    }
+    hemi.color.set('#ffffff');
     if (!open) {
       scene.background = new T.Color('#1a1c1e'); scene.fog = new T.Fog('#2a2e33', 35, 110);
       hemi.intensity = 1.75; sun.intensity = .45;
@@ -329,6 +336,7 @@ const World = (() => {
       camera.position.copy(cam.pos);
       camera.lookAt(player.x + fx * 3, ey - (cam.pitch - .3) * 3, player.z + fz * 3);
     } else camera.lookAt(tx, ty, tz);
+    if (plight && plight.intensity > 0) plight.position.set(player.x + Math.sin(player.face) * .4, player.y + 1.7, player.z + Math.cos(player.face) * .4);
     for (const fn of tickers) fn(dt, now);
     updateActionBtn();
     renderer.render(scene, camera);
@@ -433,6 +441,8 @@ const World = (() => {
       hemi = new T.HemisphereLight('#ffffff', '#8a8c90', 1.7); scene.add(hemi);
       sun = new T.DirectionalLight('#fff4e0', 1); sun.position.set(20, 40, 25); scene.add(sun);
       env = new T.Group(); scene.add(env);
+      // 玩家身上的光（迷霧之城的暗區用；平常強度 0，光源數量固定，不會重編材質）
+      plight = new T.PointLight('#ffe6b0', 0, 9, 1.6); scene.add(plight);
       bindInput();
       window.addEventListener('resize', resize);
       new ResizeObserver(resize).observe(el);
@@ -444,6 +454,14 @@ const World = (() => {
     set onGate(fn) { gateCheck = fn; },
     set blocker(fn) { blocked = fn; },
     setSpeedMul(v) { speedMul = v; },
+    get speedMul() { return speedMul; },
+    setMood(m) { mood = m; if (layout) applySky(layout.hasElevated); },
+    get mood() { return mood; },
+    setPlayerLight(intensity, distance = 9) { plight.intensity = intensity; plight.distance = distance; },
+    get facing() { return player.face; },
+    get camYaw() { return cam.yaw; },
+    get moving() { return player.speed > .1; },
+    pushPlayer(dx, dz) { tryMove(player.x + dx, player.z + dz); },
     cycleView,
     // 鏡頭轉向某個點（例如欣賞作品時）
     lookToward(x, z) { cam.yaw = Math.atan2(-(x - player.x), -(z - player.z)); cam.lastDrag = performance.now(); },
@@ -474,13 +492,14 @@ const World = (() => {
       charId = id; rig = Human3D.build(id, wear); rig.key = key; rig.sit = sit; scene.add(rig.root);
     },
     // 載入車站（整座：大廳＋各線月台）
-    loadStation(stationId) {
+    loadStation(stationId, alias = null) {
       for (const tr of [...trains]) this.removeTrain(tr);
       for (const grp of [stationGroup, segGroup, nextGroup, surround]) if (grp) { env.remove(grp); dispose(grp); }
       segGroup = nextGroup = null;
       env.position.set(0, 0, 0);
       layout = S.layout(stationId);
-      stationGroup = S.build(layout, TaipeiTime.sky());
+      layout.alias = alias;
+      S.setAlias(alias); stationGroup = S.build(layout, TaipeiTime.sky()); S.setAlias(null);
       surround = S.surroundings(layout, night());
       env.add(stationGroup); env.add(surround);
       applySky(layout.hasElevated);
@@ -488,6 +507,8 @@ const World = (() => {
       return layout;
     },
     get layout() { return layout; },
+    get trains() { return trains; },
+    get stationGroup() { return stationGroup; },
     // 把玩家放在大廳（付費區，靠近第一條線的電扶梯）
     spawnInConcourse() {
       const P = layout.platforms[0], r = P.ramps[1];
@@ -526,14 +547,15 @@ const World = (() => {
       if (rel > S.PLAT_HALF - .1 && rel < S.TRACK - 1.3) player.z = rel < (S.PSD + .2) ? tr.P.z + tr.side * (S.PLAT_HALF - .2) : tz - tr.side * 1.25;
     },
     // 搭乘：從目前車站開到 toId，回傳新車站版面；列車會停在新車站同一條線、同一側
-    async ride(tr, { toId, duration = 22, onSpeed, skip, anomaly }) {
+    async ride(tr, { toId, duration = 22, onSpeed, skip, anomaly, alias = null, onTick }) {
       const P = tr.P, travel = tr.travel, D = 520;
       const tx0 = P.x + tr.x, tz = P.z + tr.side * S.TRACK, ty = P.y;
       for (const o of [...trains]) if (o !== tr) this.removeTrain(o);
       riding = tr;
       const nextL = S.layout(toId);
+      nextL.alias = alias;
       const P2 = nextL.platforms.find(p => p.line === tr.line);
-      nextGroup = S.build(nextL, TaipeiTime.sky());
+      S.setAlias(alias); nextGroup = S.build(nextL, TaipeiTime.sky()); S.setAlias(null);
       const nextSur = S.surroundings(nextL, night());
       const off = new T.Vector3(tx0 + travel * D - P2.x, ty - P2.y, tz - (P2.z + tr.side * S.TRACK));
       nextGroup.position.copy(off); nextSur.position.copy(off);
@@ -562,6 +584,7 @@ const World = (() => {
           const lm = tr.group.userData.lightM;
           if (lm) lm.emissiveIntensity = anomaly && Math.abs(p - D / 2) < 45 ? (Math.sin(now / 37) > .2 ? 1.6 : .15) : 1.6;
           onSpeed && onSpeed(v);
+          if (onTick && onTick(t, p) === 'stop') return res();
           t < T0 ? requestAnimationFrame(step) : res();
         };
         requestAnimationFrame(step);
