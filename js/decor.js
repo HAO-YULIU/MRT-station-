@@ -6,6 +6,15 @@
 const Decor = (() => {
   let base = null, mats = null;
 
+  // 葉片：沿 +x 長 1、寬 1 的扁平六邊形，中脈稍微隆起（12 個三角形）
+  function leafGeo(T) {
+    const o = [[-.5, 0], [-.25, .45], [.15, .5], [.5, 0], [.15, -.5], [-.25, -.45]], pos = [];
+    for (const s of [1, -1]) for (let i = 0; i < 6; i++) {
+      const a = o[i], c = o[(i + 1) % 6], A = [a[0], 0, a[1]], Cc = [c[0], 0, c[1]], top = [-.05, s * .5, 0];
+      if (s > 0) pos.push(...top, ...A, ...Cc); else pos.push(...top, ...Cc, ...A);
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g;
+  }
   function init(T) {
     if (base) return;
     const prep = geo => {
@@ -16,12 +25,12 @@ const Decor = (() => {
     base = {
       box: prep(new T.BoxGeometry(1, 1, 1)),
       cyl: prep(new T.CylinderGeometry(.5, .5, 1, 7, 1, true)),
-      pot: prep(new T.CylinderGeometry(.5, .4, 1, 12)),
-      disk: prep(new T.CylinderGeometry(.5, .5, 1, 12)),
+      pot: prep(new T.CylinderGeometry(.5, .4, 1, 10)),
+      disk: prep(new T.CylinderGeometry(.5, .5, 1, 10)),
       ico: prep(new T.IcosahedronGeometry(.5, 0)),
       oct: prep(new T.OctahedronGeometry(.5, 0)),
       blob: prep(new T.IcosahedronGeometry(.5, 1)),
-      leaf: prep(new T.SphereGeometry(.5, 6, 3)),
+      leaf: prep(leafGeo(T)),
       cone: prep(new T.ConeGeometry(.5, 1, 5)),
       bowl: prep(new T.SphereGeometry(.5, 10, 3, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)),
     };
@@ -121,15 +130,15 @@ const Decor = (() => {
     // 這站的花色：季節色裡挑 4 種，偶爾加入路線色
     const flowers = [...SEA.flowers].sort(() => R() - .5).slice(0, 4); if (R() < .5) flowers.push(lineC);
     const twoColors = () => { const a = pick(flowers); let c = pick(flowers); if (c === a) c = '#ffffff'; return [a, c]; };
-    const mine = [];
-    const solid = (x, z, w, d, y = 0) => { K.solid(x, z, w, d, y); const o = L.obstacles[L.obstacles.length - 1]; if (o) o.decor = true; mine.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, y }); };
+    const mine = [], items = [];
+    const solid = (x, z, w, d, y = 0) => { K.solid(x, z, w, d, y); items.push([+x.toFixed(1), +z.toFixed(1), y]); const o = L.obstacles[L.obstacles.length - 1]; if (o) o.decor = true; mine.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, y }); };
 
     /* ── 零件 ── */
     // 一片花床：低矮葉叢＋花（cy 是土面高度）；round：圓形範圍
     function bed(cx, cy, cz, w, d, cols, opt = {}) {
       const round = !!opt.round, area = round ? Math.PI * w * d / 4 : w * d;
       const inside = () => { for (;;) { const u = R() - .5, v = R() - .5; if (!round || u * u + v * v < .25) return [cx + u * w, cz + v * d]; } };
-      const nLeaf = Math.max(3, Math.round(area * 16)), nFl = Math.max(4, Math.round(area * (opt.dense || 34)));
+      const nLeaf = Math.max(3, Math.round(area * 11)), nFl = Math.max(4, Math.round(area * (opt.dense || 34)));
       for (let i = 0; i < nLeaf; i++) { const [x, z] = inside(), r = .09 + R() * .08; b.add('plant', 'ico', x, cy + r * .45, z, r * 2.2, r * 1.5, r * 2.2, 0, R() * 6.28, 0, pick(GREENS), .5); }
       // 邊緣垂下來的葉片（花槽才有）
       if (!round && opt.spill) for (let x = cx - w / 2 + .15; x < cx + w / 2 - .1; x += .32 + R() * .1) for (const s of [-1, 1]) b.blade('plant', 'leaf', x, cy + .02, cz + s * d / 2, .2 + R() * .08, .09, .025, s > 0 ? -Math.PI / 2 + (R() - .5) * .6 : Math.PI / 2 + (R() - .5) * .6, -.7 - R() * .4, pick(GREENS), .3);
@@ -229,12 +238,12 @@ const Decor = (() => {
     // 不鏽鋼花朵雕塑（大站）
     function sculpture(x, z) {
       island(x, z, 1.15, { cols: twoColors() });
-      const y0 = .48, top = 2.7, lean = .18;
+      const y0 = .48, top = 2.15, lean = .12;
       b.rod('metal', x, y0, z, x + lean, top, z - .05, .05, '#c9cfd4');
-      for (const [hy, yaw] of [[1.2, .4], [1.7, 3.6]]) b.blade('metal', 'leaf', x + lean * (hy - y0) / (top - y0), hy, z, .7, .26, .04, yaw, .45, '#8fa79a', .2);
+      for (const [hy, yaw] of [[1.05, .4], [1.5, 3.6]]) b.blade('metal', 'leaf', x + lean * (hy - y0) / (top - y0), hy, z, .7, .26, .04, yaw, .45, '#8fa79a', .2);
       const n = 7, cx = x + lean, cy = top + .05;
-      for (let i = 0; i < n; i++) b.blade('metal', 'leaf', cx, cy, z - .05, .62, .34, .05, i / n * 6.28, .55, i % 2 ? lineC : '#e9edf0', .15);
-      for (let i = 0; i < n; i++) b.blade('metal', 'leaf', cx, cy + .02, z - .05, .38, .22, .04, (i + .5) / n * 6.28, .9, '#f2c200', .1);
+      for (let i = 0; i < n; i++) b.blade('metal', 'leaf', cx, cy, z - .05, .7, .4, .06, i / n * 6.28, .35, i % 2 ? lineC : '#e9edf0', .1);
+      for (let i = 0; i < n; i++) b.blade('metal', 'leaf', cx, cy + .02, z - .05, .4, .24, .05, (i + .5) / n * 6.28, .8, '#f6d24a', .1);
       b.add('metal', 'ico', cx, cy + .12, z - .05, .22, .18, .22, 0, 0, 0, '#f2c200');
     }
     // 綠牆（掛在牆上；nx,nz：牆面朝向）
@@ -411,12 +420,12 @@ const Decor = (() => {
       } else {
         // 高架月台：屋簷下的吊籃
         const cols = [pick(flowers), pick(flowers), '#ffffff'];
-        for (const [lx, lz] of [[-26, 1.55], [-12, -1.55], [12, 1.55], [26, -1.55]]) basket(ox + lx, oy + 2.45, oz + lz, oy + 3.81, cols);
+        for (const [lx, lz] of [[-26, 1.2], [-21, -1.2], [21, 1.2], [26, -1.2]]) basket(ox + lx, oy + 2.85, oz + lz, oy + 3.81, cols);
       }
     }
 
     const verts = b.finish(g);
-    L.decor = { verts, season: SEA.name, solids: mine.length, stats: b.stats };
+    L.decor = { verts, season: SEA.name, solids: mine.length, stats: b.stats, items };
   }
   return { build };
 })();
