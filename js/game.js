@@ -191,10 +191,12 @@ function openQuests() {
     const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密', timed: '限時', daily: '每日', weekly: '每週' }[q.type];
     return `<li class="quest q-${q.type}">
       <div class="q-head"><span class="q-tag"${q.line ? ` style="--c:${LINES[q.line].color}"` : ''}>${q.line ? q.line + ' ' : ''}${tag}</span><b>${q.title}</b></div>
+      ${QuestEffort.label(q)}
       <p>${q.desc}</p>
       <ol>${q.steps.map((p, i) => `<li class="${i < st.step ? 'ok' : i === st.step ? 'now' : ''}">${p.text}${i === st.step ? stepNote(q, st, p) : ''}</li>`).join('')}</ol>
       <div class="q-reward">報酬：${[q.reward.money && `NT$ ${q.reward.money}`, q.reward.xp && `經驗 ${q.reward.xp}`, q.reward.gold && `🪙 黃金 ${q.reward.gold}`, ...Object.keys(q.reward.items || {}).map(i => ITEMS[i].name)].filter(Boolean).join('、')}</div>
       ${st.deadline ? `<div class="q-timer">⏱ 剩下 ${fmtLeft(st.deadline)}</div>` : ''}
+      <button class="btn ghost small" data-track="${id}" aria-pressed="${trackedQuest() === id}">${trackedQuest() === id ? '📍 追蹤中' : '追蹤'}</button>
       ${['side', 'timed', 'daily', 'weekly'].includes(q.type) ? `<button class="btn ghost small" data-abandon="${id}">放棄</button>` : ''}
     </li>`;
   };
@@ -208,7 +210,7 @@ function openQuests() {
     ${ids.length ? `<ul class="quests">${ids.map(card).join('')}</ul>` : '<p class="empty-q">目前沒有任務。到處和人說話，看看誰需要幫忙。</p>'}
     ${done.length ? `<h4 class="q-done-h">已完成</h4><ul class="q-done">${done.map(id => `<li>${QUESTS[id].title}</li>`).join('')}</ul>` : ''}
     ${Achievements.html()}`;
-  $('#questBody').onclick = e => { const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
+  $('#questBody').onclick = e => { const t = e.target.closest('[data-track]'); if (t) { Game.state.flags.track = t.dataset.track; saveState(); Sound.click(); openQuests(); if (ctl) panelCache.pQuest = null; return; } const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
   $('#questLog').hidden = false;
 }
 
@@ -439,6 +441,7 @@ function buildPanel() {
   const fh = $('#fogHud'); if (fh) $('#game').appendChild(fh);   // 迷霧 HUD 平常住在資訊框裡，重建前先拿出來
   $('#panel').innerHTML = `<div class="mini">
       <div class="mini-title" id="pTitle"></div>
+      <div class="mini-quest" id="pQuest"></div>
       <div class="mini-rows" id="pRows"></div>
       <div class="mini-hint" id="pHint"></div>
       <div class="mini-btns" id="pBtns"></div>
@@ -447,7 +450,7 @@ function buildPanel() {
   const pn = $('#panel');
   let col = null; try { col = localStorage.getItem('panelCollapsed'); } catch (e) { /* 無法存取 */ }
   pn.classList.toggle('collapsed', col == null ? window.matchMedia('(orientation: portrait) and (pointer: coarse)').matches : col === '1');
-  pn.onclick = e => { if (e.target.closest('button, a')) return; pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
+  pn.onclick = e => { if (e.target.closest('button, a')) return; if (e.target.closest('#pQuest')) { Sound.click(); return openQuests(); } pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
 }
 const panelCache = {};
 function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = html; $('#' + id).innerHTML = html; } }
@@ -547,8 +550,24 @@ function tickStation() {
   renderPanel(z, L);
 }
 
+// 追蹤中的任務：資訊框裡顯示目前這一步、目標在哪裡（收起時也看得到）
+function trackedQuest() {
+  const s = Game.state, act = s.quests.active;
+  if (s.flags.track && act[s.flags.track]) return s.flags.track;
+  const order = ['main', 'timed', 'weekly', 'event', 'side', 'secret', 'daily'];
+  return Object.keys(act).filter(id => QUESTS[id]).sort((a, b) => order.indexOf(QUESTS[a].type) - order.indexOf(QUESTS[b].type))[0] || null;
+}
+function trackerHtml() {
+  const id = trackedQuest(); if (!id) return '';
+  const q = QUESTS[id], st = Game.state.quests.active[id], step = q.steps[st.step]; if (!step) return '';
+  const g = step.goal || {}, here = Game.state.current;
+  const target = g.station === '@treasure' ? st.treasure : g.station || (g.npc && NPCS[g.npc] && NPCS[g.npc].station) || null;
+  const where = !target ? '' : target === here ? '<em class="here">就在這一站</em>' : `<em>${esc(target)}・約 ${Math.max(1, Math.round(Economy.distance(here, target)))} 公里</em>`;
+  return `<span class="mq-ico">📋</span><span class="mq-text"><b>${esc(q.title)}</b>${esc(step.text.replace(/<[^>]+>/g, ''))}</span>${where}`;
+}
 function renderPanel(z, L) {
   const st = ctl.stationId, lines = MRT.linesAt(st);
+  setPart('pQuest', trackerHtml());
   const head = `${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(st)}</b>`;
   if (Game.ride && Game.ride.moving) return;   // 行駛中由搭乘流程顯示
   let rows = '', hint = '';

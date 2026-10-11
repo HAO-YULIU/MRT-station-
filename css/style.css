@@ -680,3 +680,12 @@ button:disabled { cursor: not-allowed; }
 .q-tips, .q-notes { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
 .q-tips li.ok { opacity: .6; }
 .q-tips .q-tag { font-size: 11px; padding: 1px 6px; }
+.q-effort { display: inline-block; margin-top: 4px; font-size: 13px; color: #f2c200; letter-spacing: .02em; }
+/* 追蹤中的任務（資訊框裡，收起時也看得到） */
+.mini-quest:empty { display: none; }
+.mini-quest { margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: rgba(242,194,0,.12); border: 1px solid rgba(242,194,0,.35); display: grid; grid-template-columns: auto 1fr; gap: 2px 6px; align-items: center; font-size: 13px; cursor: pointer; }
+.mini-quest .mq-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mini-quest .mq-text b { color: #f2c200; margin-right: 6px; }
+.mini-quest em { grid-column: 2; font-style: normal; font-size: 12px; color: #9fe0c8; }
+.mini-quest em.here { color: #7aff8a; }
+.quest [data-track][aria-pressed="true"] { border-color: #f2c200; color: #f2c200; }

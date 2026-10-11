@@ -214,7 +214,7 @@ const STORY_TITLES = { sq_musician: '最忠實的聽眾', sq_leave: '帶走台�
 })();
 
 /* ── 主線報酬（依階段） ── */
-const MAIN_REWARD = { evidence: [200, 110], choice: [200, 110], rescue: [220, 120], hidden: [220, 120], chase: [320, 150], escape: [320, 150], deduce: [400, 200] };
+const MAIN_REWARD = { evidence: [200, 110], choice: [200, 110], rescue: [220, 120], hidden: [220, 120], chase: [260, 130], escape: [260, 130], deduce: [400, 200] };
 for (const l of Object.keys(MAIN_STORY)) { QUESTS['main_' + l].reward = { money: 800, xp: 350, gold: 1, ixp: 120, items: { ['casefile_' + l]: 1 }, friend: { xiuyu: 25 } }; }
 Object.assign(ITEMS, Object.fromEntries(Object.keys(MAIN_STORY).map(l => ['casefile_' + l, { name: `案件卷宗：${MAIN_STORY[l].title}`, desc: `${LINES[l].zh}主線的完整紀錄。獨一無二的收藏。`, icon: '🗂️' }])));
 ITEMS.notebook = { name: '調查筆記本', desc: '秀蔅送的。證據、線索和人物都會記在「紀錄」裡。', icon: '📓' };
