@@ -429,6 +429,8 @@ const World = (() => {
     set blocker(fn) { blocked = fn; },
     setSpeedMul(v) { speedMul = v; },
     cycleView,
+    // 鏡頭轉向某個點（例如欣賞作品時）
+    lookToward(x, z) { cam.yaw = Math.atan2(-(x - player.x), -(z - player.z)); cam.lastDrag = performance.now(); },
     get view() { return VIEWS[cam.mode].name; },
     get scene() { return scene; },
     get env() { return env; },

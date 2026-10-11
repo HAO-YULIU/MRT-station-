@@ -327,7 +327,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -399,6 +399,7 @@ function startStation(stationId, carry) {
   Achievements.spawn(stationId);
   Life.spawn(stationId);
   Festival.spawn(stationId);
+  ArtInstall.spawn(stationId);
   Daily.refresh();
   Phone.deliverFollowups();
   arriveChecks(stationId);
@@ -515,7 +516,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
+  list.push(exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, ArtInstall.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;

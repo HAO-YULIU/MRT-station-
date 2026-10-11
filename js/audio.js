@@ -286,6 +286,8 @@ const Sound = (() => {
       }[kind] || [];
       for (const [f, t] of tunes) bell(f * (kind === 'violin' ? 1 : 2), t, vol, master, kind === 'violin' ? 2.4 : 1.0);
     },
+    // 單音（地板鋼琴之類的互動藝術）
+    note(freq, vol = .18) { if (enabled && ensure()) bell(freq, 0, vol, master, 1.4); },
     doorClose, doorOpen, arrivalChime, trainArrive, trainDepart, onboardChime, itemGet, click, gate, teleport,
     startRumble, setSpeed, stopRumble, ambience, announce,
     get enabled() { return enabled; },
