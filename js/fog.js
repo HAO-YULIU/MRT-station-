@@ -302,20 +302,34 @@ const FogCity = (() => {
   function hud() {
     const el = $('#fogHud'); if (!el) return;
     const r = rec();
-    if (!r || !started || !active()) { el.hidden = true; return; }
-    // 一般放進資訊框裡；橫向手機（高度很矮）改放在畫面上方中間，不壓到搖桿
-    const short = window.matchMedia('(max-height: 480px)').matches;
-    const host = short ? $('#game') : $('#panel .mini');
-    if (host && el.parentElement !== host) { if (short) host.appendChild(el); else host.prepend(el); }
-    el.classList.toggle('top', short);
-    el.hidden = false;
+    const hp = $('#hudHp');
+    if (!r || !started || !active()) { el.hidden = true; if (hp) hp.hidden = true; return; }
+    if (el.parentElement !== $('#game')) $('#game').appendChild(el);
     const mins = TaipeiTime.minutesToFirstTrain(), m = minuteOfDay(), toFade = Math.max(0, Math.ceil(330 - m));
     const s = S(), inv = s.inv;
+    // 生命值放在上方欄位（名字和時間中間的空位），霧散倒數放在下面一行
+    if (hp) {
+      const h2 = `<span class="hh-bar"><i style="width:${r.hp}%"></i><b>❤ ${r.hp} / ${FOG_MAX_HP}</b></span><small>🌫 ${r.escaped ? '已離開迷霧' : phase() === 'fade' ? '霧正在消散' : `消散 ${Math.floor(toFade / 60)}:${String(toFade % 60).padStart(2, '0')}`}・首班車 ${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}</small>`;
+      if (hp.dataset.h !== h2) { hp.dataset.h = h2; hp.innerHTML = h2; }
+      hp.hidden = false; hp.classList.toggle('low', r.hp <= 30);
+    }
+    // 霧燈與隨身道具：右側一排小按鈕（筆記和本站事件的提示在「任務」裡）
     const quick = [['fog_tea', '🫖'], ['firstaid', '🩹'], ['fog_salt', '🧂'], ['mistmap', '🗺️'], ['fog_battery', '🔋']].filter(([id]) => inv[id] > 0);
-    const html = `<div class="fh-hp" title="生命值"><i style="width:${r.hp}%"></i><span>❤ ${r.hp} / ${FOG_MAX_HP}</span></div>
-      <div class="fh-row"><b>🌫 迷霧之城</b><span>${r.escaped ? '已離開迷霧，等待首班車' : phase() === 'fade' ? '霧正在消散' : `消散 ${Math.floor(toFade / 60)}:${String(toFade % 60).padStart(2, '0')}`}・首班車 ${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}</span></div>
-      <div class="fh-btns"><button data-fh="notes">📓 筆記 ${r.clues.length}</button>${inv.mistlamp > 0 ? `<button data-fh="lamp" aria-pressed="${lampOn}">🏮 ${Math.round(r.lamp)}%</button>` : ''}${quick.map(([id, ic]) => `<button data-fh="${id}">${ic}×${inv[id]}</button>`).join('')}</div>`;
+    const html = `${inv.mistlamp > 0 ? `<button data-fh="lamp" aria-pressed="${lampOn}">🏮<small>${Math.round(r.lamp)}%</small></button>` : ''}${quick.map(([id, ic]) => `<button data-fh="${id}">${ic}<small>×${inv[id]}</small></button>`).join('')}`;
+    el.hidden = !html;
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+  }
+  // 「任務」裡的本站活動：事件提示、筆記、怎麼玩
+  function questHtml() {
+    const r = rec(); if (!r || !started || !active()) return '';
+    const mins = minuteOfDay(), toFade = Math.max(0, Math.ceil(330 - mins));
+    const state = r.escaped ? '你已經離開迷霧了，等首班車就好。' : r.result && r.result !== 'fail' ? '本站的事件解開了！找到發光的出口門就能離開迷霧。' : r.result === 'fail' ? '這一站的事件失敗了。05:30 霧散時，會出現一扇出口門。' : '本站的事件還沒解開。';
+    return `<section class="q-local"><div class="q-head"><span class="q-tag" style="--c:#2f9e8a">本站活動</span><b>🌫 迷霧之城・${esc(r.station)}</b></div>
+      <p class="q-local-hint">「${esc(hintText || '……')}」</p>
+      <p>${state}${!r.escaped && !(r.result && r.result !== 'fail') ? `<br><small>距離霧散還有 ${Math.floor(toFade / 60)} 小時 ${toFade % 60} 分。</small>` : ''}</p>
+      <ul class="q-tips"><li>和霧裡的人說話、調查會發光或怪怪的東西，線索會自動記進筆記。</li><li>每一站都藏著一件事，種類不會告訴你：可能是謎題、要救的人、要躲的東西，或隱藏的條件。</li><li>❤ 生命值歸零會倒下：可以付 NT$ ${FOG_REVIVE_COST} 復活，或等 06:00。</li><li>05:30 霧開始消散，站內會出現一扇出口門；06:00 還在霧裡就判定死亡。</li></ul>
+      <h5>📓 霧中筆記（${r.clues.length}）</h5>${r.clues.length ? `<ul class="q-notes">${r.clues.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : '<p class="empty-q">還沒有記下任何東西。</p>'}
+    </section>`;
   }
   function onHudClick(e) {
     const b = e.target.closest('[data-fh]'); if (!b) return;
@@ -860,7 +874,7 @@ const FogCity = (() => {
 
   function locked() { return active() && !!started && !!rec(); }
   return {
-    active, phase, rec, spawn, tick, interaction, hurt, heal, enter, dawn, catchUp, locked, cashBlocked, shop, eventKey, assignment, setMood, teardown, hud, onHudClick, closeOverlay, escape, overlay, setLamp,
+    active, phase, rec, spawn, tick, interaction, hurt, heal, enter, dawn, catchUp, locked, cashBlocked, shop, eventKey, assignment, setMood, teardown, hud, questHtml, notes, onHudClick, closeOverlay, escape, overlay, setLamp,
     get started() { return started; }, get K() { return K; },
     get hint() { const r = rec(); return !started || !r ? '' : r.escaped ? '已經離開迷霧了。等首班車吧。' : r.dead ? '' : hintText; }, CAT_COUNT, FIXED, MOODS, nightKey,
   };

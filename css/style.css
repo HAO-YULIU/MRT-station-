@@ -646,3 +646,37 @@ button:disabled { cursor: not-allowed; }
   .hud-btns button { min-height: 42px; padding: 4px 10px; font-size: 15px; gap: 4px; }
   .hud-btns button i { font-size: 16px; }
 }
+
+/* ── 生命值放在上方欄位（名字和時間中間的空位） ── */
+.hud-hp { flex: 1 1 auto; min-width: 0; max-width: 360px; margin: 0 10px; padding: 4px 6px; border: 0; background: none; color: #f4eee8; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+.hud-hp[hidden] { display: none; }
+.hh-bar { position: relative; display: block; height: 22px; border-radius: 11px; background: rgba(255,255,255,.12); overflow: hidden; border: 1px solid rgba(255,120,120,.4); }
+.hh-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #b3161e, #ff5a4a); transition: width .3s; }
+.hh-bar b { position: relative; display: block; text-align: center; font: 700 14px/22px var(--latin); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.hud-hp small { font-size: 12px; color: #9fe0c8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-hp.low .hh-bar { animation: hpPulse 1s infinite; }
+@keyframes hpPulse { 50% { box-shadow: 0 0 0 3px rgba(255,60,60,.45); } }
+@media (orientation: portrait) and (pointer: coarse) { .hud-me { order: 0; } .hud-time { order: 1; } .hud-hp { order: 2; flex: 1 0 100%; max-width: none; margin: 0; padding: 0 2px; flex-direction: row; align-items: center; gap: 10px; } .hud-hp .hh-bar { flex: 1; } .hud-btns { order: 3; } .hh-bar { height: 20px; } .hh-bar b { font-size: 13px; line-height: 20px; } }
+
+/* ── 霧燈與隨身道具：右側一排小按鈕 ── */
+#fogHud.fog-hud { position: absolute; z-index: 7; left: auto; right: 12px; top: calc(var(--hud-h, 70px) + 112px); width: auto; padding: 4px; display: flex; flex-direction: column; gap: 6px; background: rgba(8,14,14,.6); border-radius: 14px; }
+#fogHud.fog-hud[hidden] { display: none; }
+#fogHud button { width: 52px; height: 52px; border-radius: 12px; border: 1px solid rgba(159,224,200,.4); background: rgba(20,30,30,.85); color: #fff; font-size: 22px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0; }
+#fogHud button small { font: 600 10px var(--latin); color: #9fe0c8; }
+#fogHud button[aria-pressed="true"] { background: rgba(242,194,0,.35); border-color: #f2c200; }
+@media (max-height: 480px) { #fogHud.fog-hud { top: calc(var(--hud-h, 60px) + 54px); flex-direction: row; right: 128px; } #fogHud button { width: 44px; height: 44px; font-size: 19px; } }
+
+/* ── 資訊框可以收起（手機直向預設收起，只留站名） ── */
+#panel { cursor: pointer; }
+#panel .mini-title::after { content: '▾'; margin-left: auto; padding-left: 8px; color: var(--fog); font-size: 14px; transition: transform .2s; }
+#panel.collapsed .mini-title::after { transform: rotate(-90deg); }
+#panel.collapsed .mini-rows, #panel.collapsed .mini-hint { display: none; }
+
+/* ── 任務：本站活動 ── */
+.q-local { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px; background: rgba(47,158,138,.12); border: 1px solid rgba(47,158,138,.45); }
+.q-local p { margin: 8px 0 0; }
+.q-local-hint { font-size: 16px; color: #bfeee0; font-style: italic; }
+.q-local h5 { margin: 12px 0 4px; font-size: 14px; }
+.q-tips, .q-notes { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+.q-tips li.ok { opacity: .6; }
+.q-tips .q-tag { font-size: 11px; padding: 1px 6px; }

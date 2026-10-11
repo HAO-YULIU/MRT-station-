@@ -204,6 +204,7 @@ function openQuests() {
   const done = Object.keys(s.quests.done).filter(id => QUESTS[id]);
   $('#questCount').textContent = `支線 ${Quests.sideCount()} / ${SIDE_LIMIT}`;
   $('#questBody').innerHTML = `
+    ${localHtml()}
     ${ids.length ? `<ul class="quests">${ids.map(card).join('')}</ul>` : '<p class="empty-q">目前沒有任務。到處和人說話，看看誰需要幫忙。</p>'}
     ${done.length ? `<h4 class="q-done-h">已完成</h4><ul class="q-done">${done.map(id => `<li>${QUESTS[id].title}</li>`).join('')}</ul>` : ''}
     ${Achievements.html()}`;
@@ -211,6 +212,20 @@ function openQuests() {
   $('#questLog').hidden = false;
 }
 
+// 任務最上面：這一站正在發生的事（迷霧之城的事件、這一站的主線委託）
+function localHtml() {
+  if (FogCity.started && FogCity.locked()) return FogCity.questHtml();
+  const s = Game.state, id = s.current; if (!id || Puzzles.NO_MAIN.has(id)) return '';
+  const rows = [];
+  for (const l of MRT.linesAt(id)) {
+    const st = s.quests.active['main_' + l.line]; if (!st || st.step !== 0) continue;
+    const done = st.solved && st.solved[id], c = Puzzles.challenge(l.line, id);
+    const what = { quiz: '月台上有一張秀蔅留下的紙條（謎題）', passage: '月台上的紙條是一道謎語，要在站裡找到對的地方', coins: '有人的硬幣掉滿整站，幫他找回三枚', lost: '有人在站裡弄丟了東西', escort: '有人找不到站裡的某個地方，需要你帶路', person: '有人和朋友在站裡走散了', buy: '有人需要你幫忙買東西（本站就買得到）', way: '有人不知道該在月台哪一邊等車' }[c.kind] || '月台上有人需要幫忙';
+    rows.push(`<li class="${done ? 'ok' : 'now'}"><span class="q-tag" style="--c:${LINES[l.line].color}">${l.line}</span> ${done ? '已完成' : what}${done ? '' : '<small>（到這條線的月台找「❗」或「謎」）</small>'}</li>`);
+  }
+  if (!rows.length) return '';
+  return `<section class="q-local"><div class="q-head"><span class="q-tag" style="--c:#2f9e8a">本站活動</span><b>📍 ${esc(id)}</b></div><ul class="q-tips">${rows.join('')}</ul><p><small>主線委託在這一站裡就能完成，不用去別站。</small></p></section>`;
+}
 const fmtLeft = t => { const sec = Math.max(0, Math.round((t - Date.now()) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
 // 任務目前這一步的補充說明：謎題進度、寶物感應
 function stepNote(q, st, step) {
@@ -362,6 +377,8 @@ let worldReady = false;
 function layoutScene() {
   document.body.style.setProperty('--hud-h', $('.hud').offsetHeight + 'px');
 }
+// 上方欄位的高度會變（例如迷霧時多一列生命值）：一變就重新排版，下面的資訊框和按鈕不會被蓋住
+if (window.ResizeObserver) window.addEventListener('DOMContentLoaded', () => { const h = $('.hud'); if (h) new ResizeObserver(() => layoutScene()).observe(h); });
 function ensureWorld() {
   if (worldReady) return;
   World.init(sceneEl());
@@ -426,6 +443,11 @@ function buildPanel() {
       <div class="mini-hint" id="pHint"></div>
       <div class="mini-btns" id="pBtns"></div>
     </div>`;
+  // 手機直向：資訊框預設收起（只留站名），點一下展開／收起，免得擋住角色
+  const pn = $('#panel');
+  let col = null; try { col = localStorage.getItem('panelCollapsed'); } catch (e) { /* 無法存取 */ }
+  pn.classList.toggle('collapsed', col == null ? window.matchMedia('(orientation: portrait) and (pointer: coarse)').matches : col === '1');
+  pn.onclick = e => { if (e.target.closest('button, a')) return; pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
 }
 const panelCache = {};
 function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = html; $('#' + id).innerHTML = html; } }
@@ -549,7 +571,7 @@ function renderPanel(z, L) {
     setPart('pTitle', `${head}<span class="mini-sub">電扶梯</span>`);
   }
   setPart('pRows', rows);
-  if (FogCity.locked() && FogCity.hint) hint = `<span class="tag fogtag">🌫 ${FogCity.hint}</span>`;
+  if (FogCity.locked() && FogCity.hint) hint = `<span class="tag fogtag">🌫 本站事件的提示與筆記在「任務」裡</span>`;
   if (!ctl.doorHint) setPart('pHint', hint);
 }
 
@@ -1172,6 +1194,7 @@ function goldIcons() {
 function init() {
   lockPageGestures();
   $('#fogHud').addEventListener('click', e => FogCity.onHudClick(e));
+  $('#hudHp').addEventListener('click', () => { Sound.click(); openQuests(); });
   goldIcons();
   renderTitle();
   showScreen('title');
