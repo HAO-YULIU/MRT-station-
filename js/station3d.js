@@ -642,7 +642,7 @@ const Station3D = (() => {
     for (const P of L.platforms) {
       const terms = [...new Set([...P.sides[1], ...P.sides[-1]].map(d => MRT.label(d.terminal, P.line).zh))];
       const tx = guideTex([P.line], `${LINES[P.line].zh}月台 往 ${terms.join('／')}`, `${LINES[P.line].en} · Platform`, P.under ? 'down' : 'up');
-      for (const r of P.ramps) sign(tx, 3.2, .8, r.xb + r.b * 1.6, 3.1, r.z, g, Math.PI / 2);
+      for (const r of P.ramps) sign(tx, 3.0, .75, r.xb + r.b * 3.4, 3.6, r.z, g, Math.PI / 2);   // 吊在出口前方較高處
     }
     // 大廳中央：各線月台方向總指標
     L.platforms.forEach((P, i) => {
@@ -1057,7 +1057,7 @@ const Station3D = (() => {
       }
       // 時鐘
       const pct = M('#ffffff', { map: clockTex() });
-      const signXs = P.ramps.map(r => r.xa - P.x - r.b * 1.2);   // 電扶梯口吊牌的位置，時鐘要避開
+      const signXs = P.ramps.map(r => r.xa - P.x - r.b * 2.6);   // 電扶梯口吊牌的位置，時鐘要避開
       for (let x of [-10, 10]) { while (signXs.some(sx => Math.abs(sx - x) < 1.8)) x += Math.sign(x) * 1.5; box(.04, .35, .04, darkM, x, top - .17, 0, pg); for (const s of [-1, 1]) { const c = plane(.6, .6, pct, pg); c.position.set(x, top - .65, s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
       // 監視器、喇叭
       for (const x of [-30, -16, 2, 16, 30]) { cam(P.x + x, P.y + top, P.z + 1.4); cam(P.x + x + 2, P.y + top, P.z - 1.4); }
@@ -1096,8 +1096,23 @@ const Station3D = (() => {
         const w = stair ? .7 : .52;
         const rail = new T.Mesh(new T.BoxGeometry(len, .9, .04), M('#cfe3ec', { t: true, o: .25 }));
         rail.position.set(cx, cy + .5, lz + sz * w); rail.rotation.z = m.rotation.z; pg.add(rail);
-        const hand = new T.Mesh(new T.BoxGeometry(len, .06, .1), M(stair ? '#9aa1a8' : '#1c1c1e', { r: .4 }));
+        const handM = M(stair ? '#9aa1a8' : '#1c1c1e', { r: .4 });
+        const hand = new T.Mesh(new T.BoxGeometry(len, .06, .1), handM);
         hand.position.set(cx, cy + .97, lz + sz * w); hand.rotation.z = m.rotation.z; pg.add(hand);
+        // 兩端的水平段＋圓弧收尾（像真的手扶梯，不會斜插進地板）
+        for (const [ex, ey, dir] of [[x0, y0, Math.sign(x0 - x1)], [x1, y1, Math.sign(x1 - x0)]]) {
+          const L2 = 1.1, mx = ex + dir * L2 / 2;
+          const hh = new T.Mesh(new T.BoxGeometry(L2, .06, .1), handM); hh.position.set(mx, ey + .97, lz + sz * w); pg.add(hh);
+          const gl = new T.Mesh(new T.BoxGeometry(L2, .9, .04), M('#cfe3ec', { t: true, o: .25 })); gl.position.set(mx, ey + .5, lz + sz * w); pg.add(gl);
+          const cap = new T.Mesh(new T.TorusGeometry(.47, .035, 6, 14, Math.PI), handM);
+          cap.position.set(ex + dir * L2, ey + .5, lz + sz * w); cap.rotation.y = dir > 0 ? 0 : Math.PI; cap.rotation.z = -Math.PI / 2; pg.add(cap);
+          if (!stair) { const base = new T.Mesh(new T.BoxGeometry(L2, .1, .14), M('#8a9097', { m: .7, r: .3 })); base.position.set(mx, ey + .05, lz + sz * w); pg.add(base); }
+        }
+      }
+      // 上下兩端的金屬梳齒板
+      if (!stair) for (const [ex, ey, dir] of [[x0, y0, Math.sign(x0 - x1)], [x1, y1, Math.sign(x1 - x0)]]) {
+        const cp = new T.Mesh(new T.BoxGeometry(1.0, .015, .92), M('#b9c0c6', { m: .8, r: .3 })); cp.position.set(ex + dir * .5, ey + .008, lz); pg.add(cp);
+        const yl = new T.Mesh(new T.BoxGeometry(.06, .016, .92), M('#f2c200')); yl.position.set(ex + dir * .03, ey + .01, lz); pg.add(yl);
       }
     });
     // 電扶梯井：上下樓層之間（下層天花板到上層地板）用牆圍起來，看不到外面
@@ -1127,7 +1142,7 @@ const Station3D = (() => {
     const others = L.platforms.filter(o => o.line !== P.line).map(o => o.line);
     const zh = others.length ? `大廳・出口・轉乘 ${others.map(o => LINES[o].zh).join('、')}` : '大廳・出口';
     const tex = guideTex(others, zh, others.length ? 'Concourse · Exit · Transfer' : 'Concourse · Exit', P.y < 0 ? 'up' : 'down');
-    sign(tex, 2.4, .6, x0 - r.b * 1.2, P.under ? 3.05 : 3.4, 0, pg, Math.PI / 2);
+    sign(tex, 2.4, .6, x0 - r.b * 2.6, P.under ? 3.1 : 3.45, 0, pg, Math.PI / 2);   // 離電扶梯出口遠一點、高一點，走出來時不會擋住畫面
   }
 
   /* ── 列車 ── */
