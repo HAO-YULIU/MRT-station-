@@ -355,7 +355,7 @@ const NPCManager = (() => {
   }
   function placeFor(def) {
     const L = layout, U = L.unpaid;
-    if (['cafe', 'stage', 'stall', 'shop'].includes(def.spot)) return Station3D.placeAt(L, def.spot);
+    if (['cafe', 'stage', 'stall', 'shop', 'breakfast', 'mistshop'].includes(def.spot)) return Station3D.placeAt(L, def.spot);
     if (def.spot === 'service') return { x: U.x1 - 3.5, y: 0, z: U.z0 + 4.4 };
     if (def.spot === 'lostfound') return { x: U.x1 - 8.2, y: 0, z: U.z0 + 4.4 };
     if (def.spot === 'bench') { const P = L.platforms[0]; return { x: P.x + 31, y: P.y, z: P.z + .15 }; }
@@ -374,6 +374,7 @@ const NPCManager = (() => {
       const forced = qp && Quests.isActive(qp.quest) && qp.station === id;
       if (!forced && (npcStation(def) !== id || !inHours(def))) continue;
       if (def.onlyQuest && !def.onlyQuest.some(q => Quests.isActive(q))) continue;   // 只在任務進行時出現
+      if (def.onlyFlag && !Game.state.flags[def.onlyFlag]) continue;                // 只在達成秘密條件後出現
       if (def.event && !(def.event === '*' ? Quests.eventsNow().length : Quests.eventsNow().includes(def.event))) continue;
       const pos = placeFor(def); if (!pos) continue;
       addNpc({ id: nid, ...def, pos, named: true, area: areaOf(def.spot), speed: forced ? .9 : def.speed });
@@ -488,8 +489,8 @@ for (const l of LINE_ORDER) {
 /* ── 對話框 ── */
 const Dialog = (() => {
   let current = null;
-  const tier = v => (v >= 80 ? '信任' : v >= 50 ? '朋友' : v >= 20 ? '認識' : '陌生');
-  function hearts(v) { const n = Math.min(5, Math.floor((v || 0) / 20)); return '♥'.repeat(n) + '♡'.repeat(5 - n); }
+  const tier = v => friendTier(v);
+  function hearts(v) { const n = Math.min(5, Math.floor((v || 0) / 24)); return `${'♥'.repeat(n)}${'♡'.repeat(5 - n)} ${friendTier(v)}`; }
   function close() { current = null; $('#dialog').hidden = true; World.setInput(true); }
   function show(npc, text, buttons) {
     current = npc;
@@ -508,6 +509,11 @@ const Dialog = (() => {
   function open(npc) {
     if (npc.id === 'xiuyu') return xiuyu(npc);
     if (npc.id === 'ferryman') return ferryman(npc);
+    if (npc.id === 'wushang') {   // 霧商人：先處理秘密故事，再開店
+      const d = Quests.emit({ kind: 'talk', npc: 'wushang' });
+      if (d.length) return show(npc, npc.questTalk[d[0].id] || '……', [{ label: '看看商品', primary: true, run: () => Gold.shop() }, { label: '再見', run: close }]);
+      return show(npc, pick(npc.lines), [{ label: '看看商品', primary: true, run: () => Gold.shop() }, { label: '聊天', run: () => chat(npc) }, { label: '再見', run: close }]);
+    }
     if (!npc.named) {
       const pool = npc.role === '乘客' ? (TRAIN_TALK[npc.type] || TRAIN_TALK.office) : (CROWD_TALK[npc.type] || CROWD_TALK.casual);
       return show(npc, pick(pool), [{ label: '再聊一下', run: () => open(npc) }, { label: '再見', run: close }]);
@@ -559,7 +565,7 @@ const Dialog = (() => {
   }
   function chat(npc) {
     const s = Game.state, f = s.friends[npc.id] || 0;
-    s.friends[npc.id] = f + 2 + Math.ceil(Progress.friendBonus(npc.id) / 2); saveState();
+    Friends.add(npc.id, Friends.chatGain(npc.id) + Math.ceil(Progress.friendBonus(npc.id) / 2));
     let pool = [...npc.lines];
     if (f >= 50 && npc.knows) pool = pool.concat(npc.knows.map(k => k.text));
     if (f >= 80 && npc.rumors) pool = pool.concat(npc.rumors.map(r => '（小聲）' + r));
@@ -569,14 +575,16 @@ const Dialog = (() => {
     const s = Game.state;
     const inv = Object.entries(s.inv).filter(([id, n]) => n > 0 && !/^treasure_/.test(id));   // 主線寶物不能送人
     if (!inv.length) return menu(npc, '（你的背包是空的。）');
+    if (!Friends.canGift(npc.id) && !Quests.wants('give', g => g.npc === npc.id)) return menu(npc, '「今天已經收過你的禮物了，明天再說吧。」');
     show(npc, '要送什麼給' + esc(npc.name) + '？', [
       ...inv.map(([id]) => ({
         label: `${ITEMS[id].icon} ${ITEMS[id].name}`, run: () => {
           s.inv[id]--;
           const done = Quests.emit({ kind: 'give', npc: npc.id, item: id });
           const liked = (npc.likes || []).includes(id);
-          s.friends[npc.id] = (s.friends[npc.id] || 0) + (done.length ? 10 : liked ? 15 : 5) + Progress.friendBonus(npc.id);
-          saveState(); updateHud();
+          if (!done.length) Friends.markGift(npc.id);
+          Friends.add(npc.id, (done.length ? 10 : liked ? 15 : 5) + Progress.friendBonus(npc.id));
+          updateHud();
           const text = (npc.give && npc.give[id]) || (liked ? '這個我很喜歡！謝謝你。' : '謝謝，你人真好。');
           if (done.length) toast(`<b>${QUESTS[done[0].id].title}</b><span>✓ ${done[0].text}</span>`);
           menu(npc, text);
@@ -607,6 +615,7 @@ const Dialog = (() => {
       ...(npc.gives || []).filter(id => Quests.canAccept(id)).map(id => ({ label: `接任務：${QUESTS[id].title}`, run: () => { Quests.accept(id); close(); } })),
       { label: '聊天', run: () => { s.friends.xiuyu = (s.friends.xiuyu || 0) + 2; saveState(); xiuyuChat(npc); } },
       { label: '送禮', run: () => gift(npc) },
+      ...(s.flags.xiuyuTalk ? [{ label: '問她：妳是從哪一站上車的？', run: () => show(npc, '……1987 年，圓山。那時候還不是捷運，是火車。我上了末班車，窗外起了霧。<br>等我再睜開眼睛，就在這裡了。<br>你是第一個問我這件事的人。', [{ label: '再見', run: close }]) }] : []),
       { label: '再見', run: close },
     ]);
   }

@@ -87,7 +87,7 @@ function updateHud() {
   const lv = Economy.levelInfo(s.xp || 0);
   const left = TaipeiTime.state(t) === 'open' ? TaipeiTime.minutesToLastTrain(t) : null;
   const dl = Object.values(s.quests.active).map(q => q.deadline).filter(Boolean).sort()[0];
-  $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
+  $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${s.gold ? `<span class="money gold">🪙 ${s.gold}</span>` : ''}${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
     $('#hudName').innerHTML = `${esc(CHARACTERS[s.char].name)} <small class="hud-title">${esc(Progress.titleName())}</small>`;
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
@@ -136,8 +136,13 @@ Game.reward = (r = {}, label = '') => {
   if (r.money) { s.money += r.money; parts.push(`NT$ +${r.money}`); }
   if (r.xp) { s.xp += r.xp; parts.push(`經驗 +${r.xp}`); }
   for (const [id, n] of Object.entries(r.items || {})) { s.inv[id] = (s.inv[id] || 0) + n; parts.push(`${ITEMS[id].icon} ${ITEMS[id].name}`); }
-  for (const [id, n] of Object.entries(r.friend || {})) s.friends[id] = (s.friends[id] || 0) + n;
-  if (r.wear && OUTFITS[r.wear]) { s.wardrobe.own[r.wear] = true; parts.push(`限定服裝：${OUTFITS[r.wear].name}（背包 → 換裝）`); }
+  if (r.gold) { s.gold = (s.gold || 0) + r.gold; parts.push(`🪙 黃金 +${r.gold}`); }
+  for (const [id, n] of Object.entries(r.friend || {})) Friends.add(id, n, true);
+  if (r.wear && OUTFITS[r.wear]) { s.wardrobe.own[r.wear] = true; parts.push(`限定外觀：${OUTFITS[r.wear].name}（背包 → 換裝）`); }
+  if (r.title) { (s.titles = s.titles || {})[r.title] = true; const t = TITLES.find(t => t.id === r.title); if (t) parts.push(`稱號「${t.name}」`); }
+  if (r.profile) { (s.hiddenProfiles = s.hiddenProfiles || {})[r.profile] = NPC_PAST[r.profile]; parts.push('隱藏人物檔案（紀錄 → 人物）'); }
+  if (r.flag) s.flags[r.flag] = true;
+  if (r.place) { (s.places = s.places || {})[r.place] = TaipeiTime.date(); parts.push(`特殊地點紀錄：${r.place}`); }
   saveState(); updateHud();
   if (label || parts.length) { toast(`<b>${label}</b>${parts.length ? `<span>${parts.join('　')}</span>` : ''}`, 'reward'); Sound.itemGet(); }
   const after = Economy.levelInfo(s.xp).lv;
@@ -228,6 +233,7 @@ function checkSecrets() {
   if (t.hour === 6 && t.minute < 15) Quests.secret('sec_firsttrain');
   if (t.hour === 0 && t.minute === 0 && TaipeiTime.state(t) === 'open') Quests.secret('sec_midnight');
   if (Object.values(s.friends).some(f => f >= 100)) Quests.secret('sec_friend');
+  if (['sec_ghost', 'sec_room', 'sec_midnight'].every(id => Quests.isDone(id))) Quests.secret('sec_story');
 }
 
 /* ── 進出站扣款 ── */
@@ -572,7 +578,9 @@ async function doRide(tr, ride) {
   Passengers.board(tr);
   World.setInteractions([npcInteraction, seatInteraction, dropInteraction]);   // 行駛中：可以和乘客聊天、坐下、撿東西
   setTimeout(() => Passengers.maybeDrop(tr), 3000);
-  const anomaly = Math.random() < .2;   // 偶爾在隧道裡看到不該存在的月台
+  const lateHour = TaipeiTime.now().hour >= 23 || TaipeiTime.now().hour === 0;
+  const anomaly = Math.random() < (Game.state.flags.mistArchive && lateHour ? .6 : .2);   // 偶爾在隧道裡看到不該存在的月台（解開霧的檔案室後，深夜更常出現）
+  if (anomaly && Game.state.flags.mistArchive && lateHour) setTimeout(() => toast('<b>🌫️ 霧中列車</b><span>車廂的燈暗了一下。對面的座位上，好像坐著一個提燈的女孩。</span>', 'level'), 6000);
   if (TaipeiTime.now().hour === 0) Quests.secret('sec_lasttrain');
   Sound.ambience(null);
   Sound.startRumble();
@@ -663,6 +671,7 @@ const spotInteraction = {
     if (sp.kind === 'ticket') return Dialog.info('售票機・票價表', fareTable(st));
     if (sp.kind === 'toilet') return restroom();
     if (sp.kind === 'shop') return shopMenu(st);
+    if (sp.kind === 'office' && st === '小南門' && TaipeiTime.now().hour >= 21) Quests.secret('sec_room');   // 晚上那扇門是開著的
     const done = Quests.emit({ kind: 'inspect', spot: sp.kind, station: st });
     for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
     if (typeof Achievements !== 'undefined') Achievements.onInspect(sp, st);
@@ -678,7 +687,7 @@ const FACILITY = {
   aed: () => Dialog.info('AED', '自動體外心臟電擊去顫器。打開箱門會有警報聲，裡面的機器會用語音一步一步教你怎麼用。<br>旁邊貼著站務員的分機號碼。'),
   art: (sp, st) => Dialog.info('公共藝術', `這幅作品叫《${esc(st)}・${['晨光', '流動', '交會', '回聲', '城市的呼吸', '月台之間'][st.length % 6]}》。<br>藝術家用${esc(LINES[MRT.linesAt(st)[0].line].zh)}的顏色畫了一條穿過城市的線。${TaipeiTime.state() !== 'open' ? '' : TaipeiTime.now().hour >= 23 ? '<br>……夜深了，畫裡好像多了一個戴紅色貝雷帽的小人影。' : ''}`),
   nursing: () => Dialog.info('哺集乳室', '給需要哺乳、集乳的人使用。門口有按鈕，使用中會亮紅燈。裡面有沙發、尿布台和洗手台。'),
-  office: () => Dialog.info('站務室', '門上寫著「非工作人員請勿進入」。<br>門縫底下透出一點光，裡面的螢幕牆顯示著每一座月台的監視畫面。'),
+  office: (sp, st) => (st === '小南門' && TaipeiTime.now().hour >= 21) ? Dialog.info('那扇開著的門', '站務室旁邊那扇平常鎖著的門，今天晚上是開著的。<br>裡面是一間小房間，牆上靠著一排沒用過的站名牌——每一塊都寫著同一個字：「霧」。角落有一張攤位，一個提燈的人抬頭看你：「你終於來了。」<br><small>（記下了特殊地點：小南門・霧的檔案室）</small>') : Dialog.info('站務室', '門上寫著「非工作人員請勿進入」。<br>門縫底下透出一點光，裡面的螢幕牆顯示著每一座月台的監視畫面。'),
   women: () => Dialog.info('夜間婦女候車區', '晚上 10 點到隔天早上 6 點，女性旅客可以在這一區候車。這裡在監視器拍得到的範圍，旁邊就有緊急對講機。'),
   locker: () => Dialog.info('置物櫃', '大小兩種櫃子，用悠遊卡付費。大部分都有人用了，只剩最下面一格空著。'),
   atm: () => Dialog.info('ATM', '提款機。螢幕上寫著：「本機暫停服務」。'),
@@ -704,10 +713,11 @@ const FACILITY = {
   },
 };
 function cafeMenu() {
+  const fd = Friends.shopDiscount('cafe');
   const s = Game.state, items = ['coffee', 'bread', 'greentea'].concat(Quests.eventsNow().includes('event_halloween') ? ['pumpkinlatte'] : []);
   Dialog.show({ name: 'Leo 咖啡', role: '吧台' }, `餘額 NT$ ${s.money}。今天想喝什麼？`, items.map(id => ({
-    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Progress.price(ITEMS[id].price)}`, disabled: s.money < Progress.price(ITEMS[id].price),
-    run: () => { s.money -= Progress.price(ITEMS[id].price); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); cafeMenu(); },
+    label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Math.round(Progress.price(ITEMS[id].price) * (1 - fd))}`, disabled: s.money < Math.round(Progress.price(ITEMS[id].price) * (1 - fd)),
+    run: () => { s.money -= Math.round(Progress.price(ITEMS[id].price) * (1 - fd)); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); toast(`<b>${ITEMS[id].icon} ${ITEMS[id].name}</b><span>餘額 NT$ ${s.money}</span>`); questEvent({ kind: 'buy', item: id }); cafeMenu(); },
   })).concat([{ label: '離開', run: () => Dialog.close() }]));
 }
 function vendMenu() {
@@ -923,7 +933,7 @@ function openBag() {
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
     <h4 class="bag-h">物品</h4>
-    ${inv.length ? `<ul class="inv">${inv.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : '<p class="empty-q">背包是空的。</p>'}
+    ${inv.length ? `<ul class="inv">${inv.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}${id === 'detector' ? ' <button class="btn small ghost eat" data-detect="1">使用</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : '<p class="empty-q">背包是空的。</p>'}
     <h4 class="bag-h">換裝</h4>
     ${wardrobeHtml()}
     <h4 class="bag-h">路線收藏</h4>
@@ -947,6 +957,7 @@ function openBag() {
   $('#bag').hidden = false;
   $('#bagBody').onclick = e => {
     if (e.target.closest('[data-photo]')) { $('#bag').hidden = true; return SideQuests.photo(); }
+    if (e.target.closest('[data-detect]')) { $('#bag').hidden = true; return Gold.detect(); }
     const w = e.target.closest('[data-wear]'), f = e.target.closest('[data-eat]');
     if (w) { Sound.click(); putOn(w.dataset.wear); openBag(); }
     if (f) { Sound.click(); eat(f.dataset.eat); openBag(); }
@@ -959,7 +970,7 @@ function eat(id) {
   if (!it || !it.eat || !(s.inv[id] > 0)) return;
   s.inv[id]--;
   const pool = EAT_TEXT[it.eat];
-  Game.reward({ xp: 5 }, `${it.eat}掉了 ${it.icon} ${it.name}　${pool[(Math.random() * pool.length) | 0]}`);
+  Game.reward({ xp: id === 'inspiretea' ? 120 : 5 }, `${it.eat}掉了 ${it.icon} ${it.name}　${pool[(Math.random() * pool.length) | 0]}`);
 }
 function wardrobeHtml() {
   const s = Game.state, wear = Outfits.wear(s.char, s.wardrobe.wear), own = Outfits.owned(s.char, s.wardrobe.own);
@@ -986,7 +997,7 @@ function openMap() {
     document.querySelectorAll('#mapLines .ml').forEach(x => x.setAttribute('aria-pressed', x.dataset.l === solo));
   };
   Map3D.open($('#map3d'), {
-    visited: s.visited, current: s.current, char: s.char, compass: $('#compassN').parentElement, mistLine: !!s.flags.mistLine,
+    visited: s.visited, current: s.current, char: s.char, compass: $('#compassN').parentElement, mistLine: !!s.flags.mistLine, hiddenMap: !!s.flags.hiddenMap,
     onPick: id => {
       const lines = MRT.linesAt(id);
       const here = id === s.current, been = !!s.visited[id];

@@ -78,6 +78,7 @@ const Progress = (() => {
       const hurt = o && o.reward && Object.values(o.reward.friend || {}).some(v => v < 0);
       if (hurt) g = { S: 'A', A: 'B', B: 'C', C: 'C' }[g];                           // 有人因此受傷：降一級
     }
+    if (g === 'S' && (q.diff === 'hard' || q.type === 'main')) Game.reward({ gold: q.type === 'main' ? 2 : 1 }, '特殊案件獎勵');
     if (g) { s.quests.grade[id] = g; saveState(); setTimeout(() => toast(`<b>案件評價：${g}</b><span>${q.title}</span>`, g === 'S' ? 'level' : ''), 1400); }
   }
   function onTalk(npcId) { const s = S(); if (NPCS[npcId] && !s.met[npcId]) { s.met[npcId] = TaipeiTime.date(); saveState(); } }
@@ -149,8 +150,9 @@ const Progress = (() => {
       body = ids.length ? `<ul class="rc-people">${ids.map(id => {
         const n = NPCS[id], f = s.friends[id] || 0, where = n.station || (n.rotate ? '每天在不同的站' : n.schedule ? n.schedule.map(([a, b, st]) => `${a}–${b} 點 ${st}`).join('、') : n.routes ? '每天的通勤路線不同' : '');
         return `<li><b>${esc(n.name)}</b><small>${esc(n.role || '')}　${esc(where)}${n.hours ? `　${n.hours.map(([a, b]) => `${a}–${b} 點`).join('、')}` : ''}</small>
-          <p>好感 ${f}${f >= 20 && n.likes && n.likes.length ? `　喜歡：${n.likes.map(i => ITEMS[i] ? ITEMS[i].name : i).join('、')}` : '　（再熟一點才知道他喜歡什麼）'}</p>
-          ${f >= 50 && n.rumors && n.rumors[0] ? `<p class="rc-note">「${esc(n.rumors[0])}」</p>` : ''}</li>`;
+          <p>好感 ${f}（${friendTier(f)}）${f >= 20 && n.likes && n.likes.length ? `　喜歡：${n.likes.map(i => ITEMS[i] ? ITEMS[i].name : i).join('、')}` : '　（再熟一點才知道他喜歡什麼）'}</p>
+          ${f >= 50 && n.rumors && n.rumors[0] ? `<p class="rc-note">「${esc(n.rumors[0])}」</p>` : ''}
+          ${(s.hiddenProfiles || {})[id] ? `<p class="rc-note">🔒 隱藏檔案：${esc(s.hiddenProfiles[id])}</p>` : ''}</li>`;
       }).join('')}</ul>` : '<p class="empty-q">還沒有認識任何人。</p>';
     }
     el.innerHTML = `<nav class="rc-tabs">${tabs.map(([k, n]) => `<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</nav>${body}`;

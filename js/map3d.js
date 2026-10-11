@@ -212,6 +212,16 @@ const Map3D = (() => {
     return g;
   }
 
+  /* ── 隱藏地圖：圓山與劍潭之間，一個未登錄的「霧」站 ── */
+  function ghostMarker() {
+    const a = P('圓山'), b = P('劍潭'), p = a.clone().lerp(b, .5); p.x += 1.2;
+    const g = new T.Group();
+    const st = new T.Mesh(new T.CylinderGeometry(.7, .7, .5, 20), new T.MeshStandardMaterial({ color: '#e9e7f0', emissive: '#9fe0c8', emissiveIntensity: .6, transparent: true, opacity: .7 }));
+    st.position.set(p.x, .6, p.z); g.add(st);
+    const lab = textSprite('霧（未登錄）', { size: 40, color: '#2a5a4a', bg: 'rgba(220,245,235,.85)' }); lab.position.set(p.x, 2.2, p.z); lab.scale.set(1.1 * lab.userData.aspect, 1.1, 1); g.add(lab);
+    return g;
+  }
+
   /* ── 車站 ── */
   function buildStations() {
     const g = new T.Group();
@@ -407,6 +417,7 @@ const Map3D = (() => {
       scene.add(landmarks());
       scene.add(buildLines());
       scene.add(buildStations());
+      if (o.hiddenMap) scene.add(ghostMarker());
       hero = heroRig = marker = null;
       placeHero();
       this._solo = null;

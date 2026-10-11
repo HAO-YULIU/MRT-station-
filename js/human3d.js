@@ -595,7 +595,7 @@ const Human3D = (() => {
     // 包包
     const bag = pc(W.bag);
     byTag('bag').forEach(o => { o.visible = W.bag === 'ay_cross'; });
-    if (W.bag === 'bag_backpack') {
+    if (W.bag === 'bag_backpack' || bag.as === 'bag_backpack') {
       const bp = new T.Mesh(new T.CapsuleGeometry(.13, .14, 6, 12), mat(bag.color, { rough: .7 })); bp.scale.set(1.1, 1, .55); add(S, bp, 0, .28, rig.girl ? -.17 : -.2);
       for (const sx of [-1, 1]) { const st = new T.Mesh(new T.BoxGeometry(.022, .3, .012), mat(bag.color, { rough: .7 })); add(S, st, sx * .1, .32, rig.girl ? .1 : .13); }
     }
@@ -606,7 +606,7 @@ const Human3D = (() => {
       add(S, new T.Mesh(new T.BoxGeometry(.2, .14, .06), bm), -.18, .02, .14).rotation.z = .2;
     }
     // 飾品
-    const ac = pc(W.acc), aid = W.acc;
+    const ac = pc(W.acc), aid = ac.as || W.acc;
     const top0 = rig.girl ? .15 : .14;   // 頭頂附近的高度
     if (aid === 'acc_cap') {
       const cm = mat(ac.color, { rough: .7 });
@@ -644,6 +644,18 @@ const Human3D = (() => {
     if (aid === 'acc_lantern') {
       const ln = new T.Mesh(new T.SphereGeometry(.035, 12, 10), new T.MeshBasicMaterial({ color: '#e0302a' })); ln.scale.y = .8; add(H, ln, .11, top0 + .03, .04);
       add(H, new T.Mesh(new T.CylinderGeometry(.012, .012, .015, 8), mat('#d8a830', { metal: .6 })), .11, top0 + .065, .04);
+    }
+    // 特效
+    if (W.fx === 'fx_mist') {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(200,240,225,.75)'); gr.addColorStop(1, 'rgba(200,240,225,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+      const aura = new T.Mesh(new T.PlaneGeometry(1.8, 1.8), new T.MeshBasicMaterial({ map: new T.CanvasTexture(c), transparent: true, depthWrite: false }));
+      aura.rotation.x = -Math.PI / 2; aura.position.y = .02; rig.root.add(aura);
+    }
+    if (W.fx === 'fx_sparkle') for (let i = 0; i < 6; i++) {
+      const s = new T.Mesh(new T.OctahedronGeometry(.03), new T.MeshBasicMaterial({ color: '#fff3b0' }));
+      s.position.set(Math.sin(i) * .35, .4 + i * .22, Math.cos(i) * .35); rig.root.add(s);
     }
     rig.wearKey = JSON.stringify(W);
     return rig;

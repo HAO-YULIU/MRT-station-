@@ -119,7 +119,7 @@ const Achievements = (() => {
     s.ach[id] = TaipeiTime.date(); saveState();
     Sound.itemGet();
     toast(`<b>🏆 成就解鎖：${a.name}</b><span>${a.desc}</span>`, 'level');
-    Game.reward({ xp: 50 });
+    Game.reward({ xp: 50, gold: a.gold || 0 });
   }
   function check() { const s = S(); for (const a of ACHIEVEMENTS) if (a.check && !s.ach[a.id]) { try { if (a.check(s)) unlock(a.id); } catch (e) { /* 資料還沒準備好 */ } } }
 
@@ -246,8 +246,8 @@ const Achievements = (() => {
     if (sp.kind === 'breakfast') {
       const s = S(), list = ['soymilk', 'turnipcake', 'danbing', 'bread'];
       const menu = () => Dialog.show({ name: '阿桃早餐', role: '只賣到上午 10 點' }, `餘額 NT$ ${s.money}。`, list.map(id => ({
-        label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Progress.price(ITEMS[id].price)}`, disabled: s.money < Progress.price(ITEMS[id].price),
-        run: () => { s.money -= Progress.price(ITEMS[id].price); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); questEvent({ kind: 'buy', item: id }); unlock('a_breakfast'); menu(); },
+        label: `${ITEMS[id].icon} ${ITEMS[id].name}　NT$ ${Math.round(Progress.price(ITEMS[id].price) * (1 - Friends.shopDiscount('breakfast')))}`, disabled: s.money < Math.round(Progress.price(ITEMS[id].price) * (1 - Friends.shopDiscount('breakfast'))),
+        run: () => { s.money -= Math.round(Progress.price(ITEMS[id].price) * (1 - Friends.shopDiscount('breakfast'))); s.inv[id] = (s.inv[id] || 0) + 1; saveState(); updateHud(); Sound.gate(); questEvent({ kind: 'buy', item: id }); unlock('a_breakfast'); menu(); },
       })).concat([{ label: '離開', run: () => Dialog.close() }]));
       menu(); return true;
     }
@@ -265,5 +265,8 @@ const Achievements = (() => {
       ${msgs.length ? `<h4 class="q-done-h">✉️ 留言本</h4><ul class="q-done">${msgs.map(m => `<li><small>${m}</small></li>`).join('')}</ul>` : ''}`;
   }
   const count = () => items.filter(it => it.kind !== 'drop').length;
-  return { count, spawn, clear, tick, near, take, onInspect, onTalk, onPhoto, onSecret, onPassage, noticeExtra, spot, html, check, unlock };
+  // 探測器：把收集品放大、發光一段時間
+  let revealUntil = 0;
+  function reveal(ms) { revealUntil = Date.now() + ms; for (const it of items) it.mesh.scale.multiplyScalar(2.2); setTimeout(() => { for (const it of items) it.mesh.scale.divideScalar(2.2); }, ms); }
+  return { reveal, count, spawn, clear, tick, near, take, onInspect, onTalk, onPhoto, onSecret, onPassage, noticeExtra, spot, html, check, unlock };
 })();

@@ -249,7 +249,7 @@ const Station3D = (() => {
     const C = L.concourse, U = L.unpaid;
     if (kind === 'cafe') return { x: C.x1 - .65, y: 0, z: C.z0 + 14, buy: { x: C.x1 - 2.6, z: C.z0 + 14 } };
     if (kind === 'stage') return { x: C.x0 + 3, y: 0, z: C.z0 + 13.5 };
-    if (kind === 'stall' || kind === 'breakfast') return { x: C.x1 - 3.4, y: 0, z: C.z0 + 18.5 };
+    if (kind === 'stall' || kind === 'breakfast' || kind === 'mistshop') return { x: C.x1 - 3.4, y: 0, z: C.z0 + 18.5 };
     if (kind === 'oldmap') return { x: C.x0 + .1, y: 0, z: C.z0 + 16 };
     if (kind === 'tiles') return { x: C.x1 - .1, y: 0, z: C.z0 + 16 };
     if (kind === 'stamp') return { x: U.x1 - .6, y: 0, z: U.z0 + 1.0 };
@@ -687,6 +687,12 @@ const Station3D = (() => {
         const m = plane(.7, .7, M('#ffffff', { map: t }), g); m.position.set(p.x - .03, 1.6, p.z - 1.2 + i * .8); m.rotation.y = -Math.PI / 2;
       });
       sign(plainSign('磁磚壁畫', '「從夜晚到早晨」', '#23272b', '#fff'), 2.2, .45, p.x - .1, 2.4, p.z, g, -Math.PI / 2);
+    }
+    if (kind === 'mistshop') {   // 霧商人的攤位
+      box(1.8, .9, .9, M('#3a3a4a', { r: .6 }), p.x, .45, p.z, g); solid(p.x, p.z, 1.8, .9);
+      for (let i = 0; i < 5; i++) box(.22, .22, .22, M(['#c8ccd8', '#9aa0c8', '#e9e7f0', '#c4162a', '#f2c200'][i], { e: i < 3 ? '#9aa0c8' : '#000', ei: i < 3 ? .4 : 0 }), p.x - .7 + i * .35, 1.01, p.z, g);
+      box(2.0, .05, 1.1, M('#4a4a5a', { r: .8 }), p.x, 2.5, p.z, g); box(.04, 1.6, .04, dark, p.x - .9, 1.7, p.z - .4, g); box(.04, 1.6, .04, dark, p.x + .9, 1.7, p.z - .4, g);
+      sign(plainSign('霧商人', '只收黃金', '#3a3a4a', '#e9e7f0'), 1.8, .45, p.x, 2.25, p.z + .6, g);
     }
     if (kind === 'stall') {
       box(1.8, .9, .9, wood, p.x, .45, p.z, g); solid(p.x, p.z, 1.8, .9);   // 攤車
