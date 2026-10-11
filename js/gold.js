@@ -54,16 +54,17 @@ const Friends = (() => {
 
 /* ── 黃金 ── */
 // 秘密任務的報酬（依類型：隱藏物品／隱藏房間／隱藏謎題／NPC 的另一面／跨站秘密調查／整條秘密故事）
-Object.assign(QUESTS.sec_ghost.reward, { money: 400, xp: 300, gold: 2, flag: 'hiddenMap' });
-Object.assign(QUESTS.sec_lasttrain.reward, { money: 300, xp: 220, gold: 2, title: 't_lasttrain' });
-Object.assign(QUESTS.sec_firsttrain.reward, { money: 150, xp: 160, gold: 1, title: 't_firsttrain' });
-Object.assign(QUESTS.sec_branch.reward, { money: 300, xp: 240, gold: 2, items: { branchstamp: 1 } });
-Object.assign(QUESTS.sec_circle.reward, { money: 300, xp: 240, gold: 2 });
-Object.assign(QUESTS.sec_maxfare.reward, { money: 150, xp: 200, gold: 1, title: 't_farthest' });
-Object.assign(QUESTS.sec_seat.reward, { money: 250, xp: 200, gold: 1, profile: 'yulan' });
-Object.assign(QUESTS.sec_midnight.reward, { money: 250, xp: 260, gold: 2, title: 't_unregistered' });
-Object.assign(QUESTS.sec_friend.reward, { money: 300, xp: 300, gold: 2, profile: 'xiuyu', flag: 'xiuyuTalk' });
-Object.assign(QUESTS.sec_dawn.reward, { money: 250, xp: 250, gold: 1, profile: 'yuchen' });
+// 一般秘密任務：NT$ 100–300、黃金 1；高難度秘密任務：NT$ 250–600、黃金 1–3；完整秘密故事線：NT$ 500–1,200、黃金 3–8
+Object.assign(QUESTS.sec_ghost.reward, { money: 450, xp: 300, gold: 2, ixp: 70, flag: 'hiddenMap' });
+Object.assign(QUESTS.sec_lasttrain.reward, { money: 350, xp: 220, gold: 2, ixp: 70, title: 't_lasttrain' });
+Object.assign(QUESTS.sec_firsttrain.reward, { money: 150, xp: 160, gold: 1, ixp: 40, title: 't_firsttrain' });
+Object.assign(QUESTS.sec_branch.reward, { money: 400, xp: 240, gold: 2, ixp: 70, items: { branchstamp: 1 } });
+Object.assign(QUESTS.sec_circle.reward, { money: 400, xp: 240, gold: 2, ixp: 70 });
+Object.assign(QUESTS.sec_maxfare.reward, { money: 200, xp: 200, gold: 1, ixp: 40, title: 't_farthest' });
+Object.assign(QUESTS.sec_seat.reward, { money: 250, xp: 200, gold: 1, ixp: 40, profile: 'yulan' });
+Object.assign(QUESTS.sec_midnight.reward, { money: 450, xp: 260, gold: 2, ixp: 70, title: 't_unregistered' });
+Object.assign(QUESTS.sec_friend.reward, { money: 550, xp: 300, gold: 3, ixp: 80, profile: 'xiuyu', flag: 'xiuyuTalk' });
+Object.assign(QUESTS.sec_dawn.reward, { money: 250, xp: 250, gold: 1, ixp: 40, profile: 'yuchen' });
 NPC_PAST.yuchen = '雨晨在機場工作，每天早上 7 點從中山出發，晚上在淡水看海。她說：「我在等一班飛機，帶我回到某一年。」';
 
 // 隱藏房間 → 霧商人（隱藏店家）
@@ -71,14 +72,14 @@ QUESTS.sec_room = {
   type: 'secret', giver: null, title: '小南門的另一扇門',
   desc: '晚上的小南門站，站務室旁邊有一扇平常鎖著的門，今天是開著的。',
   steps: [{ text: '走進那扇門', goal: { kind: 'inspect', spot: 'office', station: '小南門' } }],
-  reward: { money: 220, xp: 220, gold: 1, flag: 'mistShop', place: '小南門・霧的檔案室' },
+  reward: { money: 220, xp: 220, gold: 1, ixp: 40, flag: 'mistShop', place: '小南門・霧的檔案室' },
 };
 // 整條秘密故事：霧的檔案室
 QUESTS.sec_story = {
   type: 'secret', giver: null, title: '霧的檔案室',
   desc: '不存在的月台、小南門的另一扇門、零點……這些事好像都連在一起。霧商人說他知道答案。',
   steps: [{ text: '晚上去小南門找霧商人', goal: { kind: 'talk', npc: 'wushang' } }],
-  reward: { money: 900, xp: 600, gold: 6, wear: 'fx_mist', flag: 'mistArchive', title: 't_archive' },
+  reward: { money: 1000, xp: 600, gold: 6, ixp: 200, wear: 'fx_mist', flag: 'mistArchive', title: 't_archive' },
 };
 Object.assign(NPCS, {
   wushang: {

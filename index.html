@@ -51,6 +51,7 @@
         <button id="btnMap">路網圖</button>
         <button id="btnQuest">任務 <span id="hudQuests">0</span></button>
         <button id="btnRecord">紀錄</button>
+        <button id="btnPhone">手機 <span id="hudPhone"></span></button>
         <button id="btnBag">背包 <span id="hudItems">0/6</span></button>
         <button id="btnSound" aria-pressed="true">音效 開</button>
       </nav>
@@ -59,6 +60,7 @@
     <button class="action-btn" id="actionBtn" hidden></button>
     <div class="joystick" id="joystick" aria-label="移動搖桿"><span class="knob"></span></div>
     <button class="run-btn" id="runBtn" aria-pressed="false">跑</button>
+    <button class="view-btn" id="viewBtn" title="切換視角（V）">視角：標準</button>
     <div class="toasts" id="toasts" aria-live="polite"></div>
     <p class="controls-hint" id="controlsHint">方向鍵／WASD 走動　Shift 跑步　拖曳畫面轉視角　E 互動</p>
   </section>
@@ -99,6 +101,12 @@
   </div>
 
   <!-- 背包 -->
+  <div class="phone-wrap" id="phone" hidden>
+    <div class="phone" role="dialog" aria-modal="true" aria-label="手機">
+      <button class="x phone-x" id="phoneClose" aria-label="關閉">×</button>
+      <div id="phoneBody"></div>
+    </div>
+  </div>
   <div class="modal" id="bag" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
       <header><h3 id="bagTitle">背包</h3><button class="x" data-close="bag" aria-label="關閉">×</button></header>
@@ -144,11 +152,14 @@
   <script src="js/station3d.js"></script>
   <script src="js/world3d.js"></script>
   <script src="js/npcs.js"></script>
+  <script src="js/crowd.js"></script>
   <script src="js/sidequests.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/progress.js"></script>
   <script src="js/gold.js"></script>
   <script src="js/life.js"></script>
+  <script src="js/daily.js"></script>
+  <script src="js/phone.js"></script>
   <script src="js/map3d.js"></script>
   <script src="js/game.js"></script>
 </body>

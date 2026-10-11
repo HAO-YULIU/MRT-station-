@@ -31,6 +31,7 @@ function loadState() {
 }
 function saveState() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.state)); } catch (e) { /* 無法存檔時仍可遊玩 */ } }
 Game.state = loadState();
+Daily.refresh();
 if (Game.state.flags.mistLine) MRT.openAirport();   // 已經交出寶物：桃園機場捷運加入路網
 
 /* ── 小工具 ── */
@@ -135,6 +136,7 @@ Game.reward = (r = {}, label = '') => {
   const before = Economy.levelInfo(s.xp).lv;
   if (r.money) { s.money += r.money; parts.push(`NT$ +${r.money}`); }
   if (r.xp) { s.xp += r.xp; parts.push(`經驗 +${r.xp}`); }
+  if (r.ixp) parts.push(`調查經驗 +${Investigate.add(r.ixp, null, true)}`);
   for (const [id, n] of Object.entries(r.items || {})) { s.inv[id] = (s.inv[id] || 0) + n; parts.push(`${ITEMS[id].icon} ${ITEMS[id].name}`); }
   if (r.gold) { s.gold = (s.gold || 0) + r.gold; parts.push(`🪙 黃金 +${r.gold}`); }
   for (const [id, n] of Object.entries(r.friend || {})) Friends.add(id, n, true);
@@ -179,18 +181,18 @@ function openQuests() {
   const s = Game.state, act = s.quests.active;
   const card = id => {
     const q = QUESTS[id], st = act[id];
-    const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密', timed: '限時' }[q.type];
+    const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密', timed: '限時', daily: '每日', weekly: '每週' }[q.type];
     return `<li class="quest q-${q.type}">
       <div class="q-head"><span class="q-tag"${q.line ? ` style="--c:${LINES[q.line].color}"` : ''}>${q.line ? q.line + ' ' : ''}${tag}</span><b>${q.title}</b></div>
       <p>${q.desc}</p>
       <ol>${q.steps.map((p, i) => `<li class="${i < st.step ? 'ok' : i === st.step ? 'now' : ''}">${p.text}${i === st.step ? stepNote(q, st, p) : ''}</li>`).join('')}</ol>
-      <div class="q-reward">報酬：${[q.reward.money && `NT$ ${q.reward.money}`, q.reward.xp && `經驗 ${q.reward.xp}`, ...Object.keys(q.reward.items || {}).map(i => ITEMS[i].name)].filter(Boolean).join('、')}</div>
+      <div class="q-reward">報酬：${[q.reward.money && `NT$ ${q.reward.money}`, q.reward.xp && `經驗 ${q.reward.xp}`, q.reward.gold && `🪙 黃金 ${q.reward.gold}`, ...Object.keys(q.reward.items || {}).map(i => ITEMS[i].name)].filter(Boolean).join('、')}</div>
       ${st.deadline ? `<div class="q-timer">⏱ 剩下 ${fmtLeft(st.deadline)}</div>` : ''}
-      ${q.type === 'side' || q.type === 'timed' ? `<button class="btn ghost small" data-abandon="${id}">放棄</button>` : ''}
+      ${['side', 'timed', 'daily', 'weekly'].includes(q.type) ? `<button class="btn ghost small" data-abandon="${id}">放棄</button>` : ''}
     </li>`;
   };
   const ids = Object.keys(act);
-  const order = ['main', 'timed', 'secret', 'event', 'side'];
+  const order = ['main', 'weekly', 'timed', 'secret', 'event', 'daily', 'side'];
   ids.sort((a, b) => order.indexOf(QUESTS[a].type) - order.indexOf(QUESTS[b].type));
   const done = Object.keys(s.quests.done).filter(id => QUESTS[id]);
   $('#questCount').textContent = `支線 ${Quests.sideCount()} / ${SIDE_LIMIT}`;
@@ -238,22 +240,25 @@ function checkSecrets() {
   if (['sec_ghost', 'sec_room', 'sec_midnight'].every(id => Quests.isDone(id))) Quests.secret('sec_story');
 }
 
-/* ── 進出站扣款 ── */
-function onGate(side) {
-  const s = Game.state, here = ctl ? ctl.stationId : s.current;
-  if (side < 0) {                     // 進站
-    if (s.money < 20) { toast('<b>餘額不足</b><span>至少要 NT$ 20 才能進站</span>', 'warn'); return false; }
-    s.trip = { from: here }; saveState();
-    toast(`<b>進站</b><span>${esc(here)}</span>`);
-    return true;
-  }
-  // 出站：依進站站與出站站的距離扣款
-  const from = s.trip ? s.trip.from : here;
-  const fare = Economy.fare(from, here);
-  s.money -= fare; s.trip = null; saveState(); updateHud();
-  if (fare >= 65) Quests.secret('sec_maxfare');
-  toast(`<b>出站扣款 NT$ ${fare}</b><span>${esc(from)} → ${esc(here)}　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
-  return true;
+/* ── 車資：上車時記錄起站，下車時依距離自動扣款（轉乘只補差額）；閘門可以自由進出 ──
+ * 一趟行程在走出閘門、傳送到別站、或下車超過 15 分鐘沒有再搭車時結束
+ */
+function onGate() { endTrip(); return true; }
+function endTrip() { const s = Game.state; if (s.trip) { s.trip = null; saveState(); } }
+function onBoard(from) {
+  const s = Game.state;
+  if (s.trip && s.trip.paid != null && s.trip.last && Date.now() - s.trip.last > 15 * 60000) s.trip = null;
+  if (s.trip && s.trip.paid != null) return;
+  s.trip = { from, paid: 0 }; saveState();
+  toast(`<b>嗶！上車</b><span>${esc(from)} 上車，下車時自動扣款${s.money < 20 ? '（餘額不足，記得加值）' : ''}</span>`, s.money < 20 ? 'warn' : '');
+}
+function onAlight(here) {
+  const s = Game.state; if (!s.trip || s.trip.paid == null) return;
+  const total = Economy.fare(s.trip.from, here), fare = Math.max(0, total - s.trip.paid);
+  s.trip.paid += fare; s.trip.last = Date.now();
+  s.money -= fare; saveState(); updateHud();
+  if (total >= 65) Quests.secret('sec_maxfare');
+  toast(`<b>下車扣款 NT$ ${fare}</b><span>${esc(s.trip.from)} → ${esc(here)}${s.trip.paid > fare ? '（轉乘補差額）' : ''}　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
 }
 
 /* ── 標題畫面 ── */
@@ -270,7 +275,7 @@ function renderTitle() {
   $('#btnStart') && ($('#btnStart').onclick = go);
   $('#btnNew') && ($('#btnNew').onclick = () => {
     if (!confirm('重新開始會清除目前的進度與收集到的物品，確定嗎？')) return;
-    Game.state = newState(); MRT.closeAirport(); saveState(); go();
+    Game.state = newState(); MRT.closeAirport(); Daily.refresh(); saveState(); go();
   });
   $('#btnContinue') && ($('#btnContinue').onclick = () => { Sound.unlock(); goFullscreen(); enterGame(s.current); });
 }
@@ -299,7 +304,7 @@ function renderCharSelect() {
     // 每一位玩家都從南港展覽館出發
     const s = Game.state;
     MRT.closeAirport();
-    Object.assign(s, newState(), { char: pick, start: START_STATION, current: START_STATION, visited: { [START_STATION]: true }, trip: { from: START_STATION } });
+    Object.assign(s, newState(), { char: pick, start: START_STATION, current: START_STATION, visited: { [START_STATION]: true }, trip: null });
     saveState();
     enterGame(START_STATION);
   };
@@ -319,9 +324,9 @@ function ensureWorld() {
   World.init(sceneEl());
   World.bindJoystick($('#joystick'));
   World.onGate = onGate;
-  World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y);
+  World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); });
+  World.addTicker((dt, now) => { NPCManager.tick(dt, now); Crowd.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -377,6 +382,7 @@ function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = htm
 
 /* ── 車站控制：各月台兩側依 3 分鐘班距自動進車 ── */
 let ctl = null;
+let lastDaily = 0;
 function startStation(stationId, carry) {
   const id = newSession();
   clearInterval(Game.ctlTimer);
@@ -385,11 +391,14 @@ function startStation(stationId, carry) {
   World.onZone = () => tickStation();
   Xiuyu.arrive(stationId);
   NPCManager.enter(stationId, World.layout);
+  Crowd.spawn(World.layout);
   Pickups.spawn(stationId);
   Challenges.spawn(stationId);
   Secrets.spawn(stationId);
   Achievements.spawn(stationId);
   Life.spawn(stationId);
+  Daily.refresh();
+  Phone.deliverFollowups();
   arriveChecks(stationId);
   Sound.ambience(World.layout.allUnder ? 'underground' : 'elevated');
   Game.ctlTimer = setInterval(tickStation, 400);
@@ -483,6 +492,7 @@ function renderPanel(z, L) {
 async function trainCycle(k, side, dir, id) {
   const livery = Liveries.pick(dir.line, ctl.stationId);
   const tr = World.spawnTrain(k, side, dir.line, dir.travel, livery);
+  if (!Game.ride && World.zone().P === tr.P) Sound.trainArrive();   // 在月台上：聽到列車進站
   await World.trainArrive(tr);
   if (!alive(id)) return;
   Liveries.seen(livery);
@@ -512,6 +522,7 @@ async function dwell(tr, dir, id, ride) {
   const key = trackKey(tr.P.k, tr.side);
   Sound.doorOpen();
   await World.setDoors(tr, true);
+  Crowd.doors(tr.P.k, tr.side);
   if (!alive(id)) return;
   ctl.doors.set(tr, { n: ++doorSeq });
   doorInteractions();
@@ -549,8 +560,9 @@ async function dwell(tr, dir, id, ride) {
     const r = ride || { line: dir.line, terminal: dir.terminal, stops: dir.stops, idx: 0, from: ctl.stationId };
     return doRide(tr, r);
   }
-  if (ride) { Game.ride = null; }
+  if (ride) { onAlight(ctl.stationId); Game.ride = null; }   // 下車：扣款
   if (Passengers.train === tr) Passengers.clear();
+  if (!World.isInside(tr) && World.zone().P === tr.P) Sound.trainDepart();
   await World.trainDepart(tr);
   if (!alive(id)) return;
   ctl.busy.delete(key); ctl.chimed.delete(key);
@@ -563,6 +575,7 @@ function setLcd(head, stationId, line) {
 }
 async function doRide(tr, ride) {
   if (tr.livery) Liveries.rode(tr.livery);
+  onBoard(ride.idx === 0 ? ride.from : ride.stops[ride.idx - 1]);
   newSession(); clearInterval(Game.ctlTimer);
   Game.ride = ride; ride.moving = true;
   World.setInteractions([]);
@@ -778,7 +791,7 @@ function elevatorMenu(sp) {
 // 售票機：從這站到各大站的票價
 function fareTable(st) {
   const dests = ['台北車站', '西門', '市政府', '南港展覽館', '淡水', '動物園', '新店', '頂埔', '蘆洲', '大坪林'].filter(d => d !== st);
-  return `<table class="fares">${dests.map(d => `<tr><td>${esc(d)}</td><td>NT$ ${Economy.fare(st, d)}</td></tr>`).join('')}</table><small>依台北捷運計費規則估算。悠遊卡出站時扣款。</small>`;
+  return `<table class="fares">${dests.map(d => `<tr><td>${esc(d)}</td><td>NT$ ${Economy.fare(st, d)}</td></tr>`).join('')}</table><small>依台北捷運計費規則估算。上車時記錄、下車時自動扣款，轉乘只補差額。</small>`;
 }
 async function restroom() {
   const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
@@ -963,8 +976,8 @@ function openBag() {
   const tre = Object.keys(MAIN_STORY).filter(l => s.inv['treasure_' + l] > 0).length;
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
-    <h4 class="bag-h">物品</h4>
-    ${inv.length ? `<ul class="inv">${inv.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}${id === 'detector' ? ' <button class="btn small ghost eat" data-detect="1">使用</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : '<p class="empty-q">背包是空的。</p>'}
+    <div class="wallet"><span>黃金</span><b>🪙 ${s.gold || 0}</b><span>調查</span><b>🔍 ${Investigate.info().name}</b></div>
+    ${inv.length ? ITEM_CATS.map(([cat, name]) => { const list = inv.filter(([id]) => ITEMS[id] && itemCat(id) === cat); return list.length ? `<h4 class="bag-h">${name}</h4><ul class="inv">${list.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}${id === 'detector' ? ' <button class="btn small ghost eat" data-detect="1">使用</button>' : ''}${id === 'hint' ? ' <button class="btn small ghost eat" data-hint="1">使用</button>' : ''}${id === 'tracker' ? ' <button class="btn small ghost eat" data-track="1">使用</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : ''; }).join('') : '<h4 class="bag-h">物品</h4><p class="empty-q">背包是空的。</p>'}
     <h4 class="bag-h">換裝</h4>
     ${wardrobeHtml()}
     <h4 class="bag-h">路線收藏</h4>
@@ -989,6 +1002,8 @@ function openBag() {
   $('#bagBody').onclick = e => {
     if (e.target.closest('[data-photo]')) { $('#bag').hidden = true; return SideQuests.photo(); }
     if (e.target.closest('[data-detect]')) { $('#bag').hidden = true; return Gold.detect(); }
+    if (e.target.closest('[data-hint]')) { $('#bag').hidden = true; return Phone.useHint(); }
+    if (e.target.closest('[data-track]')) { $('#bag').hidden = true; return Phone.useTracker(); }
     const w = e.target.closest('[data-wear]'), f = e.target.closest('[data-eat]');
     if (w) { Sound.click(); putOn(w.dataset.wear); openBag(); }
     if (f) { Sound.click(); eat(f.dataset.eat); openBag(); }
@@ -1059,7 +1074,7 @@ async function teleport(id) {
   await sleep(450);
   World.loadStation(id);
   World.spawnInConcourse();
-  s.current = id; s.trip = { from: id }; saveState(); updateHud();
+  s.current = id; s.trip = null; saveState(); updateHud();
   startStation(id);
   fx.classList.add('out');
   await sleep(600);
@@ -1086,8 +1101,11 @@ function init() {
 
   $('#btnMap').onclick = openMap;
   $('#btnBag').onclick = openBag;
+  $('#btnPhone').onclick = () => Phone.open();
+  Phone.init();
   $('#btnRecord').onclick = () => Progress.open();
   $('#btnQuest').onclick = openQuests;
+  $('#viewBtn').onclick = () => { const n = World.cycleView(); toast(`<b>視角：${n}</b><span>拖曳畫面轉動、雙指或滾輪縮放；按 V 也可以切換</span>`); };
   $('#runBtn').onclick = () => { const on = !World.running; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
   $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').textContent = on ? '音效 開' : '音效 關'; };
   document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { $('#' + b.dataset.close).hidden = true; });

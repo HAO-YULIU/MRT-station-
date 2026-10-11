@@ -12,7 +12,9 @@ const World = (() => {
   const trains = new Set();   // 目前場上的列車
   let riding = null;          // 正在搭乘的列車
   const player = { x: 0, y: 0, z: 0, face: Math.PI, speed: 0, inputOn: true, auto: null, sitting: false };
-  const cam = { yaw: 0, pitch: .32, dist: 4.4, pos: new T.Vector3(0, 2.4, 6) };
+  const cam = { yaw: 0, pitch: .32, dist: 4.4, pos: new T.Vector3(0, 2.4, 6), mode: 0, lastDrag: 0, roomKey: '' };
+  // 視角：標準、遠景、近景、第一人稱、俯視
+  const VIEWS = [{ name: '標準', dist: 4.4, pitch: .32 }, { name: '遠景', dist: 7.5, pitch: .45 }, { name: '近景', dist: 2.2, pitch: .2 }, { name: '第一人稱', fp: true, pitch: .3 }, { name: '俯視', dist: 9, pitch: .85 }];
   let interactions = [];
   let last = 0, shake = 0, lastGateSide = 0;
   let onZoneChange = null, lastZoneKey = '';
@@ -63,10 +65,15 @@ const World = (() => {
         }));
         if (!hole) consider(0);
       }
+      // 房間（廁所、哺集乳室、站務室、便利商店）與門口
+      for (const r of layout.rooms || []) {
+        if (inR(null, r.x0 + .3, r.x1 - .3, r.z0 + .25, r.z1 - .25)) consider(0);
+        if (Math.abs(z - r.door.z) < r.door.w / 2 - .12 && Math.abs(x - r.door.wx) < .7) consider(0);
+      }
       // 閘門通道
       if (z >= layout.gateZ - .05 && z <= layout.gateZ + 1.25 && layout.gates.some(g => Math.abs(x - g) < .32)) consider(0);
       // 非付費區（扣掉售票機、詢問處）
-      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(S.SHOPS[layout.stationId] && x < U.x0 + 1.4 && z > U.z0 + 4.4 && z < U.z0 + 9.6)) consider(0);
+      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4)) consider(0);
       for (const P of layout.platforms) {
         // 月台（扣掉電扶梯、柱子、座椅）
         if (Math.abs(z - P.z) < S.PLAT_HALF && Math.abs(x - P.x) < S.LEN / 2 - .4) {
@@ -129,7 +136,11 @@ const World = (() => {
     if (tr) return { kind: 'train', train: tr, P: tr.P };
     if (!layout) return { kind: 'none' };
     for (const P of layout.platforms) if (Math.abs(player.y - P.y) < .3 && Math.abs(player.z - P.z) < 3.3 && Math.abs(player.x - P.x) < S.LEN / 2) return { kind: 'platform', P };
-    if (Math.abs(player.y) < .3) return { kind: player.z > layout.gateZ + .6 ? 'unpaid' : 'concourse' };
+    if (Math.abs(player.y) < .3) {
+      const kind = player.z > layout.gateZ + .6 ? 'unpaid' : 'concourse';
+      const room = (layout.rooms || []).find(r => player.x > Math.min(r.x0, r.x1) && player.x < Math.max(r.x0, r.x1) && player.z > r.z0 && player.z < r.z1 && Math.abs(player.x - r.door.wx) > .15);
+      return room ? { kind, room } : { kind };
+    }
     return { kind: 'ramp' };
   }
 
@@ -142,6 +153,7 @@ const World = (() => {
     window.addEventListener('keydown', e => {
       if (!container || e.target.closest('input, textarea')) return;
       if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+      if (e.code === 'KeyV') { cycleView(); e.preventDefault(); }
       // E 一律是互動；空白鍵／Enter 在按鈕上時保留給按鈕
       if (e.code === 'KeyE' || ((e.code === 'Space' || e.code === 'Enter') && !e.target.closest('button'))) {
         const it = currentInteraction(); if (it) { e.preventDefault(); it.run(); }
@@ -166,7 +178,8 @@ const World = (() => {
       p.x = e.clientX; p.y = e.clientY;
       if (pts.size >= 2) { if (pinch) zoomTo(pinch.dist * pinch.d / Math.max(20, spread())); return; }
       cam.yaw -= dx * .006;
-      cam.pitch = Math.min(.9, Math.max(.05, cam.pitch + dy * .004));
+      cam.pitch = Math.min(.9, Math.max(VIEWS[cam.mode].fp ? -.5 : .05, cam.pitch + dy * .004));
+      cam.lastDrag = performance.now();
     });
     const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
     container.addEventListener('pointerup', end); container.addEventListener('pointercancel', end);
@@ -270,9 +283,10 @@ const World = (() => {
     const z = zone();
     const key = z.kind + (z.P ? ':' + z.P.k : '') + (z.train ? ':t' : '');
     if (key !== lastZoneKey) { lastZoneKey = key; onZoneChange && onZoneChange(z); }
-    // 鏡頭
+    // 鏡頭：在手扶梯／樓梯、車廂、房間、和人說話時自動轉到好看的角度（玩家剛拖曳過就不自動）
+    autoCamera(z, dt);
     const inTrain = z.kind === 'train';
-    const dist = inTrain ? Math.min(cam.dist, 2.6) : cam.dist;
+    const dist = inTrain ? Math.min(cam.dist, 2.6) : z.room ? Math.min(cam.dist, 2.2) : cam.dist;
     const pitch = inTrain ? Math.min(cam.pitch, .12) : cam.pitch;
     const tx = player.x, ty = player.y + 1.5, tz = player.z;
     let px = tx + Math.sin(cam.yaw) * Math.cos(pitch) * dist;
@@ -283,6 +297,9 @@ const World = (() => {
       px = Math.min(ctx + 30, Math.max(ctx - 30, px)); pz = Math.min(ctz + 1.3, Math.max(ctz - 1.3, pz)); py = Math.min(player.y + 2.15, py);
     } else if (z.kind === 'platform') {
       pz = Math.min(z.P.z + 6.5, Math.max(z.P.z - 6.5, pz)); py = Math.min(player.y + (z.P.under ? 3.2 : 3.6), py);
+    } else if (z.room) {   // 在房間裡：鏡頭拉近、不穿牆
+      const r = z.room;
+      px = Math.min(r.x1 - .4, Math.max(r.x0 + .4, px)); pz = Math.min(r.z1 - .3, Math.max(r.z0 + .3, pz)); py = Math.min(2.55, py);
     } else if (z.kind === 'unpaid') {
       const U = layout.unpaid;
       px = Math.min(U.x1 - .5, Math.max(U.x0 + .5, px)); pz = Math.min(U.z1 - .5, Math.max(layout.gateZ + .6, pz)); py = Math.min(3.9, py);
@@ -294,7 +311,14 @@ const World = (() => {
     cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * k; cam.pos.z += (pz - cam.pos.z) * k;
     camera.position.copy(cam.pos);
     if (shake) camera.position.y += Math.sin(now / 45) * .006 * shake + Math.sin(now / 97) * .008 * shake;
-    camera.lookAt(tx, ty, tz);
+    const fp = VIEWS[cam.mode].fp && !player.sitting;
+    if (rig) rig.root.visible = !fp;
+    if (fp) {   // 第一人稱：鏡頭在眼睛的位置，往前看
+      const ey = player.y + (charId === 'aiyun' ? 1.52 : 1.62), fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
+      cam.pos.set(player.x + fx * .12, ey, player.z + fz * .12);
+      camera.position.copy(cam.pos);
+      camera.lookAt(player.x + fx * 3, ey - (cam.pitch - .3) * 3, player.z + fz * 3);
+    } else camera.lookAt(tx, ty, tz);
     for (const fn of tickers) fn(dt, now);
     updateActionBtn();
     renderer.render(scene, camera);
@@ -304,6 +328,51 @@ const World = (() => {
     if (h != null) { player.x = nx; player.z = nz; player.y = h; return; }
     h = groundAt(nx, player.z, player.y); if (h != null) { player.x = nx; player.y = h; return; }
     h = groundAt(player.x, nz, player.y); if (h != null) { player.z = nz; player.y = h; }
+  }
+  function autoCamera(z, dt) {
+    if (player.auto) return;
+    const free = performance.now() - cam.lastDrag > 1500;
+    let yaw = null, pitch = null, rate = 2.2;
+    const behind = face => face + Math.PI;   // 鏡頭在玩家背後
+    const talk = typeof Dialog !== 'undefined' && Dialog.with && Dialog.with.rig && Dialog.with.x != null ? Dialog.with : null;
+    if (talk) {   // 說話：從玩家肩膀後面看著對方
+      yaw = Math.atan2(-(talk.x - player.x), -(talk.z - player.z)) + .35; pitch = .2; rate = 3;
+    } else if (z.kind === 'ramp' && player.speed > .1) {   // 手扶梯、樓梯：轉到行進方向，下樓時從高一點往下看
+      const goingDown = Math.sin(player.face) * (rampSlope(player.x, player.z) || 0) < 0;
+      yaw = behind(Math.abs(Math.sin(player.face)) > .5 ? Math.sign(Math.sin(player.face)) * Math.PI / 2 : player.face); pitch = goingDown ? .5 : .14; rate = 3;
+    } else if (z.kind === 'ramp') {   // 站在電扶梯上不動：跟著電扶梯的方向
+      const cv = conveyorAt(player.x, player.z);
+      if (cv) { yaw = behind(Math.sign(cv) * Math.PI / 2); pitch = (rampSlope(player.x, player.z) || 0) * cv < 0 ? .5 : .14; }
+    } else if (z.kind === 'train' && !free) {
+      // 剛拖過：不動
+    } else if (z.kind === 'train') {   // 車廂：沿著車廂長邊看
+      const s = Math.sin(cam.yaw) >= 0 ? 1 : -1; yaw = s * Math.PI / 2; pitch = Math.min(cam.pitch, .12); rate = 1.5;
+    } else if (z.room) {   // 剛走進房間：轉向房間裡面
+      const key = z.room.kind;
+      if (cam.roomKey !== key) { cam.roomKey = key; cam.roomT = 1.4; }
+      if (cam.roomT > 0) { cam.roomT -= dt; const dir = z.room.door.wx === z.room.x0 ? 1 : -1; yaw = behind(dir * Math.PI / 2); }
+    }
+    if (!z.room) cam.roomKey = '';
+    if (!free && !talk) return;
+    if (yaw != null) cam.yaw = lerpAngle(cam.yaw, yaw, Math.min(1, dt * rate));
+    if (pitch != null && !VIEWS[cam.mode].fp) cam.pitch += (pitch - cam.pitch) * Math.min(1, dt * rate);
+  }
+  // 電扶梯斜率：往 +x 走時高度增加為正
+  function rampSlope(x, z) {
+    if (!layout) return 0;
+    for (const P of layout.platforms) for (const r of P.ramps) {
+      if (x < Math.min(r.xa, r.xb) - .1 || x > Math.max(r.xa, r.xb) + .1 || Math.abs(z - r.z) > 1.9) continue;
+      return Math.sign((r.yb - r.ya) / (r.xb - r.xa));
+    }
+    return 0;
+  }
+  function cycleView(i) {
+    cam.mode = i != null ? i : (cam.mode + 1) % VIEWS.length;
+    const v = VIEWS[cam.mode];
+    if (v.dist) cam.dist = v.dist;
+    cam.pitch = v.pitch;
+    const b = document.getElementById('viewBtn'); if (b) b.textContent = '視角：' + v.name;
+    return v.name;
   }
   function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
   function tween(ms, fn, ease = t => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)) {
@@ -359,6 +428,8 @@ const World = (() => {
     set onGate(fn) { gateCheck = fn; },
     set blocker(fn) { blocked = fn; },
     setSpeedMul(v) { speedMul = v; },
+    cycleView,
+    get view() { return VIEWS[cam.mode].name; },
     get scene() { return scene; },
     get env() { return env; },
     get camera() { return camera; },
@@ -375,6 +446,8 @@ const World = (() => {
     onRecenter(fn) { recenterHooks.push(fn); },
     get running() { return runToggle; },
     groundAt: (x, z, y) => groundAt(x, z, y),
+    // 拍照：把目前的畫面縮小成一張圖
+    snap: (w = 200) => { renderer.render(scene, camera); const c = document.createElement('canvas'); c.width = w; c.height = Math.round(w * renderer.domElement.height / renderer.domElement.width); c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', .6); },
     setCharacter(id, wear) {
       const key = id + JSON.stringify(wear ? Outfits.wear(id, wear) : Outfits.wear(id));
       if (rig && rig.key === key) return;
