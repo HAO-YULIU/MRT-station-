@@ -24,3 +24,18 @@
 
 檔名格式看起來來自 Pixabay（作者—標題—編號），公開發布前請再確認各檔案的授權條款。
 已轉成單聲道、統一音量，循環的檔案頭尾做了交叉淡入淡出。
+
+## 第二批錄音（使用者提供）
+
+| 檔名 | 用途 | 原始檔 |
+|---|---|---|
+| `arrive2.mp3` | 另一種列車進站聲（和 arrive 輪流） | spinopel — a-subway-train-approaching-a-station-456314 |
+| `depart2.mp3` | 另一種列車離站聲（和 depart 輪流） | spinopel — a-subway-train-leaving-a-station-456315 |
+| `steps.mp3` | 腳步聲（程式切成一步一步播放） | freesound_community — concrete-footsteps-1-6265 |
+| `crickets.mp3` | 晚上 19:00–05:00 在高架月台的蟲鳴 | freesound_community — night-cricket-ambience-22484 |
+| `fog.mp3` | 迷霧之城氛圍音 | universfield — horror-background-atmosphere-03-166106 |
+| `ghost.mp3` | 鬼站配樂 | dark_ns — darkshadow-sow-215388 |
+| `chase.mp3` | 迷霧裡被追的時候 | u_bkwf1ft7np — run-faster-421513 |
+| `died.mp3` | 迷霧裡倒下時的「You died」 | magiaz — man_saying_you_died-396154 |
+| `jazz.mp3` | 標題畫面音樂 | kabbalistic_village — deep-in-manhattan-jazzy-chill-vibes-141300 |
+| `shop.mp3` | 便利商店裡的音樂 | bransboynd — deep-tech-house-399974 |

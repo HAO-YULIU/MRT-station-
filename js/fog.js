@@ -252,7 +252,7 @@ const FogCity = (() => {
       return;
     }
     r.dead = true; r.deaths++; r.hp = 0; saveState();
-    Sound.fog('die');
+    Sound.fog('die'); setTimeout(() => Sound.died(), 700);   // 「You died」
     for (const c of chasers) c.sleep = 1e9;
     World.setInput(false); Dialog.close();
     if (K && K.onDeath) K.onDeath(why);
