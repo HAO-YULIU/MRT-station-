@@ -727,6 +727,9 @@ const Station3D = (() => {
       // 端牆、天花板
       if (P.under) {
         for (const ex of [-1, 1]) box(.3, 3.4, 6.2, M('#ffffff', { map: tiled(TEX.wall, 5, 3) }), ex * (LEN / 2 + .15), 1.7, 0, pg);
+        // 月台端牆往下延伸到道床、隧道底鋪滿整個寬度：從軌道上方往月台外看，不會看到地板下面的空洞
+        for (const ex of [-1, 1]) box(.3, 1.25, 6.2, M('#3a3b3c', { map: tiled(TEX.concrete, 5, 1), r: .95 }), ex * (LEN / 2 + .15), -.62, 0, pg);
+        { const base = plane(LEN + 400, 14, M('#2a2928', { r: 1 }), pg); base.rotation.x = -Math.PI / 2; base.position.set(0, -1.2, 0); }
         const ceilHoles = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return { x0: a - .2, x1: b + .2, z0: -1.9, z1: 1.9 }; });
         slab(rectsMinus({ x0: -LEN / 2 - 150, x1: LEN / 2 + 150, z0: -7, z1: 7 }, ceilHoles), 3.4, M('#ffffff', { map: TEX.ceil, r: .7, m: .15 }), pg, .2, false);
         for (const z of [-4.6, -2, 2, 4.6]) for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) if (!(Math.abs(z) < 2.1 && P.ramps.some(r => (x + P.x - r.xa) * (x + P.x - r.xb) < 0))) box(2.2, .04, .14, lightM, x, 3.37, z, pg);
