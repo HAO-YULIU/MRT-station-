@@ -290,7 +290,7 @@ const Phone = (() => {
   Progress.onTalk = id => {
     const r = _talk(id), n = NPCS[id];
     if (n && Game.state.inv.recorder > 0) {
-      const f = Game.state.friends[id] || 0, pool = (f >= 50 && n.knows ? n.knows.map(k => k.text) : []).concat(n.lines || []);
+      const f = Game.state.friends[id] || 0, pool = (f >= 50 && n.knows ? n.knows.map(k => k.text) : []).concat(n.lines || []).filter(DayCalm.ok);
       if (pool.length) Phone.note(id, pool[(Math.random() * pool.length) | 0]);
     }
     return r;

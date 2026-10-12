@@ -588,7 +588,7 @@ const Dialog = (() => {
     $('#dialog').onclick = e => { const b = e.target.closest('[data-i]'); if (b) { Sound.click(); buttons[+b.dataset.i].run(); } };
     World.setInput(false);
   }
-  function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
+  function pick(arr) { arr = typeof DayCalm !== 'undefined' ? DayCalm.clean(arr) : arr; return arr[(Math.random() * arr.length) | 0]; }   // 白天不聊迷霧
 
   function open(npc) {
     if (npc.id === 'xiuyu') return xiuyu(npc);
@@ -1366,11 +1366,11 @@ const TRAIN_TALK = {
 };
 const Passengers = (() => {
   const T = THREE, S = Station3D;
-  let list = [], drop = null, tr = null;
+  let list = [], drop = null, tr = null, lastTx = null;
   const CAR_TYPES = [['student', 'student', 'casual'], ['office', 'elder', 'office'], ['tourist', 'casual', 'storyteller']];
   function board(train) {
     if (tr === train && list.length) return;
-    clear(); tr = train;
+    clear(); tr = train; lastTx = null;
     const P = train.P, tx = P.x + train.x, tz = P.z + train.side * S.TRACK;
     const hour = TaipeiTime.now().hour, busy = (hour >= 7 && hour < 9) || (hour >= 17 && hour < 20);
     let r = (hour * 97 + P.x * 13 + 7) % 233280;
@@ -1425,7 +1425,11 @@ const Passengers = (() => {
     for (const q of Quests.emit({ kind: 'find', item: d.item, station: null })) toast(`<b>${QUESTS[q.id].title}</b><span>✓ ${q.text}</span>`);
   }
   function clear() { for (const p of list) World.scene.remove(p.rig.root); list = []; if (drop) World.scene.remove(drop.mesh); drop = null; tr = null; }
-  function tick(dt, now) { for (const p of list) { if (Dialog.with === p && !p.sitting) p.rig.root.rotation.y = Math.atan2(World.player.x - p.x, World.player.z - p.z); p.rig.update(dt, 0, now / 1000); } }
+  function tick(dt, now) {
+    // 乘客跟著列車移動（列車進站時人就已經在車上，不會關門後才突然冒出來）
+    if (tr) { const tx = tr.P.x + tr.x; if (lastTx != null && tx !== lastTx) { const d = tx - lastTx; for (const p of list) { p.x += d; p.rig.root.position.x = p.x; } if (drop) { drop.x += d; drop.mesh.position.x = drop.x; } } lastTx = tx; }
+    for (const p of list) { if (Dialog.with === p && !p.sitting) p.rig.root.rotation.y = Math.atan2(World.player.x - p.x, World.player.z - p.z); p.rig.update(dt, 0, now / 1000); }
+  }
   function blocks(x, z, y) { return list.some(p => Math.abs(p.y - y) < .6 && Math.hypot(p.x - x, p.z - z) < .45); }
   function nearest(pp, r = 1.5) { let b = null, bd = r; for (const p of list) { const d = Math.hypot(p.x - pp.x, p.z - pp.z); if (Math.abs(p.y - pp.y) < .6 && d < bd) { bd = d; b = p; } } return b; }
   function dropNear(pp) { return drop && Math.abs(drop.y - pp.y) < .6 && Math.hypot(drop.x - pp.x, drop.z - pp.z) < 1.2 ? drop : null; }
@@ -1440,6 +1444,7 @@ const Passengers = (() => {
   }
   // 到站後世界重新對齊時，乘客跟著列車移動
   function shift(W) {
+    lastTx = null;   // 世界重新對齊：下一幀重新記列車位置
     for (const p of list) { p.x -= W.x; p.y -= W.y; p.z -= W.z; p.rig.root.position.set(p.x, p.y, p.z); }
     if (drop) { drop.x -= W.x; drop.y -= W.y; drop.z -= W.z; drop.mesh.position.set(drop.x, drop.y + .2, drop.z); }
   }

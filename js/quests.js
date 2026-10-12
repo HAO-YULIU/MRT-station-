@@ -81,13 +81,13 @@ const QUESTS = {
 
   /* ── 支線 ── */
   wallet: {
-    type: 'side', title: '遺失的皮夾', giver: 'lin',
+    type: 'side', title: '遺失的皮夾', giver: 'linsir',   // 'lin' 被 daily.js 的林姐用掉了，林先生是 'linsir'
     desc: '上班族林先生早上趕車時，皮夾掉在車上了。',
     steps: [
       { text: '到台北車站的失物招領處問問', goal: { kind: 'talk', npc: 'meiling' }, gain: { wallet: 1 } },
-      { text: '把皮夾還給林先生', goal: { kind: 'give', npc: 'lin', item: 'wallet' } },
+      { text: '把皮夾還給台北車站的林先生（早上 7–10 點、傍晚 5–9 點會經過大廳）', goal: { kind: 'give', npc: 'linsir', item: 'wallet' } },
     ],
-    reward: { money: 200, xp: 60, friend: { lin: 15 } },
+    reward: { money: 200, xp: 60, friend: { linsir: 15 } },
   },
   cat: {
     type: 'side', title: '走失的麻糬', giver: 'xiaoyu',
@@ -351,7 +351,7 @@ const QUESTS = {
     desc: '有人想送花給在捷運上遇見的人，卻不敢開口。幫他把花送到秀蔅手上——她說她認得那個人。',
     steps: [
       { text: '在中山花店買一小束花', goal: { kind: 'buy', item: 'flower' } },
-      { text: '把花交給秀蔅', goal: { kind: 'give', npc: 'xiuyu', item: 'flower' } },
+      { text: '把花交給秀蔅（找不到她的話，她會在小碧潭站等你）', goal: { kind: 'give', npc: 'xiuyu', item: 'flower' } },
     ],
     reward: { money: 300, xp: 200, items: { chocolate: 1 }, friend: { xiuyu: 15 } },
   },
@@ -425,8 +425,8 @@ const SECRET_QUESTS = {
   },
   sec_seat: {
     title: '老位子',
-    desc: '你好像也有了自己習慣坐的位置。台北車站的玉蘭阿姨每天都坐同一張長椅，她一定懂。',
-    steps: [{ text: '去找每天坐在長椅上的玉蘭阿姨', goal: { kind: 'talk', npc: 'yulan' } }],
+    desc: '你好像也有了自己習慣坐的位置。中山站的玉蘭阿嬤每天都坐同一張長椅，她一定懂。',
+    steps: [{ text: '到中山站找每天坐在月台長椅上的玉蘭阿嬤（早上 8 點到晚上 7 點）', goal: { kind: 'talk', npc: 'yulan' } }],
     reward: { money: 150, xp: 180, friend: { yulan: 20 } },
   },
   sec_midnight: {
@@ -438,7 +438,7 @@ const SECRET_QUESTS = {
   sec_friend: {
     title: '知心',
     desc: '有人把你當成真正的朋友了。秀蔅好像有話想跟你說。',
-    steps: [{ text: '去找秀蔅', goal: { kind: 'talk', npc: 'xiuyu' } }],
+    steps: [{ text: '去找秀蔅（找不到她的話，她會在小碧潭站等你）', goal: { kind: 'talk', npc: 'xiuyu' } }],
     reward: { money: 200, xp: 300, friend: { xiuyu: 20 } },
   },
 };

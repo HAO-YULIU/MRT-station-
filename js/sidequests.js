@@ -294,7 +294,7 @@ const SIDE2 = {
     title: '錯誤收件人', trigger: { kind: 'pickup', item: 'parcel', station: '南京復興' },
     desc: '撿到一個包裹，收件人只寫「林先生（北投）」。認識的林先生有好幾位……',
     steps: [{ text: '判斷真正的收件人（可以先問美玲）', goal: { kind: 'decide', npc: 'meiling' } }],
-    clues: [{ id: 'lin', text: '上班族林先生說他住在板橋，不是北投', goal: { kind: 'talk', npc: 'lin' } }],
+    clues: [{ id: 'lin', text: '上班族林先生說他住在板橋，不是北投', goal: { kind: 'talk', npc: 'linsir' } }],   // 上班族林先生（'lin' 是委託所的林姐）
     decide: { npc: 'meiling', prompt: '包裹應該寄給誰？', options: [
       { label: '北投的退休司機林伯', outcome: 'perfect' },
       { label: '上班族林先生', outcome: 'wrong' },
@@ -536,7 +536,7 @@ const SIDE2 = {
     desc: '一張 1987 年的合照：兩個少女在圓山站前。背面寫著「秀……與惠」。另一個人是誰？',
     steps: [
       { text: '問圓山的林奶奶認不認得照片', goal: { kind: 'talk', npc: 'linnai' } },
-      { text: '把照片拿給秀蔅看', goal: { kind: 'give', npc: 'xiuyu', item: 'oldphoto2' } },
+      { text: '把照片拿給秀蔅看（找不到她的話，她會在小碧潭站等你）', goal: { kind: 'give', npc: 'xiuyu', item: 'oldphoto2' } },
     ],
     outcomes: { normal: { name: '特殊結局', text: '林奶奶說：「這是我，林惠。另一個是我最好的朋友，叫秀蔅……她在 1987 年的末班車上不見了。」秀蔅看著照片，很久很久，才說：「……原來我有朋友。」', reward: { money: 150, xp: 300, friend: { xiuyu: 30, linnai: 20 } } } },
   },
@@ -726,7 +726,7 @@ const SIDE2 = {
   sq_hiddenmsg: {
     title: '底片上的字', trigger: { kind: 'tool', station: '古亭', spot: 'notice' },
     desc: '你用相機拍古亭站的告示牌，洗出來的照片上多了一行字：「去行天宮，找沒有影子的人。」',
-    steps: [{ text: '到行天宮站', goal: { kind: 'reach', station: '行天宮' } }, { text: '告訴秀蔅你看到了什麼', goal: { kind: 'talk', npc: 'xiuyu' } }],
+    steps: [{ text: '到行天宮站', goal: { kind: 'reach', station: '行天宮' } }, { text: '告訴秀蔅你看到了什麼（找不到她的話，她會在小碧潭站等你）', goal: { kind: 'talk', npc: 'xiuyu' } }],
     outcomes: { normal: { name: '隱藏資訊', text: '秀蔅看著照片：「你的相機看得到霧。好好收著它。」', reward: { money: 150, xp: 250, friend: { xiuyu: 15 } } } },
   },
 };
@@ -766,6 +766,12 @@ const SideQuests = (() => {
   const trig = kind => Object.keys(QUESTS).filter(id => QUESTS[id].trigger && QUESTS[id].trigger.kind === kind);
   // 到站：聽見對話、廣播、手機訊息、偶遇（每次到站最多一則）
   function onArrive(stationId) {
+    // 補救：支線滿了時撿到的東西（紙條、撿到就觸發的物品），或錯過的後續委託——有空位後再問一次（一天一次）
+    const pending = trig('pickup').filter(id => S().inv[QUESTS[id].trigger.item] > 0)
+      .concat(S().inv.note1 > 0 ? ['notes'] : [])
+      .concat(trig('after').filter(id => Quests.isDone(QUESTS[id].trigger.after)))
+      .find(id => offerable(id) && Quests.sideCount() < SIDE_LIMIT);
+    if (pending) { setTimeout(() => { if (!Dialog.with && ctl && ctl.stationId === stationId) offer(pending); }, 2500); return; }
     for (const kind of ['pa', 'overhear', 'time', 'phone']) for (const id of trig(kind)) {
       const t = QUESTS[id].trigger;
       if (t.station && t.station !== stationId) continue;

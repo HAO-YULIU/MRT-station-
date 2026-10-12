@@ -519,7 +519,7 @@ function startStation(stationId, carry) {
     FogCity.teardown(); World.setMood(null); World.setPlayerLight(0);
     Xiuyu.arrive(stationId);
     NPCManager.enter(stationId, World.layout);
-    Crowd.spawn(World.layout);
+    Crowd.spawn(World.layout, carry && carry.key ? +carry.key.split(':')[0] : null);   // 搭車到站：抵達的月台一開始不放人
     Pickups.spawn(stationId);
     Challenges.spawn(stationId);
     Secrets.spawn(stationId);
@@ -649,6 +649,9 @@ function renderPanel(z, L) {
 async function trainCycle(k, side, dir, id) {
   const livery = Liveries.pick(dir.line, ctl.stationId);
   const tr = World.spawnTrain(k, side, dir.line, dir.travel, livery);
+  // 玩家在這個月台（或正在搭電扶梯下來）：列車進站時車上就已經有乘客
+  const z0 = World.zone();
+  if (!Game.ride && (z0.P === tr.P || z0.kind === 'ramp') && (!Passengers.train || !World.trains.has(Passengers.train))) Passengers.board(tr);
   if (!Game.ride && World.zone().P === tr.P) Sound.trainArrive();   // 在月台上：聽到列車進站
   await World.trainArrive(tr);
   if (!alive(id)) return;
@@ -722,9 +725,9 @@ async function dwell(tr, dir, id, ride) {
     return doRide(tr, r);
   }
   if (ride && Game.ride === ride) { onAlight(ctl.stationId); Game.ride = null; }   // 下車：扣款（已經轉搭別班車就不算）
-  if (Passengers.train === tr) Passengers.clear();
   if (!World.isInside(tr) && World.zone().P === tr.P) Sound.trainDepart();
   await World.trainDepart(tr);
+  if (Passengers.train === tr) Passengers.clear();   // 列車開走、看不到了才清掉乘客
   if (!alive(id)) return;
   ctl.busy.delete(key); ctl.chimed.delete(key);
 }
@@ -854,13 +857,14 @@ const spotInteraction = {
       if (K && K.onSpot && K.onSpot(sp)) return;
       if (['shop', 'cafe', 'vending', 'breakfast', 'stall'].includes(sp.kind) && FogCity.cashBlocked(sp.kind)) return;
     }
+    if (sp.kind === 'office' && st === '小南門' && TaipeiTime.now().hour >= 21) Quests.secret('sec_room');   // 晚上那扇門是開著的
+    // 先送出「查看」事件，再開設施選單（每日委託「檢查售票機」「確認電梯」等才完成得了）
+    const done = Quests.emit({ kind: 'inspect', spot: sp.kind, station: st });
+    for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
     if (sp.kind === 'elevator') return elevatorMenu(sp);
     if (sp.kind === 'ticket') return Dialog.info('售票機・票價表', fareTable(st));
     if (sp.kind === 'toilet') return restroom();
     if (sp.kind === 'shop') return shopMenu(st);
-    if (sp.kind === 'office' && st === '小南門' && TaipeiTime.now().hour >= 21) Quests.secret('sec_room');   // 晚上那扇門是開著的
-    const done = Quests.emit({ kind: 'inspect', spot: sp.kind, station: st });
-    for (const d of done) toast(`<b>${QUESTS[d.id].title}</b><span>✓ ${d.text}</span>`);
     if (typeof Achievements !== 'undefined') Achievements.onInspect(sp, st);
     if (SideQuests.onInspect(sp.kind, st)) return;   // 公告欄、路線圖上的委託
     if (Achievements.spot(sp)) return;              // 紀念章、舊地圖、磁磚、早餐攤

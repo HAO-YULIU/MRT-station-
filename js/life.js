@@ -176,8 +176,8 @@ const Life = (() => {
   const AD_TEXT = ['捐血中心就在車站出口旁，捐一袋血，救一條命。', '淡水夕照攝影展，在淡水站附近的藝文中心展出。', '搭電扶梯請緊握扶手，不要在電扶梯上行走。', '台北城市散步：每週末都有免費的導覽，從大稻埕走到艋舺。', '海報上只有一團白霧，和一行小字：「你看見了嗎？」右下角印著一頂紅色的貝雷帽。', '夜市小吃節開跑！集滿五個攤位的章，可以換一杯青草茶。', '請勿在月台上奔跑。（海報上的小人跑得很開心。）'];
   function lookAd(a) {
     const s = S(); s.col.posters = s.col.posters || {}; const first = !s.col.posters[a.ad]; s.col.posters[a.ad] = true; saveState();
-    const ad = Station3D.ADS[a.ad];
-    Dialog.info(`廣告：${ad.zh}`, `${AD_TEXT[a.ad] || ''}${first ? `<br><small>（海報圖鑑：${Object.keys(s.col.posters).length} / ${Station3D.ADS.length}）</small>` : ''}`);
+    const ad = DayCalm.ad(Station3D.ADS[a.ad]);
+    Dialog.info(`廣告：${ad.zh}`, `${DayCalm.adText(AD_TEXT[a.ad] || '')}${first ? `<br><small>（海報圖鑑：${Object.keys(s.col.posters).length} / ${Station3D.ADS.length}）</small>` : ''}`);
     if (Object.keys(s.col.posters).length >= Station3D.ADS.length) Achievements.unlock('a_posters');
   }
   // 路線指南
