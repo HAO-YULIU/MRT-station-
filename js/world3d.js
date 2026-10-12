@@ -245,7 +245,7 @@ const World = (() => {
     const el = now - perf.t0; if (el < 2000) return;
     perf.fps = perf.n * 1000 / el; perf.t0 = now; perf.n = 0;
     if (quality !== 'auto') return;
-    const cap = capFor('auto'), min = coarse ? .6 : .75;
+    const cap = capFor('auto'), min = .75;   // 解析度太低時細線會閃，最低 .75
     if (perf.fps < 40 && pr > min + .01) { setPR(Math.max(min, pr - .15)); perf.changed = now; }
     else if (perf.fps > 57 && pr < cap - .01 && now - perf.changed > 8000) { setPR(Math.min(cap, pr + .1)); perf.changed = now; }
   }
@@ -616,8 +616,8 @@ const World = (() => {
   return {
     init(el) {
       container = el;
-      // 高解析度手機螢幕本身就很細，不開反鋸齒省下很多效能
-      renderer = new T.WebGLRenderer({ antialias: !(coarse && DPR >= 2), powerPreference: 'high-performance' });
+      // 一定開反鋸齒：手機的 GPU 做多重取樣很便宜；關掉的話手扶梯階梯、扶手、燈條這些細東西一移動就會閃
+      renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
       renderer.setPixelRatio(pr);
       renderer.outputColorSpace = T.SRGBColorSpace;
       renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -625,7 +625,7 @@ const World = (() => {
       renderer.domElement.className = 'world-canvas';
       el.appendChild(renderer.domElement);
       scene = new T.Scene();
-      camera = new T.PerspectiveCamera(55, 1, .1, 700);
+      camera = new T.PerspectiveCamera(55, 1, .2, 700);   // 近平面 .2：深度精度加倍，手機上共面的東西比較不會閃
       hemi = new T.HemisphereLight('#ffffff', '#8a8c90', 1.7); scene.add(hemi);
       sun = new T.DirectionalLight('#fff4e0', 1); sun.position.set(20, 40, 25); scene.add(sun);
       env = new T.Group(); scene.add(env);

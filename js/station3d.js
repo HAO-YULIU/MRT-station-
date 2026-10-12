@@ -229,7 +229,7 @@ const Station3D = (() => {
     if (!o.map && !o.em) { const k = JSON.stringify([color, o]); if (!matCache.has(k)) matCache.set(k, M0(color, o)); return matCache.get(k); }
     return M0(color, o);
   };
-  const M0 = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: o.r ?? .7, metalness: o.m ?? 0, map: o.map || null, transparent: !!o.t, opacity: o.o ?? 1, side: o.side || T.FrontSide, emissive: o.e || '#000', emissiveIntensity: o.ei ?? 1, emissiveMap: o.em || null, depthWrite: o.dw ?? true });
+  const M0 = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: o.r ?? .7, metalness: o.m ?? 0, map: o.map || null, transparent: !!o.t, opacity: o.o ?? 1, side: o.side || T.FrontSide, emissive: o.e || '#000', emissiveIntensity: o.ei ?? 1, emissiveMap: o.em || null, depthWrite: o.dw ?? true, polygonOffset: !!o.po, polygonOffsetFactor: o.po ? -2 : 0, polygonOffsetUnits: o.po ? -4 : 0 });   // po：薄薄貼在別的面上的東西，深度往前拉，手機上不會閃
   function box(w, h, d, mat, x, y, z, parent) { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); parent && parent.add(m); return m; }
   // 貼在地上的標記：用 polygonOffset 拉開深度，避免和地板互相閃爍
   // 地面標記放在透明佇列（一定畫在地板之後），不寫深度，加 polygonOffset：手機上也不會和地板互相閃爍
@@ -237,11 +237,11 @@ const Station3D = (() => {
   function plane(w, h, mat, parent) { const m = new T.Mesh(new T.PlaneGeometry(w, h), mat); parent && parent.add(m); return m; }
   // 兩面都看得到的看板
   function sign(tex, w, h, x, y, z, parent, rotY = 0) {
-    const mat = new T.MeshBasicMaterial({ map: tex });
+    const mat = new T.MeshBasicMaterial({ map: tex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });   // 看板面拉到外框前面，遠看不會跟外框互相閃
     const g = new T.Group(); g.position.set(x, y, z); g.rotation.y = rotY;
     box(w + .06, h + .06, .04, M('#2a2e33'), 0, 0, 0, g);
-    const front = plane(w, h, mat, g); front.position.z = .025;
-    const back = plane(w, h, mat, g); back.position.z = -.025; back.rotation.y = Math.PI;
+    const front = plane(w, h, mat, g); front.position.z = .035;
+    const back = plane(w, h, mat, g); back.position.z = -.035; back.rotation.y = Math.PI;
     parent.add(g);
     return g;
   }
@@ -707,7 +707,7 @@ const Station3D = (() => {
         for (let i = 0; i < edges.length; i += 2) box(edges[i + 1] - edges[i], psdH, .04, glass, (edges[i] + edges[i + 1]) / 2, psdH / 2, s * PSD, pg);
         if (fullPSD) {
           box(LEN, .38, .3, M('#30363c'), 0, psdH + .19, s * PSD, pg);
-          box(LEN, .06, .31, M(Lc, { e: Lc, ei: .25 }), 0, psdH + .03, s * PSD, pg);
+          box(LEN, .06, .36, M(Lc, { e: Lc, ei: .25, po: 1 }), 0, psdH + .05, s * PSD, pg);   // 路線色飾帶：離橫樑底 2 公分、前後各凸出 3 公分（不跟橫樑共面）
         } else box(LEN, .06, .14, M(Lc), 0, psdH + .03, s * PSD, pg);
         // 方向指標（掛在月台兩側上方）
         const dirs = P.sides[s];
@@ -739,7 +739,7 @@ const Station3D = (() => {
         { const base = plane(LEN + 400, 14, M('#2a2928', { r: 1 }), pg); base.rotation.x = -Math.PI / 2; base.position.set(0, -1.2, 0); }
         const ceilHoles = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return { x0: a - .2, x1: b + .2, z0: -1.9, z1: 1.9 }; });
         slab(rectsMinus({ x0: -LEN / 2 - 150, x1: LEN / 2 + 150, z0: -7, z1: 7 }, ceilHoles), PH, M('#ffffff', { map: TEX.ceil, r: .7, m: .15 }), pg, .2, false);
-        for (const z of [-4.6, -2, 2, 4.6]) for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) if (!(Math.abs(z) < 2.1 && P.ramps.some(r => (x + P.x - r.xa) * (x + P.x - r.xb) < 0))) box(2.2, .04, .14, lightM, x, PH - .03, z, pg);
+        for (const z of [-4.6, -2, 2, 4.6]) for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) if (!(Math.abs(z) < 2.1 && P.ramps.some(r => (x + P.x - r.xa) * (x + P.x - r.xb) < 0))) box(2.2, .04, .14, lightM, x, PH - .005, z, pg);   // 燈條嵌進天花板一點，不留 1 公分的縫
       } else {
         box(LEN + 4, .18, 14.5, M(night ? '#2a2f35' : '#5b6168'), 0, PHE, 0, pg);
         for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) box(2.2, .04, .14, M('#ffffff', { e: '#fff6e0', ei: night ? 1.4 : .6 }), x, PHE - .1, 0, pg);
@@ -826,7 +826,7 @@ const Station3D = (() => {
     box(C.x1 - C.x0, .16, .07, skirt, (C.x0 + C.x1) / 2, .08, C.z0 + .035, g);   // 比護牆板凸出一點，兩個面不重疊
     for (let x = C.x0 + 3; x < C.x1 - 2; x += 6) for (let z = C.z0 + 3; z < L.unpaid.z1 - 1; z += 5) {
       if (ceilHoles.some(h => x > h.x0 - 2.6 && x < h.x1 + 2.6 && z > h.z0 - .4 && z < h.z1 + .4)) continue;   // 電扶梯口上方不放燈，免得擋到指標
-      box(1.6, .04, .4, lightM, x, hallH - .03, z, g);
+      box(1.6, .04, .4, lightM, x, hallH - .005, z, g);
     }
     try { themeFeatures(L, g, hallH, ceilHoles, hallHoles); } catch (e) { console.error('themeFeatures', e); }   // 依主題吊在天花板下的特色裝飾
     // 大廳站名牆
@@ -1326,7 +1326,7 @@ const Station3D = (() => {
       pg.add(m);
       // 側欄（玻璃＋扶手）
       for (const sz of [-1, 1]) {
-        const w = stair ? .7 : .52;
+        const w = stair ? .62 : .52;   // 樓梯扶手往內：不跟旁邊電扶梯的扶手重疊（重疊會一直閃）
         const rail = new T.Mesh(new T.BoxGeometry(len, .9, .04), M('#cfe3ec', { t: true, o: .25 }));
         rail.position.set(cx, cy + .5, lz + sz * w); rail.rotation.z = m.rotation.z; pg.add(rail);
         const handM = M(stair ? '#9aa1a8' : '#1c1c1e', { r: .4 });
@@ -1345,7 +1345,7 @@ const Station3D = (() => {
       // 上下兩端的金屬梳齒板
       if (!stair) for (const [ex, ey, dir] of [[x0, y0, Math.sign(x0 - x1)], [x1, y1, Math.sign(x1 - x0)]]) {
         const cp = new T.Mesh(new T.BoxGeometry(1.0, .015, .92), M('#b9c0c6', { m: .8, r: .3 })); cp.position.set(ex + dir * .5, ey + .008, lz); pg.add(cp);
-        const yl = new T.Mesh(new T.BoxGeometry(.06, .016, .92), M('#f2c200')); yl.position.set(ex + dir * .03, ey + .01, lz); pg.add(yl);
+        const yl = new T.Mesh(new T.BoxGeometry(.06, .03, .92), M('#f2c200', { po: 1 })); yl.position.set(ex + dir * .03, ey + .015, lz); pg.add(yl);   // 黃線比梳齒板高 1.5 公分
       }
     });
     // 電扶梯井：上下樓層之間（下層天花板到上層地板）用牆圍起來，看不到外面
@@ -1759,11 +1759,11 @@ const Station3D = (() => {
         W(m.skin, d - .7, d + .7, 2.05, TOPY, zo, side, sUV);
         W(m.inner, d - .7, d + .7, 2.05, 2.3, zi, -side);
         for (const sx of [-1, 1]) {
-          box(.12, 2.05, SKZ - INZ, m.rubber, d + sx * .7, 1.025, side * HALF_W, car);              // 門框
-          box(.03, 1.98, .012, m.yellow, d + sx * .655, 1.0, side * (INZ - .006), car);            // 門邊黃色警示條
+          box(.12, 2.05, SKZ - INZ + .02, m.rubber, d + sx * .7, 1.025, side * HALF_W, car);        // 門框（內外各凸出 1 公分，不跟車壁共面）
+          box(.03, 1.98, .012, m.yellow, d + sx * .655, 1.0, side * (INZ - .022), car);            // 門邊黃色警示條（貼在門框前面）
           const pole = new T.Mesh(S.pole, m.steel); pole.position.set(d + sx * .92, 1.15, side * 1.2); car.add(pole);
         }
-        box(1.52, .05, SKZ - INZ, m.rubber, d, 2.075, side * HALF_W, car);
+        box(1.52, .05, SKZ - INZ + .02, m.rubber, d, 2.075, side * HALF_W, car);
         box(1.4, .012, .16, m.plate, d, .006, side * (HALF_W - .08), car);                         // 門口踏板
         box(.2, .055, .03, m.doorLamp, d, 2.19, side * (SKZ + .012), car);                         // 車門上方的指示燈
         box(.13, .2, .03, m.yellow, d - 1.1, 1.45, side * (INZ - .015), car);                     // 緊急對講機
