@@ -173,7 +173,7 @@ const SpecialHalls = (() => {
         break;
       }
       case 'steam': {
-        cyl(2.4, 2.6, .5, '#6a6458', 0, .25, 0, 14, { r: .9 }); cyl(2.1, 2.1, .1, M('#bfe0d8', { r: .1, m: .2 }), 0, .45, 0, 20); solid(-2.6, -2.6, 2.6, 2.6);
+        cyl(2.4, 2.6, .5, '#6a6458', 0, .25, 0, 14, { r: .9 }); cyl(2.1, 2.1, .1, M('#bfe0d8', { r: .1, m: .2 }), 0, .465, 0, 20); solid(-2.6, -2.6, 2.6, 2.6);
         for (let i = 0; i < 9; i++) { const a = i * 1.7; sph(.3 + (i % 3) * .1, M('#ffffff', { t: true, o: .35, dw: false }), Math.cos(a) * 1.1, .8 + (i % 4) * .35, Math.sin(a) * .9); }
         for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; sph(.32, '#5a5448', Math.cos(a) * 2.5, .45, Math.sin(a) * 2.5, 1, .7, 1); }
         label('北投溫泉 1896', 2, .4, 0, 1.4, -D + .5, '#4a3020', '#ffe2b0');
