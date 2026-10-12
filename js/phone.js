@@ -231,7 +231,7 @@ const Phone = (() => {
     if (a === 'shop') {
       if (FogCity.locked()) return `<div class="ph-card"><em class="ph-tag">迷霧之城</em><p>網路只剩一格訊號，頁面一直轉圈圈。<br>霧裡新台幣不能用。要買東西，去找大廳角落提燈的攤販（只收黃金）。</p></div>`;
       const t = TaipeiTime.now(), deals = Object.keys(Station3D.SHOPS || {}), deal = deals.length ? deals[(t.day * 3 + t.month) % deals.length] : null;
-      const goods = ['magnifier', 'recorder', 'battery', 'firstaid'].map(id => ({ id, it: ITEMS[id] }));
+      const goods = ['magnifier', 'recorder', 'battery', 'firstaid', 'clue'].map(id => ({ id, it: ITEMS[id] }));
       return `<div class="ph-card"><em class="ph-tag">商店通知</em><p>${deal ? `今天 ${esc(deal)} 站的商店有新貨上架，路過可以看看。` : '今天沒有特別的優惠。'}</p>${Quests.eventsNow().length ? '<p>節慶限定商品販售中！</p>' : ''}</div>
         <h4 class="bag-h">家具</h4>
         ${Object.entries(FURNITURE).map(([id, f]) => { const own = Furniture.has(id), price = Progress.price(f.price); return `<div class="ph-card ph-row"><span class="ph-ic">${f.icon}</span><div><b>${f.name}</b><small>${f.effect}</small></div><button class="btn small ${own ? 'ghost' : 'primary'}" data-buyf="${id}" ${own || s.money < price ? 'disabled' : ''}>${own ? '已擁有' : 'NT$ ' + price}</button></div>`; }).join('')}

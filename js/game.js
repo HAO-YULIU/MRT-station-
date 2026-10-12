@@ -210,10 +210,11 @@ function openQuests() {
   $('#questCount').textContent = `支線 ${Quests.sideCount()} / ${SIDE_LIMIT}`;
   $('#questBody').innerHTML = `
     ${localHtml()}
+    <button class="btn ghost small q-nav" data-navopen="1">🧭 站內導航・任務指引${Game.state.flags.navGuide ? '（開）' : '（關）'}</button>
     ${ids.length ? `<ul class="quests">${ids.map(card).join('')}</ul>` : '<p class="empty-q">目前沒有任務。到處和人說話，看看誰需要幫忙。</p>'}
     ${done.length ? `<h4 class="q-done-h">已完成</h4><ul class="q-done">${done.map(id => `<li>${QUESTS[id].title}</li>`).join('')}</ul>` : ''}
     ${Achievements.html()}`;
-  $('#questBody').onclick = e => { const t = e.target.closest('[data-track]'); if (t) { Game.state.flags.track = t.dataset.track; saveState(); Sound.click(); openQuests(); if (ctl) panelCache.pQuest = null; return; } const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
+  $('#questBody').onclick = e => { if (e.target.closest('[data-navopen]')) { $('#questLog').hidden = true; return Nav.open(); } const t = e.target.closest('[data-track]'); if (t) { Game.state.flags.track = t.dataset.track; saveState(); Sound.click(); openQuests(); if (ctl) panelCache.pQuest = null; return; } const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
   $('#questLog').hidden = false;
 }
 
@@ -392,7 +393,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { FogCity.tick(dt, now); Teleporter.tick(dt, now); NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Onsen.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
+  World.addTicker((dt, now) => { FogCity.tick(dt, now); Teleporter.tick(dt, now); NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Onsen.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Nav.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -446,6 +447,7 @@ function buildPanel() {
   $('#panel').innerHTML = `<div class="mini">
       <div class="mini-title" id="pTitle"></div>
       <div class="mini-quest" id="pQuest"></div>
+      <div class="mini-guide" id="pGuide"></div>
       <div class="mini-rows" id="pRows"></div>
       <div class="mini-hint" id="pHint"></div>
       <div class="mini-btns" id="pBtns"></div>
@@ -454,7 +456,7 @@ function buildPanel() {
   const pn = $('#panel');
   let col = null; try { col = localStorage.getItem('panelCollapsed'); } catch (e) { /* 無法存取 */ }
   pn.classList.toggle('collapsed', col == null ? window.matchMedia('(orientation: portrait) and (pointer: coarse)').matches : col === '1');
-  pn.onclick = e => { if (e.target.closest('button, a')) return; if (e.target.closest('#pQuest')) { Sound.click(); return openQuests(); } pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
+  pn.onclick = e => { if (e.target.closest('[data-nav]')) { Sound.click(); return Nav.open(); } if (e.target.closest('button, a')) return; if (e.target.closest('#pQuest')) { Sound.click(); return openQuests(); } pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
 }
 const panelCache = {};
 function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = html; $('#' + id).innerHTML = html; } }
@@ -489,6 +491,7 @@ function startStation(stationId, carry) {
     Onsen.spawn(stationId);
     Teleporter.spawn(stationId);
   }
+  Nav.onStation(stationId);
   Daily.refresh();
   Phone.deliverFollowups();
   arriveChecks(stationId);
@@ -572,15 +575,17 @@ function trackerHtml() {
 function renderPanel(z, L) {
   const st = ctl.stationId, lines = MRT.linesAt(st);
   setPart('pQuest', trackerHtml());
-  const head = `${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(st)}</b>`;
+  setPart('pGuide', Nav.panelHtml());
+  const head = `${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(st)}</b><button class="nav-btn" data-nav="1" aria-label="站內導航" title="站內導航（N）">🧭</button>${Nav.floorChip(z)}`;
   if (Game.ride && Game.ride.moving) return;   // 行駛中由搭乘流程顯示
   let rows = '', hint = '';
   if (z.kind === 'platform' || (z.kind === 'train' && !Game.ride)) {
     const P = z.P;
     const ln = `${lineChip(P.line)} ${LINES[P.line].zh}月台`;
+    const mySide = Nav.sideOf(P, World.player.z);
     rows = [-1, 1].map(side => {
       const d = sideDirs(P, side)[0];
-      return d ? `<div class="mini-row"><span>往 ${esc(MRT.label(d.terminal, d.line).zh)}</span><b>${TaipeiTime.state() === 'open' ? fmtEta(d.eta) : '--'}</b></div>` : '';
+      return d ? `<div class="mini-row${z.kind === 'platform' && side === mySide ? ' me' : ''}"><span>往 ${esc(MRT.label(d.terminal, d.line).zh)}${z.kind === 'platform' && side === mySide ? '<i>你這側</i>' : ''}</span><b>${TaipeiTime.state() === 'open' ? fmtEta(d.eta) : '--'}</b></div>` : '';
     }).join('');
     setPart('pTitle', `${head}<span class="mini-sub">${ln}</span>`);
     hint = z.kind === 'train' ? '在車廂裡，車門關上就會出發' : (lines.length > 1 ? '搭電扶梯上大廳可以轉乘' : '走到月台哪一側，就搭往那個方向的車');
@@ -1084,7 +1089,7 @@ function openBag() {
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
     <div class="wallet"><span>黃金</span><b>🪙 ${s.gold || 0}</b><span>調查</span><b>🔍 ${Investigate.info().name}</b></div>
-    ${inv.length ? ITEM_CATS.map(([cat, name]) => { const list = inv.filter(([id]) => ITEMS[id] && itemCat(id) === cat); return list.length ? `<h4 class="bag-h">${name}</h4><ul class="inv">${list.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}${id === 'detector' ? ' <button class="btn small ghost eat" data-detect="1">使用</button>' : ''}${id === 'hint' ? ' <button class="btn small ghost eat" data-hint="1">使用</button>' : ''}${id === 'tracker' ? ' <button class="btn small ghost eat" data-track="1">使用</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : ''; }).join('') : '<h4 class="bag-h">物品</h4><p class="empty-q">背包是空的。</p>'}
+    ${inv.length ? ITEM_CATS.map(([cat, name]) => { const list = inv.filter(([id]) => ITEMS[id] && itemCat(id) === cat); return list.length ? `<h4 class="bag-h">${name}</h4><ul class="inv">${list.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}${id === 'detector' ? ' <button class="btn small ghost eat" data-detect="1">使用</button>' : ''}${id === 'hint' ? ' <button class="btn small ghost eat" data-hint="1">使用</button>' : ''}${id === 'tracker' ? ' <button class="btn small ghost eat" data-track="1">使用</button>' : ''}${id === 'clue' ? ' <button class="btn small ghost eat" data-clue="1">使用</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : ''; }).join('') : '<h4 class="bag-h">物品</h4><p class="empty-q">背包是空的。</p>'}
     <h4 class="bag-h">換裝</h4>
     ${wardrobeHtml()}
     <h4 class="bag-h">路線收藏</h4>
@@ -1112,6 +1117,7 @@ function openBag() {
     if (e.target.closest('[data-detect]')) { $('#bag').hidden = true; return Gold.detect(); }
     if (e.target.closest('[data-hint]')) { $('#bag').hidden = true; return Phone.useHint(); }
     if (e.target.closest('[data-track]')) { $('#bag').hidden = true; return Phone.useTracker(); }
+    if (e.target.closest('[data-clue]')) { $('#bag').hidden = true; return Nav.useClue(); }
     const w = e.target.closest('[data-wear]'), f = e.target.closest('[data-eat]');
     if (w) { Sound.click(); putOn(w.dataset.wear); openBag(); }
     if (f) { Sound.click(); eat(f.dataset.eat); openBag(); }
@@ -1252,7 +1258,11 @@ function init() {
   $('#btnQuest').onclick = openQuests;
   $('#transferBtn').onclick = transferMenu;
   $('#viewBtn').onclick = () => { const n = World.cycleView(); toast(`<b>視角：${n}</b><span>拖曳畫面轉動、雙指或滾輪縮放；按 V 也可以切換</span>`); };
-  $('#runBtn').onclick = () => { const on = !World.running; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
+  $('#runBtn').onclick = () => { const on = $('#runBtn').getAttribute('aria-pressed') !== 'true'; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
+  const QNAME = { auto: '自動', high: '高', low: '省電' };
+  const qLabel = () => { $('#btnQuality').innerHTML = `<i aria-hidden="true">⚙️</i>畫質 ${QNAME[World.quality] || '自動'}`; };
+  qLabel();
+  $('#btnQuality').onclick = () => { const order = ['auto', 'high', 'low'], q = order[(order.indexOf(World.quality) + 1) % 3]; World.setQuality(q); qLabel(); toast(`<b>畫質：${QNAME[q]}</b><span>${{ auto: '依手機效能自動調整解析度', high: '最清楚，比較耗電', low: '解析度較低、最高 30 fps、人潮少一點，比較省電不發燙' }[q]}${q === 'low' ? '（人潮在下一站生效）' : ''}</span>`); };
   $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').innerHTML = `<i aria-hidden="true">${on ? '🔊' : '🔇'}</i>音效 ${on ? '開' : '關'}`; };
   // 選單：手機、紀錄、音效、回到標題
   const menu = $('#hudMenu'), menuBtn = $('#btnMenu');
@@ -1273,7 +1283,8 @@ function init() {
   $('#mapModal [data-close]').onclick = closeMap;
   $('#charBack').onclick = () => { renderTitle(); showScreen('title'); };
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { $('#bag').hidden = true; $('#questLog').hidden = true; if (!$('#mapModal').hidden) closeMap(); }
+    if (e.code === 'KeyN' && document.body.dataset.screen === 'game' && !e.target.closest('input, textarea') && World.layout) { if ($('#navModal').hidden) Nav.open(); else $('#navModal').hidden = true; }
+    if (e.key === 'Escape') { $('#bag').hidden = true; $('#questLog').hidden = true; $('#navModal').hidden = true; if (!$('#mapModal').hidden) closeMap(); }
   });
   window.addEventListener('resize', () => {
     if (document.body.dataset.screen === 'game') layoutScene();
