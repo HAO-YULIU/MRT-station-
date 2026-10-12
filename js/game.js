@@ -88,14 +88,22 @@ function updateHud() {
   const lv = Economy.levelInfo(s.xp || 0);
   const left = TaipeiTime.state(t) === 'open' ? TaipeiTime.minutesToLastTrain(t) : null;
   const dl = Object.values(s.quests.active).map(q => q.deadline).filter(Boolean).sort()[0];
-  $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${s.gold ? `<span class="money gold">🪙 ${s.gold}</span>` : ''}${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
+  // 等級、經驗畫在頭像外圈；餘額做成悠遊卡
+  $('#hudLv').textContent = lv.lv; $('#hudXp').style.strokeDasharray = `${Math.round(lv.cur / lv.need * 100)} 100`;
+  $('#hudStats').innerHTML = `<span class="money card${s.money < 0 ? ' neg' : ''}" title="悠遊卡餘額">NT$ ${s.money}</span>${s.gold ? `<span class="money gold">🪙 ${s.gold}</span>` : ''}${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
     if (typeof Titles !== 'undefined') Titles.check();   // 得到新稱號時通知、還是新手乘客就自動換上
     $('#hudName').innerHTML = `${esc(CHARACTERS[s.char].name)} <small class="hud-title">${esc(Progress.titleName())}</small>`;
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
-  $('#hudWhere').textContent = s.gondolaAt && typeof Gondola !== 'undefined' && Gondola.mode ? `🚡 貓空纜車・${(Gondola.ST.find(x => x.key === Gondola.mode.key) || {}).zh || ''}${Gondola.mode.scene === 'ride' ? '（搭乘中）' : '站'}` : s.current ? s.current : '尚未出發';
+  const where = s.gondolaAt && typeof Gondola !== 'undefined' && Gondola.mode ? `🚡 貓空纜車・${(Gondola.ST.find(x => x.key === Gondola.mode.key) || {}).zh || ''}${Gondola.mode.scene === 'ride' ? '（搭乘中）' : '站'}` : s.current ? s.current : '尚未出發';
+  const wk = where + (Game.ride ? 'r' : '');
+  if ($('#hudWhere').dataset.k !== wk) {   // 所在車站：前面加上路線站碼
+    $('#hudWhere').dataset.k = wk;
+    const chips = !s.gondolaAt && s.current && STATIONS[s.current] && !Game.ride ? MRT.linesAt(s.current).map(l => lineChip(l.line, l.code)).join('') : '';
+    $('#hudWhere').innerHTML = `${chips}<span>${esc(where)}</span>`;
+  }
   $('#hudItems').textContent = `${Teleporter.total()}/6`;   // 主線寶物（傳送裝置零件）
   $('#hudQuests').textContent = Object.keys(s.quests.active).length;
 }
@@ -437,6 +445,7 @@ function enterGame(stationId) {
   World.spawnInConcourse();
   Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
   startStation(stationId);
+  const ch = $('#controlsHint'); if (ch) { ch.classList.remove('faded'); clearTimeout(enterGame.hintT); enterGame.hintT = setTimeout(() => ch.classList.add('faded'), 20000); }   // 操作說明看 20 秒就淡掉，不擋畫面
   if (Game.state.gondolaAt && Gondola.unlocked()) Gondola.enter(Game.state.gondolaAt);   // 上次停在貓空纜車站
   else opening();
 }
@@ -830,13 +839,13 @@ const dropInteraction = {
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
   guide: '路線指南', cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
-  feature: '特色大廳', mallshop: '商店', malldir: '樓層指南', onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
+  feature: '特色大廳', limited: '限定小舖', mallshop: '商店', malldir: '樓層指南', onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
 const SPOT_VERB = { mallshop: '逛商店', malldir: '看樓層指南', stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
-  get label() { const sp = nearSpot(World.player); return sp ? (sp.kind === 'feature' ? `欣賞：${sp.name}` : sp.kind === 'mallshop' ? `逛：${sp.name}` : SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
+  get label() { const sp = nearSpot(World.player); return sp ? (sp.kind === 'feature' ? `欣賞：${sp.name}` : sp.kind === 'mallshop' ? `逛：${sp.name}` : sp.kind === 'limited' ? `逛：${(Limited.shopOf(ctl && ctl.stationId) || {}).name || '限定小舖'}` : SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
   when: p => !Dialog.with && !!nearSpot(p) && !NPCManager.nearest(p, 1.2),
   run: () => {
     const sp = nearSpot(World.player), st = ctl.stationId;
@@ -861,6 +870,7 @@ const spotInteraction = {
 };
 // 車站設施
 const FACILITY = {
+  limited: (sp, st) => { Sound.click(); Limited.menu(st); },
   mallshop: sp => { Sound.click(); BigStations.shopMenu(sp); },
   malldir: () => { Sound.click(); BigStations.dirInfo(); },
   feature: (sp, st) => { Sound.click(); Dialog.info(`✨ ${sp.name}`, `${esc(sp.text)}<br><small>${esc(st)}站的特色大廳</small>`); const s = Game.state, f = (s.col = s.col || {}).halls = s.col.halls || {}; if (!f[st]) { f[st] = 1; saveState(); toast(`<b>✨ 特色大廳 ${Object.keys(f).length} / ${Object.keys(SpecialHalls.HALLS).length}</b><span>${esc(sp.name)}</span>`, 'level'); } },
@@ -1165,7 +1175,7 @@ function eat(id) {
   if (!it || !it.eat || !(s.inv[id] > 0)) return;
   s.inv[id]--;
   const pool = EAT_TEXT[it.eat];
-  Game.reward({ xp: id === 'inspiretea' ? 120 : 5 }, `${it.eat}掉了 ${it.icon} ${it.name}　${pool[(Math.random() * pool.length) | 0]}`);
+  Game.reward({ xp: id === 'inspiretea' ? 120 : it.xp || 5 }, `${it.eat}掉了 ${it.icon} ${it.name}　${pool[(Math.random() * pool.length) | 0]}`);
 }
 function wardrobeHtml() {
   const s = Game.state, wear = Outfits.wear(s.char, s.wardrobe.wear), own = Outfits.owned(s.char, s.wardrobe.own);

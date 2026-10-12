@@ -296,7 +296,7 @@ const MetroProps = (() => {
 
     /* ── 2) 付費區與非付費區之間的玻璃隔欄（閘門兩側） ── */
     {
-      const zf = gz + .6, gl = L.gates[0] - 1.2 - .26, gr = L.gates[L.gates.length - 1] + 1.2 + .26;
+      const zf = gz + .6, gl = L.gates[0] - 2.02, gr = L.gates[L.gates.length - 1] + 2.02;   // 從閘門機箱外緣開始
       for (const [a, c] of [[U.x0 + .02, gl], [gr, U.x1 - .02]]) {
         const len = c - a, n = Math.max(1, Math.ceil(len / 1.5));
         for (let i = 0; i <= n; i++) add(steel, 'box', a + len * i / n, .58, zf, .06, 1.16, .06);

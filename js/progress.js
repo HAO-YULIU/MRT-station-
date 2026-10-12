@@ -37,7 +37,7 @@ const Progress = (() => {
   function discount() { const s = S(); const r = (s.rep[regionOf(s.current)] || 0) >= 50 ? .1 : 0; return Math.min(.3, stat('cha') * .01 + r); }
   const price = base => Math.max(1, Math.round(base * (1 - discount())));
   const friendBonus = npcId => Math.floor(stat('cha') / 2) + (((S().rep[regionOf(npcStation(NPCS[npcId] || {}) || S().current)] || 0) >= 20) ? 2 : 0);
-  function applySpeed() { World.setSpeedMul && World.setSpeedMul(1 + stat('sta') * .03); }
+  function applySpeed() { World.setSpeedMul && World.setSpeedMul(1 + stat('sta') * .03 + (S().inv && S().inv.hikestick > 0 ? .08 : 0)); }   // 象山登山杖：再快 8%
   function onArrive(stationId) {
     applySpeed();
     if (stat('obs') < 3) return;

@@ -461,6 +461,7 @@ const Station3D = (() => {
     for (const P of platforms) spots.push({ kind: 'elevator', x: P.x - 24, y: P.y, z: P.z + 1.4, level: P.k });
     spots.push({ kind: 'ticket', x: unpaid.x0 + 4.4, y: 0, z: unpaid.z1 - 1.6 });
     spots.push({ kind: 'toilet', x: unpaid.x1 - 1.4, y: 0, z: unpaid.z0 + 9 });
+    if (typeof Limited !== 'undefined' && Limited.shopOf(stationId)) spots.push({ kind: 'limited', x: unpaid.x0 + 2.5, y: 0, z: unpaid.z0 + 5 });   // 車站限定小舖
     if (SHOPS[stationId]) spots.push({ kind: 'shop', x: unpaid.x0 - 1.7, y: 0, z: unpaid.z0 + 6.2 });   // 便利商店櫃台
     if (GRAFFITI.includes(stationId)) spots.push({ kind: 'graffiti', x: concourse.x1 - 4, y: 0, z: concourse.z0 + .9 });
     const L0 = { concourse, unpaid };
@@ -851,11 +852,45 @@ const Station3D = (() => {
     const gateM = M('#b9c0c6', { m: .6, r: .35 });
     for (let i = 0; i <= L.gates.length; i++) {
       const x = i === 0 ? L.gates[0] - 1.2 : i === L.gates.length ? L.gates[i - 1] + 1.2 : (L.gates[i - 1] + L.gates[i]) / 2;
-      box(.45, 1.0, 1.3, gateM, x, .5, L.gateZ + .6, g);
-      box(.47, .05, .5, M('#2a7de1', { e: '#2a7de1', ei: .6 }), x, 1.03, L.gateZ + .3, g);   // 感應區
+      const w = 1.6, cx = x;   // 機箱寬 1.6 公尺，通道只留 .8 公尺（看得到的空隙就是走得過去的地方）
+      box(w, 1.0, 1.3, gateM, cx, .5, L.gateZ + .6, g);
+      box(w - .1, .04, 1.2, M('#d8dde1', { m: .7, r: .25 }), cx, 1.02, L.gateZ + .6, g);   // 上蓋
+      for (const sx of [-1, 1]) if (!(i === 0 && sx < 0) && !(i === L.gates.length && sx > 0)) {
+        box(.36, .05, .5, M('#2a7de1', { e: '#2a7de1', ei: .6 }), x + sx * .5, 1.05, L.gateZ + .3, g);   // 兩側通道各一個感應區
+        box(.03, .18, .14, M('#31d07a', { e: '#31d07a', ei: .9 }), x + sx * .41, .85, L.gateZ - .04, g);   // 綠燈：可通行
+        box(.03, .18, .14, M('#31d07a', { e: '#31d07a', ei: .9 }), x + sx * .41, .85, L.gateZ + 1.24, g);
+      }
     }
-    for (const gx of L.gates) for (const sx of [-1, 1]) box(.3, .45, .03, M('#e04848', { t: true, o: .55 }), gx + sx * .15, .75, L.gateZ + .6, g);
+    for (const gx of L.gates) for (const sx of [-1, 1]) box(.38, .45, .03, M('#e04848', { t: true, o: .55 }), gx + sx * .2, .75, L.gateZ + .6, g);   // 閘門擋板
     sign(plainSign('閘門　請刷卡進出', 'Fare gates', '#23272b', '#fff'), 3.2, .8, 0, 3.3, L.gateZ - .2, g);
+    // 車站限定小舖：非付費區靠牆的小推車
+    { const sp = L.spots.find(x => x.kind === 'limited'), shop = sp && Limited.shopOf(L.stationId);
+      if (shop) {
+        const cx = L.unpaid.x0 + .95, cz = sp.z, col = M(shop.color, { r: .5 });
+        box(1.1, .95, 1.8, M('#f4efe4', { r: .7 }), cx, .48, cz, g); box(1.16, .06, 1.86, M('#8a6440', { r: .6 }), cx, .98, cz, g);
+        for (const dz of [-.8, .8]) box(.06, 1.3, .06, M('#5a4a3a'), cx + .5, 1.6, cz + dz, g);
+        for (let i = 0; i < 6; i++) { const a = box(.22, .12, 1.9 / 6, M(i % 2 ? '#ffffff' : shop.color, { r: .7 }), cx + .45, 2.28, cz - .95 + (i + .5) * 1.9 / 6, g); a.rotation.z = -.35; }   // 條紋遮陽棚
+        shop.items.forEach((it, i) => { box(.26, .2 + (i % 2) * .1, .26, M(['#e9c46a', '#f4a261', '#a8dadc', '#e76f51'][i % 4], { r: .6 }), cx - .1, 1.1 + (i % 2) * .05, cz - .5 + i * .5, g); });
+        const t = canvasTex(512, 128, x => { x.fillStyle = shop.color; x.fillRect(0, 0, 512, 128); x.fillStyle = '#fff'; x.font = '700 58px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText(shop.name, 256, 84); });
+        const p = plane(1.8, .45, M('#ffffff', { map: t, e: '#ffffff', ei: .3 }), g); p.position.set(cx + .56, 2.55, cz); p.rotation.y = Math.PI / 2;
+        solid(cx, cz, 1.2, 1.9);
+      } }
+    // 閘門兩側（非付費區這一側、靠著玻璃隔欄）：悠遊卡加值機、乘車須知看板，旁邊不會空空的
+    {
+      const gz = L.gateZ, zL = gz + 1.35, left = L.gates[0] - 2.6, right = left - 2.4, U = L.unpaid;   // 右邊已經有首末班車時刻表
+      const topT = canvasTex(256, 384, x => { x.fillStyle = '#1f6fb8'; x.fillRect(0, 0, 256, 384); x.fillStyle = '#fff'; x.font = '700 40px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('悠遊卡', 128, 60); x.font = '700 34px "Noto Sans TC", sans-serif'; x.fillText('加值機', 128, 104); x.fillStyle = '#0d2a44'; x.fillRect(28, 130, 200, 120); x.fillStyle = '#7fd0ff'; x.font = '24px "Barlow Semi Condensed", sans-serif'; x.fillText('Add value', 128, 200); x.fillStyle = '#f2c200'; x.fillRect(70, 280, 116, 60); });
+      for (const dx of [0, -1.1]) {
+        const mx = left + dx;
+        if (mx < U.x0 + 1) continue;
+        box(.9, 1.75, .55, M('#2a7de1', { r: .4, m: .2 }), mx, .875, zL, g); solid(mx, zL, .9, .55);
+        const f = plane(.8, 1.2, M('#ffffff', { map: topT, e: '#ffffff', ei: .25 }), g); f.position.set(mx, 1.05, zL + .28);
+      }
+      const ruleT = canvasTex(320, 420, x => { x.fillStyle = '#f6f4ee'; x.fillRect(0, 0, 320, 420); x.fillStyle = '#23272b'; x.fillRect(0, 0, 320, 64); x.fillStyle = '#fff'; x.font = '700 34px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('乘車須知', 160, 44); x.fillStyle = '#23272b'; x.font = '24px "Noto Sans TC", sans-serif'; ['禁止飲食・嚼口香糖', '手扶梯靠右站穩', '請勿奔跑・推擠', '先下後上・排隊候車', '博愛座請禮讓'].forEach((t, i) => { x.fillStyle = ['#c8202a', '#2a7de1', '#e07a3a', '#3a8a5a', '#8a4ab0'][i]; x.fillRect(22, 98 + i * 62, 12, 34); x.fillStyle = '#23272b'; x.textAlign = 'left'; x.fillText(t, 46, 124 + i * 62); }); });
+      if (right > U.x0 + 1) {
+        box(1.1, 1.5, .08, M('#3a3f45', { m: .5 }), right, 1.25, zL, g); box(.08, .5, .08, M('#3a3f45'), right, .25, zL, g); box(.6, .04, .4, M('#3a3f45'), right, .02, zL, g);
+        const r = plane(1, 1.32, M('#ffffff', { map: ruleT }), g); r.position.set(right, 1.25, zL + .05); solid(right, zL, 1.1, .4);
+      }
+    }
     // 非付費區：售票機、加值機、詢問處、出口、廁所
     const U = L.unpaid;
     for (let i = 0; i < 4; i++) {
