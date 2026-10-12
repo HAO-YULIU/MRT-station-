@@ -68,6 +68,15 @@ const World = (() => {
 
   /* ── 可行走區域 ── */
   // 回傳該點地面高度（最接近目前高度且落差 < 0.55 的區域），走不到回傳 null
+  // 大廳（非付費區）裡往上層電扶梯佔的地方（大廳那一端留 .3 公尺可以踏上去）
+  function inXramp(x, z) {
+    for (const r of layout.xramps || []) {
+      if (Math.abs(z - r.z) > 1.95) continue;
+      const a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
+      if (r.xb > r.xa ? x > a && x < b - .3 : x > a + .3 && x < b) return true;
+    }
+    return false;
+  }
   function groundAt(x, z, y) {
     let best = null, bestD = .55;
     const consider = h => { const d = Math.abs(h - y); if (d < bestD) { bestD = d; best = h; } };
@@ -91,7 +100,16 @@ const World = (() => {
       // 閘門通道
       if (z >= layout.gateZ - .05 && z <= layout.gateZ + 1.25 && layout.gates.some(g => Math.abs(x - g) < .32)) consider(0);
       // 非付費區（扣掉售票機、詢問處）
-      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4)) consider(0);
+      if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !inXramp(x, z) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4)) consider(0);
+      // 大型車站的上層（商店街）與往上層的電扶梯
+      for (const lv of layout.levels || []) if (inR(null, lv.x0 + .3, lv.x1 - .3, lv.z0 + .3, lv.z1 - .3) && !lv.holes.some(h => x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1)) consider(lv.y);
+      for (const r of layout.xramps || []) {
+        if (x < Math.min(r.xa, r.xb) - .05 || x > Math.max(r.xa, r.xb) + .05) continue;
+        for (const lz of S.LANES) {
+          if (Math.abs(z - (r.z + lz)) > (lz === 0 ? .62 : .44)) continue;
+          consider(r.ya + (r.yb - r.ya) * Math.min(1, Math.max(0, (x - r.xa) / (r.xb - r.xa))));
+        }
+      }
       for (const P of layout.platforms) {
         // 月台（扣掉電扶梯、柱子、座椅）
         if (Math.abs(z - P.z) < S.PLAT_HALF && Math.abs(x - P.x) < S.LEN / 2 - .4) {
@@ -138,6 +156,11 @@ const World = (() => {
       if (Math.abs(z - (P.z + S.LANES[0])) < .44) return Math.sign(r.xb - r.xa) * 1.1;   // 往大廳
       if (Math.abs(z - (P.z + S.LANES[2])) < .44) return -Math.sign(r.xb - r.xa) * 1.1;  // 往月台
     }
+    for (const r of layout.xramps || []) {   // 往上層：LANES[0] 往下到大廳、LANES[2] 往上
+      if (x < Math.min(r.xa, r.xb) || x > Math.max(r.xa, r.xb)) continue;
+      if (Math.abs(z - (r.z + S.LANES[0])) < .44) return Math.sign(r.xb - r.xa) * 1.1;
+      if (Math.abs(z - (r.z + S.LANES[2])) < .44) return -Math.sign(r.xb - r.xa) * 1.1;
+    }
     return 0;
   }
   function trainOf(px, pz, py) {
@@ -155,6 +178,7 @@ const World = (() => {
     if (tr) return { kind: 'train', train: tr, P: tr.P };
     if (!layout) return { kind: 'none' };
     for (const P of layout.platforms) if (Math.abs(player.y - P.y) < .3 && Math.abs(player.z - P.z) < 3.3 && Math.abs(player.x - P.x) < S.LEN / 2) return { kind: 'platform', P };
+    for (const lv of layout.levels || []) if (Math.abs(player.y - lv.y) < .3 && player.x > lv.x0 && player.x < lv.x1 && player.z > lv.z0 && player.z < lv.z1) return { kind: lv.kind || 'mall', level: lv };
     if (Math.abs(player.y) < .3) {
       const kind = player.z > layout.gateZ + .6 ? 'unpaid' : 'concourse';
       const room = (layout.rooms || []).find(r => player.x > Math.min(r.x0, r.x1) && player.x < Math.max(r.x0, r.x1) && player.z > r.z0 && player.z < r.z1 && Math.abs(player.x - r.door.wx) > .15);
@@ -166,13 +190,22 @@ const World = (() => {
   /* ── 輸入 ── */
   const keys = {};
   const KEYMAP = { ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ShiftLeft: 'run', ShiftRight: 'run' };
-  let runToggle = false, joyEdge = 0, joyRun = false, stuckT = 0;
-  const onRampNow = () => !!layout && Math.abs(player.y) > .05 && !layout.platforms.some(P => Math.abs(player.y - P.y) < .05);
-  const onFloor = () => !!layout && (Math.abs(player.y) < .05 || layout.platforms.some(P => Math.abs(player.y - P.y) < .05));
+  let runToggle = false, joyEdge = 0, joyRun = false, stuckT = 0, blockT = 0;
+  // 四面八方都走不出去（被設施、牆夾住）才算真的卡住；只是頂著牆走不算
+  function trapped() {
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2, nx = player.x + Math.cos(a) * .2, nz = player.z + Math.sin(a) * .2, h = groundAt(nx, nz, player.y);
+      if (h != null && (!hitObstacle(nx, nz, h) || hitObstacle(player.x, player.z, player.y))) return false;
+    }
+    return true;
+  }
+  const floorYs = () => [0, ...layout.platforms.map(P => P.y), ...(layout.levels || []).map(l => l.y)];
+  const onRampNow = () => !!layout && !floorYs().some(y => Math.abs(player.y - y) < .05);
+  const onFloor = () => !!layout && floorYs().some(y => Math.abs(player.y - y) < .05);
   // 脫離卡住：找最近、可以站的地板（大廳或月台，不在柱子、設施裡），把玩家放過去
   function unstuck(auto) {
     if (!layout || riding) return false;
-    const levels = [0, ...layout.platforms.map(P => P.y)].sort((a, b) => Math.abs(a - player.y) - Math.abs(b - player.y));
+    const levels = floorYs().sort((a, b) => Math.abs(a - player.y) - Math.abs(b - player.y));
     let best = null, bd = 1e9;
     for (let r = .4; r <= 16 && !best; r += .4) {
       for (let i = 0; i < 24; i++) {
@@ -349,20 +382,21 @@ const World = (() => {
           player.x = bx; player.z = bz;
           tryMove(bx + mx * sp, bz); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; tryMove(bx, bz + mz * sp); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; } }
         }
-        if (blocked && !onRampNow() && blocked(player.x, player.z, player.y)) { player.x = bx; player.z = bz; }   // 不能穿過 NPC（手扶梯上例外，免得前後互等卡住）
+        // 不能穿過 NPC（手扶梯上例外）；被同一群人擋住超過半秒就讓你擠過去，不會被人群圍住卡死
+        if (blocked && !onRampNow() && blocked(player.x, player.z, player.y)) { blockT += dt; if (blockT < .5) { player.x = bx; player.z = bz; } } else blockT = 0;
         player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * (v > 4 ? 9 : 12)));
         player.speed = v; moved = true;
       } else if (player.vnow > .15 && player.mdir) {   // 放開搖桿：再滑一小步停下來
         const bx = player.x, bz = player.z;
         tryMove(player.x + player.mdir.x * player.vnow * dt, player.z + player.mdir.z * player.vnow * dt);
-        if (hitObstacle(player.x, player.z, player.y) || (blocked && !onRampNow() && blocked(player.x, player.z, player.y))) { player.x = bx; player.z = bz; player.vnow = 0; }
+        if (hitObstacle(player.x, player.z, player.y) || (blocked && !onRampNow() && blockT < .5 && blocked(player.x, player.z, player.y))) { player.x = bx; player.z = bz; player.vnow = 0; }
         player.speed = player.vnow; moved = true;
       } else { player.speed = 0; player.vnow = 0; }
       // 卡住偵測：在手扶梯中間按著方向卻 2 秒都沒動，自動放到最近的地板
       if (mag > .3 && !player.auto) {
         const d = Math.hypot(player.x - (player.lastX ?? player.x), player.z - (player.lastZ ?? player.z));
-        stuckT = d < .01 && onRampNow() && !onFloor() ? stuckT + dt : 0;
-        if (stuckT > 2) { stuckT = 0; unstuck(true); }
+        stuckT = d < .01 && ((onRampNow() && !onFloor()) || trapped()) ? stuckT + dt : 0;
+        if (stuckT > 1.5) { stuckT = 0; unstuck(true); }
       } else stuckT = 0;
       player.lastX = player.x; player.lastZ = player.z;
       // 電扶梯會自己把人往上／往下帶
@@ -391,7 +425,7 @@ const World = (() => {
     // 鏡頭：在手扶梯／樓梯、車廂、房間、和人說話時自動轉到好看的角度（玩家剛拖曳過就不自動）
     autoCamera(z, dt);
     const inTrain = z.kind === 'train';
-    let sitLook = false;
+    let sitLook = false, lookAt = null;
     const dist = inTrain ? Math.min(cam.dist, 2.6) : z.room ? Math.min(cam.dist, 2.2) : cam.dist;
     const pitch = inTrain ? Math.min(cam.pitch, .12) : cam.pitch;
     const tx = player.x, ty = player.y + 1.5, tz = player.z;
@@ -415,7 +449,16 @@ const World = (() => {
         sitLook = true;
       }
     } else if (z.kind === 'platform') {
-      pz = Math.min(z.P.z + 6.5, Math.max(z.P.z - 6.5, pz)); py = Math.min(player.y + (z.P.under ? 3.2 : 3.6), py);
+      // 月台：鏡頭留在月台門內側（不會跑到軌道上方、隔著月台門往裡看，手機上看了會暈）
+      const lim = S.PLAT_HALF - .25, dzc = pz - tz;
+      if (Math.abs(pz - z.P.z) > lim && Math.abs(dzc) > 1e-3) {
+        const k = Math.max(0, Math.min(1, (Math.sign(dzc) * lim + z.P.z - tz) / dzc));
+        px = tx + (px - tx) * k; pz = tz + dzc * k; py = ty + (py - ty) * k;
+      }
+      pz = Math.min(z.P.z + lim, Math.max(z.P.z - lim, pz));
+      // 被拉得太近：沿著月台方向退後，從斜上方看，不會貼在角色身上
+      if (Math.hypot(px - tx, pz - tz) < 2.2) { const sx = Math.sin(cam.yaw) >= 0 ? 1 : -1; px = tx + sx * Math.sqrt(Math.max(0, 2.2 ** 2 - (pz - tz) ** 2)); py = Math.max(py, player.y + 2.1); }
+      py = Math.min(player.y + (z.P.under ? S.PH - .45 : S.PHE - .5), py);
       if (z.P.under) for (const r of z.P.ramps) {   // 在電扶梯底下：鏡頭壓低，不穿過電扶梯
         if (Math.abs(player.z - r.z) < 1.95 && player.x > Math.min(r.xa, r.xb) && player.x < Math.max(r.xa, r.xb)) {
           py = Math.min(py, player.y + underRampH(r, player.x) - .35);
@@ -430,6 +473,13 @@ const World = (() => {
         pz = Math.min(r.door.z + halfDoor, Math.max(r.door.z - halfDoor, pz)); py = Math.min(2.1, py);
       } else { px = Math.min(r.x1 - .4, Math.max(r.x0 + .4, px)); pz = Math.min(r.z1 - .3, Math.max(r.z0 + .3, pz)); py = Math.min(2.55, py); }
       if (Math.hypot(px - player.x, pz - player.z) < 1.1) py = Math.max(py, player.y + 2.4);   // 太近：從頭頂往下看，不會卡進角色裡
+    } else if (z.kind === 'cabin') {   // 纜車車廂裡：鏡頭在車廂中間繞一圈，看向對面的窗外（拖曳可以轉）
+      const lv = z.level, cx = (lv.x0 + lv.x1) / 2, cz = (lv.z0 + lv.z1) / 2;
+      px = cx + Math.sin(cam.yaw) * .8; pz = cz + Math.cos(cam.yaw) * .8; py = lv.y + 1.45;
+      lookAt = [cx - Math.sin(cam.yaw) * 4, lv.y + 1.05, cz - Math.cos(cam.yaw) * 4];
+    } else if (z.level) {   // 上層商店街、纜車站：鏡頭不穿牆、不穿天花板
+      const lv = z.level;
+      px = Math.min(lv.x1 - .5, Math.max(lv.x0 + .5, px)); pz = Math.min(lv.z1 - .5, Math.max(lv.z0 + .5, pz)); py = Math.min(lv.y + lv.h - .4, py);
     } else if (z.kind === 'unpaid') {
       const U = layout.unpaid;
       px = Math.min(U.x1 - .5, Math.max(U.x0 + .5, px)); pz = Math.min(U.z1 - .5, Math.max(layout.gateZ + .6, pz)); py = Math.min(3.9, py);
@@ -443,7 +493,7 @@ const World = (() => {
         px = Math.min(b + 3, Math.max(a - 3, px)); pz = Math.min(r.z + 1.6, Math.max(r.z - 1.6, pz));
         const t = Math.min(1, Math.max(0, (px - r.xa) / (r.xb - r.xa))), floor = r.ya + (r.yb - r.ya) * t;
         const dir = Math.sign(r.xb - r.xa), outA = (px - r.xa) * dir < 0, outB = (px - r.xb) * dir > 0;   // 超出月台端／大廳端
-        const top = outA ? P.y + 3.2 : outB ? 3.9 : (P.y < 0 ? 3.9 : P.y + 3.2);
+        const top = outA ? P.y + (P.under ? S.PH : S.PHE) - .4 : outB ? 3.9 : (P.y < 0 ? 3.9 : P.y + S.PHE - .4);
         py = Math.min(top, Math.max(floor + .7, py));
       } else py = Math.min(player.y + 3, py);
     }
@@ -458,7 +508,8 @@ const World = (() => {
       cam.pos.set(player.x + fx * .12, ey, player.z + fz * .12);
       camera.position.copy(cam.pos);
       camera.lookAt(player.x + fx * 3, ey - (cam.pitch - .3) * 3, player.z + fz * 3);
-    } else if (sitLook) camera.lookAt(tx, player.y + .95, tz);
+    } else if (lookAt) { cam.pos.set(px, py, pz); camera.position.copy(cam.pos); camera.lookAt(lookAt[0], lookAt[1], lookAt[2]); }
+    else if (sitLook) camera.lookAt(tx, player.y + .95, tz);
     else camera.lookAt(tx, ty, tz);
     if (plight && plight.intensity > 0) plight.position.set(player.x + Math.sin(player.face) * .4, player.y + 1.7, player.z + Math.cos(player.face) * .4);
     for (const fn of tickers) fn(dt, now);
@@ -506,6 +557,7 @@ const World = (() => {
   function rampAt(x, z) {
     if (!layout) return null;
     for (const P of layout.platforms) for (const r of P.ramps) if (Math.abs(z - r.z) < 2 && x > Math.min(r.xa, r.xb) - 1 && x < Math.max(r.xa, r.xb) + 1) return { P, r };
+    for (const r of layout.xramps || []) if (Math.abs(z - r.z) < 2 && x > Math.min(r.xa, r.xb) - 1 && x < Math.max(r.xa, r.xb) + 1) return { P: { x: 0, y: r.ya, z: r.z, under: true, mall: true }, r };
     return null;
   }
   // 電扶梯斜率：往 +x 走時高度增加為正
@@ -515,6 +567,7 @@ const World = (() => {
       if (x < Math.min(r.xa, r.xb) - .1 || x > Math.max(r.xa, r.xb) + .1 || Math.abs(z - r.z) > 1.9) continue;
       return Math.sign((r.yb - r.ya) / (r.xb - r.xa));
     }
+    for (const r of layout.xramps || []) if (x >= Math.min(r.xa, r.xb) - .1 && x <= Math.max(r.xa, r.xb) + .1 && Math.abs(z - r.z) <= 1.9) return Math.sign((r.yb - r.ya) / (r.xb - r.xa));
     return 0;
   }
   function cycleView(i) {
@@ -651,6 +704,23 @@ const World = (() => {
       surround = S.surroundings(layout, night());
       env.add(stationGroup); env.add(surround);
       applySky(layout.hasElevated);
+      lastZoneKey = '';
+      return layout;
+    },
+    // 自訂場景（貓空纜車站、纜車車廂）：不是捷運站，版面與模型由呼叫的模組提供
+    loadCustom(L, group, { open = true, fogNear = null, fogFar = null } = {}) {
+      loadSeq++; riding = null; shake = 0;
+      if (pre) { dispose(pre.group); dispose(pre.sur); pre = null; }
+      for (const tr of [...trains]) this.removeTrain(tr);
+      for (const grp of [stationGroup, segGroup, nextGroup, surround]) if (grp) { env.remove(grp); dispose(grp); }
+      segGroup = nextGroup = null;
+      env.position.set(0, 0, 0);
+      const far = { x0: -1e5, x1: -1e5 + 1, z0: -1e5, z1: -1e5 + 1, y: 0 };
+      layout = Object.assign({ platforms: [], concourse: far, unpaid: far, gateZ: 1e5, gates: [], spots: [], rooms: [], obstacles: [], seats: [], ads: [], levels: [], hasElevated: true, allUnder: false, custom: true }, L);
+      stationGroup = group; surround = new T.Group();
+      env.add(stationGroup); env.add(surround); warm(stationGroup);
+      applySky(open);
+      if (fogFar && scene.fog && !mood) { scene.fog.near = fogNear ?? scene.fog.near; scene.fog.far = fogFar; }
       lastZoneKey = '';
       return layout;
     },

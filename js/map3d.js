@@ -523,30 +523,32 @@ const Map3D = (() => {
     lmLabel(g, '北投溫泉', bx, 3.4, bz);
 
     // 貓空纜車：動物園 → 動物園南 → 指南宮 → 貓空，纜車廂沿纜線上下
+    // 解開動物園的「貓纜重新運轉」之前不顯示（opts.gondola）
     let gondola = null;
+    const gg = new T.Group(), GB = Merger(), GGL = Merger(); gg.visible = !!opts.gondola; g.add(gg);
     {
       const ptsXZ = [[76.4, 89.0, 1], [78.6, 91.0, 0], [80.8, 92.8, 1], [83.0, 93.6, 0], [85.2, 93.0, 1], [87.0, 90.8, 0], [88.6, 88.4, 1]];
       const tops = ptsXZ.map(([x, z, st]) => { const gy = Math.max(0, hillY(x, z)); return { x, z, gy, st, y: gy + (st ? 1.0 : 1.9) }; });
-      B.at(0, 0, 0); GL.at(0, 0, 0);
+      GB.at(0, 0, 0); GGL.at(0, 0, 0);
       for (const t of tops) {
-        if (t.st) { B.add(box(.9, .45 + .4, .7), '#ece6d8', t.x, t.gy + .02, t.z); B.add(box(1.05, .08, .85), '#3e8e5a', t.x, t.gy + .48, t.z); GL.add(box(.92, .1, .72), '#ffe2a8', t.x, t.gy + .25, t.z); }
-        else { B.add(cyl(.05, .09, t.y - t.gy, 6), '#c8c8c8', t.x, (t.y + t.gy) / 2, t.z); B.add(box(.55, .05, .05), '#c8c8c8', t.x, t.y, t.z); }
+        if (t.st) { GB.add(box(.9, .45 + .4, .7), '#ece6d8', t.x, t.gy + .02, t.z); GB.add(box(1.05, .08, .85), '#3e8e5a', t.x, t.gy + .48, t.z); GGL.add(box(.92, .1, .72), '#ffe2a8', t.x, t.gy + .25, t.z); }
+        else { GB.add(cyl(.05, .09, t.y - t.gy, 6), '#c8c8c8', t.x, (t.y + t.gy) / 2, t.z); GB.add(box(.55, .05, .05), '#c8c8c8', t.x, t.y, t.z); }
       }
       const t2 = tops[4];
-      B.add(box(.9, .35, .55), '#c4402e', t2.x + .9, t2.gy + .15, t2.z + .6); B.add(roofG(.6, .4, .35, .3, .8), '#e0a62a', t2.x + .9, t2.gy + .5, t2.z + .6);
+      GB.add(box(.9, .35, .55), '#c4402e', t2.x + .9, t2.gy + .15, t2.z + .6); GB.add(roofG(.6, .4, .35, .3, .8), '#e0a62a', t2.x + .9, t2.gy + .5, t2.z + .6);
       // 纜線（上行／下行各一條），中間有一點下垂
       const line = (off) => { const out = []; for (let i = 0; i < tops.length - 1; i++) { const a = tops[i], b = tops[i + 1], dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz), ox = -dz / l * off, oz = dx / l * off; for (let k = 0; k < 8; k++) { const f = k / 8; out.push(new T.Vector3(a.x + dx * f + ox, a.y + (b.y - a.y) * f - Math.sin(f * Math.PI) * .25, a.z + dz * f + oz)); } } const a = tops[tops.length - 1], b = tops[tops.length - 2], dx = a.x - b.x, dz = a.z - b.z, l = Math.hypot(dx, dz); out.push(new T.Vector3(a.x - dz / l * off, a.y, a.z + dx / l * off)); return out; };
       const up = line(.17), down = line(-.17), loop = [...up, ...down.reverse(), up[0]];
       const lv = []; for (const L of [up, down]) for (let i = 0; i < L.length - 1; i++) lv.push(L[i].x, L[i].y, L[i].z, L[i + 1].x, L[i + 1].y, L[i + 1].z);
       const lg = new T.BufferGeometry(); lg.setAttribute('position', new T.Float32BufferAttribute(lv, 3));
-      g.add(new T.LineSegments(lg, new T.LineBasicMaterial({ color: '#3d3d3d' })));
+      gg.add(new T.LineSegments(lg, new T.LineBasicMaterial({ color: '#3d3d3d' })));
       const cum = [0]; for (let i = 1; i < loop.length; i++) cum.push(cum[i - 1] + loop[i].distanceTo(loop[i - 1]));
       const n = 18, im = new T.InstancedMesh(box(.2, .24, .2), new T.MeshStandardMaterial({ color: '#fff', roughness: .5 }), n);
       const cc = ['#efe7cc', '#7bb6d9', '#f0b84a'], col = new T.Color();
       for (let i = 0; i < n; i++) im.setColorAt(i, col.set(cc[i % 3]));
-      im.frustumCulled = false; g.add(im);
+      im.frustumCulled = false; gg.add(im);
       gondola = { im, loop, cum, n };
-      lmLabel(g, '貓空纜車', tops[6].x, tops[6].y + 2.4, tops[6].z);
+      gondola.label = lmLabel(gg, '貓空纜車', tops[6].x, tops[6].y + 2.4, tops[6].z);
     }
     // 河上的車行橋（台北橋、忠孝橋、華江橋、中正橋、福和橋、百齡橋、大直橋）
     for (const [rn, x, z] of [['淡水河', 41.6, 38.8], ['淡水河', 41.4, 46.2], ['淡水河', 37.6, 52.4], ['新店溪', 44.6, 67.8], ['新店溪', 48.3, 76.6], ['基隆河', 46.2, 19.2], ['基隆河', 60.6, 28.8], ['基隆河', 79, 25.2]]) {
@@ -560,6 +562,7 @@ const Map3D = (() => {
     R.glowMat = new T.MeshBasicMaterial({ vertexColors: true, color: '#5f7181' });
     R.t101Mat = new T.MeshStandardMaterial({ vertexColors: true, roughness: .3, metalness: .45, flatShading: true, emissive: '#000000' });
     for (const [M, mat] of [[B, R.solidMat], [GL, R.glowMat], [TW, R.t101Mat]]) { const ms = M.mesh(mat); if (ms) g.add(ms); }
+    for (const [M, mat] of [[GB, R.solidMat], [GGL, R.glowMat]]) { const ms = M.mesh(mat); if (ms) gg.add(ms); }   // 貓空纜車（解鎖後才看得到）
     // 會起飛的飛機
     const PB = Merger(); planeParts(PB, 1);
     const plane = PB.mesh(new T.MeshStandardMaterial({ vertexColors: true, roughness: .5, flatShading: true }));

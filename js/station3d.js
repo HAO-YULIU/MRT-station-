@@ -14,6 +14,8 @@ const Station3D = (() => {
   const PLAT_HALF = 2.85;      // 月台可走範圍半寬
   const PSD = 3.12;            // 月台門距月台中心
   const LEN = 66;              // 月台長
+  const PH = 4.3;              // 地下月台天花板高（原本 3.4，太壓迫）
+  const PHE = 4.6;             // 高架月台屋頂高
   const RAMP_START = 9;        // 電扶梯底（或頂）距月台中心
   const LANES = [-1.25, 0, 1.25];   // 電扶梯（往大廳）、樓梯、電扶梯（往月台）
 
@@ -448,9 +450,11 @@ const Station3D = (() => {
     });
     const maxX = Math.max(...platforms.flatMap(p => p.ramps.map(r => Math.abs(r.xb)))) + 4;
     const cz1 = platforms[platforms.length - 1].z + 10;
-    const concourse = { x0: -Math.max(maxX, 18), x1: Math.max(maxX, 18), z0: -10, z1: cz1, y: 0 };
+    const BIG = typeof BigStations !== 'undefined' ? BigStations.of(stationId) : null;   // 大型車站：大廳、非付費區都比較寬
+    const hw = Math.max(maxX, BIG ? BIG.hall : 18), uw = BIG ? BIG.unpaid : 16;
+    const concourse = { x0: -hw, x1: hw, z0: -10, z1: cz1, y: 0 };
     const gateZ = cz1;
-    const unpaid = { x0: -16, x1: 16, z0: gateZ + 1.2, z1: gateZ + 14 };
+    const unpaid = { x0: -uw, x1: uw, z0: gateZ + 1.2, z1: gateZ + 14 };
     const gates = [-6, -3.6, -1.2, 1.2, 3.6, 6];
     const spots = [{ kind: 'notice', x: concourse.x0 + 8, y: 0, z: concourse.z0 + .9 }];
     spots.push({ kind: 'elevator', x: concourse.x0 + 4, y: 0, z: concourse.z0 + 1.2, level: 'hall' });
@@ -500,7 +504,9 @@ const Station3D = (() => {
     // 小碧潭：大廳側牆後面藏著「時空研究室」，主線的時空傳送裝置在裡面
     if (stationId === '小碧潭') rooms.push({ kind: 'lab', x0: C.x0 - 9, x1: C.x0, z0: C.z0 + 9, z1: C.z0 + 17, door: { wx: C.x0, z: C.z0 + 13, w: 1.6 } });
     if (big) rooms.push({ kind: 'store', x0: U.x0 - 6, x1: U.x0, z0: U.z0 + 4.4, z1: U.z0 + 11.6, door: { wx: U.x0, z: U.z0 + 8, w: 1.5 } });
-    return { stationId, platforms, concourse, gateZ, unpaid, gates, spots, rooms, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
+    const out = { stationId, platforms, concourse, gateZ, unpaid, gates, spots, rooms, hasElevated: platforms.some(p => !p.under), allUnder: platforms.every(p => p.under) };
+    if (BIG) BigStations.prepare(out);   // 非付費區上方的商店街（多一層樓）
+    return out;
   }
 
   /* ── 建造車站 ── */
@@ -714,11 +720,11 @@ const Station3D = (() => {
         pg.userData[`led${s}`] = { canvas: led, tex: ledTex };
         // 軌道外側
         if (P.under) {
-          const wall = plane(LEN + 300, 5, M('#ffffff', { map: tiled(TEX.wall, (LEN + 300) / 1.2, 5 / 1.2), r: .5 }), pg);
-          wall.position.set(0, 1.0, s * 6.9); wall.rotation.y = s > 0 ? Math.PI : 0;
+          const wall = plane(LEN + 300, PH + 1.7, M('#ffffff', { map: tiled(TEX.wall, (LEN + 300) / 1.2, (PH + 1.7) / 1.2), r: .5 }), pg);
+          wall.position.set(0, (PH - 1.7) / 2 + .05, s * 6.9); wall.rotation.y = s > 0 ? Math.PI : 0;
           const st = M('#ffffff', { map: stationSignTex(L.stationId, P.line) });
           for (let x = -30; x <= 30; x += 12) { const p = plane(2.6, .65, st, pg); p.position.set(x, 2.9, s * 6.86); p.rotation.y = s > 0 ? Math.PI : 0; }
-          box(LEN + 300, .14, .03, M(Lc, { r: .4, m: .2 }), 0, 3.32, s * 6.88, pg);   // 軌道牆上緣的路線色飾帶
+          box(LEN + 300, .14, .03, M(Lc, { r: .4, m: .2 }), 0, PH - .08, s * 6.88, pg);   // 軌道牆上緣的路線色飾帶
         } else {
           box(LEN + 300, .6, 2.6, M('#77736d', { map: TEX.concrete }), 0, -1.65, s * TRACK, pg);   // 頂面比道床低，避免閃爍
           box(LEN, 1.1, .05, M('#cfe3ec', { t: true, o: .3 }), 0, .55 - 1.15 + 1.15, s * 6.9, pg);
@@ -726,23 +732,23 @@ const Station3D = (() => {
       }
       // 端牆、天花板
       if (P.under) {
-        for (const ex of [-1, 1]) box(.3, 3.4, 6.2, M('#ffffff', { map: tiled(TEX.wall, 5, 3) }), ex * (LEN / 2 + .15), 1.7, 0, pg);
+        for (const ex of [-1, 1]) box(.3, PH, 6.2, M('#ffffff', { map: tiled(TEX.wall, 5, 3) }), ex * (LEN / 2 + .15), PH / 2, 0, pg);
         // 月台端牆往下延伸到道床、隧道底鋪滿整個寬度：從軌道上方往月台外看，不會看到地板下面的空洞
         for (const ex of [-1, 1]) box(.3, 1.25, 6.2, M('#3a3b3c', { map: tiled(TEX.concrete, 5, 1), r: .95 }), ex * (LEN / 2 + .15), -.62, 0, pg);
         { const base = plane(LEN + 400, 14, M('#2a2928', { r: 1 }), pg); base.rotation.x = -Math.PI / 2; base.position.set(0, -1.2, 0); }
         const ceilHoles = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return { x0: a - .2, x1: b + .2, z0: -1.9, z1: 1.9 }; });
-        slab(rectsMinus({ x0: -LEN / 2 - 150, x1: LEN / 2 + 150, z0: -7, z1: 7 }, ceilHoles), 3.4, M('#ffffff', { map: TEX.ceil, r: .7, m: .15 }), pg, .2, false);
-        for (const z of [-4.6, -2, 2, 4.6]) for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) if (!(Math.abs(z) < 2.1 && P.ramps.some(r => (x + P.x - r.xa) * (x + P.x - r.xb) < 0))) box(2.2, .04, .14, lightM, x, 3.37, z, pg);
+        slab(rectsMinus({ x0: -LEN / 2 - 150, x1: LEN / 2 + 150, z0: -7, z1: 7 }, ceilHoles), PH, M('#ffffff', { map: TEX.ceil, r: .7, m: .15 }), pg, .2, false);
+        for (const z of [-4.6, -2, 2, 4.6]) for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) if (!(Math.abs(z) < 2.1 && P.ramps.some(r => (x + P.x - r.xa) * (x + P.x - r.xb) < 0))) box(2.2, .04, .14, lightM, x, PH - .03, z, pg);
       } else {
-        box(LEN + 4, .18, 14.5, M(night ? '#2a2f35' : '#5b6168'), 0, 3.9, 0, pg);
-        for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) box(2.2, .04, .14, M('#ffffff', { e: '#fff6e0', ei: night ? 1.4 : .6 }), x, 3.8, 0, pg);
-        for (let x = -30; x <= 30; x += 15) for (const s of [-1, 1]) box(.3, 3.9, .3, M('#6c737a', { m: .4 }), x, 1.95, s * 7.2, pg);
+        box(LEN + 4, .18, 14.5, M(night ? '#2a2f35' : '#5b6168'), 0, PHE, 0, pg);
+        for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) box(2.2, .04, .14, M('#ffffff', { e: '#fff6e0', ei: night ? 1.4 : .6 }), x, PHE - .1, 0, pg);
+        for (let x = -30; x <= 30; x += 15) for (const s of [-1, 1]) box(.3, PHE, .3, M('#6c737a', { m: .4 }), x, PHE / 2, s * 7.2, pg);
         for (let x = -150; x <= 150; x += 30) box(2.6, Math.max(2, P.y - 1), 2.6, M('#77736d'), x, -(P.y - 1) / 2 - 1.2, 0, pg);
       }
       // 柱子（中央）＋滅火器、緊急對講機、路網圖
       for (const x of [-28, 0, 28]) {
         solid(P.x + x, P.z, .7, .7, P.y);
-        box(.7, 3.4, .7, M('#ffffff', { map: tiled(TEX.col, 1, 1), r: .45 }), x, 1.7, 0, pg);
+        box(.7, P.under ? PH : PHE, .7, M('#ffffff', { map: tiled(TEX.col, 1, 1), r: .45 }), x, (P.under ? PH : PHE) / 2, 0, pg);
         box(.76, .3, .76, M('#c8cdd2', { m: .85, r: .22 }), x, .15, 0, pg);
         box(.22, .36, .14, red, x + .36, .9, 0, pg);                               // 滅火器箱
         box(.2, .28, .1, M('#f2c200'), x - .36, 1.3, 0, pg);                        // 緊急對講機
@@ -811,7 +817,8 @@ const Station3D = (() => {
     for (const x of [L.unpaid.x0, L.unpaid.x1]) sideWall(x, L.gateZ, L.unpaid.z1);
     buildRooms(L, g);
     for (const [a, b] of [[C.x0, L.unpaid.x0], [L.unpaid.x1, C.x1]]) box(b - a, hallH, .3, wallM, (a + b) / 2, hallH / 2, L.gateZ, g);
-    const ceilHoles = L.platforms.filter(P => !P.under).flatMap(P => P.ramps.map(r => ({ x0: Math.min(r.xa, r.xb) - .2, x1: Math.max(r.xa, r.xb) + .2, z0: r.z - 1.9, z1: r.z + 1.9 })));
+    const ceilHoles = L.platforms.filter(P => !P.under).flatMap(P => P.ramps.map(r => ({ x0: Math.min(r.xa, r.xb) - .2, x1: Math.max(r.xa, r.xb) + .2, z0: r.z - 1.9, z1: r.z + 1.9 })))
+      .concat(L.big ? BigStations.ceilHoles(L) : []);   // 大型車站：往上層的電扶梯穿過天花板
     slab(rectsMinus({ x0: C.x0, x1: C.x1, z0: C.z0, z1: L.unpaid.z1 }, ceilHoles), hallH, M('#ffffff', { map: TEX.ceil, r: .55, m: .25 }), g, .2, false);
     // 牆腳的深色踢腳板
     const skirt = M('#4a4f55', { r: .4, m: .3 });
@@ -911,11 +918,13 @@ const Station3D = (() => {
     sign(plainSign('失物招領', 'Lost & Found', '#23272b', '#fff', { bg: '#e08a2a', fg: '#fff', text: '?' }), 2.6, .65, U.x1 - 8.2, 2.9, U.z0 + 3, g);
     const mapBig = plane(2.4, 2.4, M('#ffffff', { map: routeMapTex() }), g); mapBig.position.set(U.x0 + .02 + 0, 1.7, U.z0 + 6); mapBig.rotation.y = Math.PI / 2; mapBig.position.x = U.x0 + .02;
 
+    if (L.big) try { BigStations.reserve(L); BigStations.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, sign, plainSign, rectsMinus }); } catch (e) { console.error('bigstations', e); }   // 大型車站的上層商店街
     furnish(L, g, night);
     decorate(L, g);
     if (typeof SpecialHalls !== 'undefined') try { SpecialHalls.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night }); } catch (e) { console.error('specialhalls', e); }   // 特殊車站大廳（先放，後面的裝飾會避開）
     if (typeof Decor !== 'undefined') try { Decor.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD }); } catch (e) { console.error('decor', e); }   // 額外裝飾（花、植栽、藝術品）
     if (typeof MetroProps !== 'undefined') try { MetroProps.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD, sign }); } catch (e) { console.error('metroprops', e); }   // 台北捷運實際會有的設施
+    if (L.big) BigStations.finish(L);   // 擺設都放好了，拿掉預留給電扶梯的位置
     for (const k of placesOf(L.stationId)) buildPlace(L, g, k);
     buildPlace(L, g, 'stamp');
     g.userData = { psd, layout: L };
@@ -1228,7 +1237,7 @@ const Station3D = (() => {
     const gapM = decal(M('#ffffff', { t: true, map: canvasTex(256, 74, x => { x.fillStyle = '#f2c200'; x.fillRect(0, 0, 256, 74); x.fillStyle = '#1c2126'; x.font = 'bold 28px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('小心月台間隙', 128, 34); x.font = '18px "Barlow Semi Condensed", sans-serif'; x.fillText('Mind the gap', 128, 62); }) }), 3);
     for (const P of L.platforms) {
       const pg = new T.Group(); pg.position.set(P.x, P.y, P.z); g.add(pg);
-      const top = P.under ? 3.4 : 3.8;
+      const top = P.under ? PH : PHE - .1;
       // 飲水機（靠近端點的柱子）
       const f = new T.Group(); f.position.set(26.4, 0, .45); pg.add(f); solid(P.x + 26.4, P.z + .45, .5, .4, P.y);
       box(.5, .85, .4, steelM, 0, .425, 0, f); box(.46, .06, .36, M('#e8ecf0', { m: .9, r: .15 }), 0, .88, 0, f);
@@ -1306,7 +1315,7 @@ const Station3D = (() => {
     });
     // 電扶梯井：上下樓層之間（下層天花板到上層地板）用牆圍起來，看不到外面
     {
-      const under = P.y < 0, low = under ? 3.4 : y1 + 4.2, high = under ? y1 : 0;
+      const under = P.y < 0, low = under ? PH : y1 + 4.2, high = under ? y1 : 0;
       const rampY = x => y0 + (y1 - y0) * Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
       const wm = M('#e3e3df', { r: .8, side: T.DoubleSide }), W = 1.95, N = 16, pos = [];
       for (let i = 0; i < N; i++) {
@@ -2023,7 +2032,7 @@ const Station3D = (() => {
   }
 
   return {
-    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, SHOPS, tickClocks, placeAt, ADS,
+    CAR_X, DOORS, HALF_W, TRACK, PLAT_HALF, PSD, LEN, LANES, PH, PHE, SHOPS, tickClocks, placeAt, ADS,
     layout, build, makeTrain, segment, surroundings, sides, setAlias,
     drawLcd, drawStrip, drawLed, SKY_CITY,
   };
