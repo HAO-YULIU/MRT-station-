@@ -96,7 +96,8 @@ const World = (() => {
         // 月台（扣掉電扶梯、柱子、座椅）
         if (Math.abs(z - P.z) < S.PLAT_HALF && Math.abs(x - P.x) < S.LEN / 2 - .4) {
           const lx = x - P.x, lz = z - P.z;
-          const onRamp = P.ramps.some(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; const hx0 = r.b > 0 ? a + .3 : a, hx1 = r.b > 0 ? b : b - .3; return lx > hx0 && lx < hx1 && Math.abs(lz) < 1.9; });
+          // 電扶梯底下：地下月台的電扶梯往上走，離地夠高（頭頂碰不到）的那一段可以從下面走過去
+          const onRamp = P.ramps.some(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; const hx0 = r.b > 0 ? a + .3 : a, hx1 = r.b > 0 ? b : b - .3; return lx > hx0 && lx < hx1 && Math.abs(lz) < 1.9 && !(P.y < 0 && underRampH(r, x) > 2.3); });
           const pillar = [-28, 0, 28].some(px => Math.abs(lx - px) < .6 && Math.abs(lz) < .55);
           const bench = [-31, 31].some(bx => Math.abs(lx - bx) < 1 && Math.abs(lz) < .4) || (Math.abs(lx + 24) < .9 && Math.abs(lz) < .8);   // 座椅、電梯
           if (!onRamp && !pillar && !bench) consider(P.y);
@@ -165,7 +166,32 @@ const World = (() => {
   /* ── 輸入 ── */
   const keys = {};
   const KEYMAP = { ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ShiftLeft: 'run', ShiftRight: 'run' };
-  let runToggle = false, joyEdge = 0, joyRun = false;
+  let runToggle = false, joyEdge = 0, joyRun = false, stuckT = 0;
+  const onRampNow = () => !!layout && Math.abs(player.y) > .05 && !layout.platforms.some(P => Math.abs(player.y - P.y) < .05);
+  const onFloor = () => !!layout && (Math.abs(player.y) < .05 || layout.platforms.some(P => Math.abs(player.y - P.y) < .05));
+  // 脫離卡住：找最近、可以站的地板（大廳或月台，不在柱子、設施裡），把玩家放過去
+  function unstuck(auto) {
+    if (!layout || riding) return false;
+    const levels = [0, ...layout.platforms.map(P => P.y)].sort((a, b) => Math.abs(a - player.y) - Math.abs(b - player.y));
+    let best = null, bd = 1e9;
+    for (let r = .4; r <= 16 && !best; r += .4) {
+      for (let i = 0; i < 24; i++) {
+        const a = i / 24 * Math.PI * 2, x = player.x + Math.cos(a) * r, z = player.z + Math.sin(a) * r;
+        for (const y of levels) {
+          const h = groundAt(x, z, y);
+          if (h == null || Math.abs(h - y) > .02 || hitObstacle(x, z, h) || (blocked && blocked(x, z, h))) continue;
+          const d = r + Math.abs(h - player.y) * 1.5;
+          if (d < bd) { bd = d; best = { x, y: h, z }; }
+        }
+      }
+    }
+    player.auto = null; player.vnow = 0; player.sitting = false;
+    if (best) { player.x = best.x; player.y = best.y; player.z = best.z; }
+    else { const C = layout.concourse; player.x = (C.x0 + C.x1) / 2; player.y = 0; player.z = layout.gateZ - 3; }
+    cam.pos.set(player.x, player.y + 2.4, player.z + 4);
+    if (typeof toast === 'function') toast(auto ? '<b>好像卡住了</b><span>已經把你移到旁邊的地板</span>' : '<b>已脫離卡住</b><span>移到最近可以走的地方</span>');
+    return true;
+  }
   const coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
   /* ── 畫質：自動（依幀率調整解析度）／高／省電（解析度低、30 fps、人少一點） ── */
   let quality = 'auto'; try { quality = localStorage.getItem('quality') || 'auto'; } catch (e) { /* 無法存取 */ }
@@ -323,15 +349,22 @@ const World = (() => {
           player.x = bx; player.z = bz;
           tryMove(bx + mx * sp, bz); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; tryMove(bx, bz + mz * sp); if (hitObstacle(player.x, player.z, player.y)) { player.x = bx; player.z = bz; } }
         }
-        if (blocked && blocked(player.x, player.z, player.y)) { player.x = bx; player.z = bz; }   // 不能穿過 NPC
+        if (blocked && !onRampNow() && blocked(player.x, player.z, player.y)) { player.x = bx; player.z = bz; }   // 不能穿過 NPC（手扶梯上例外，免得前後互等卡住）
         player.face = lerpAngle(player.face, Math.atan2(mx, mz), Math.min(1, dt * (v > 4 ? 9 : 12)));
         player.speed = v; moved = true;
       } else if (player.vnow > .15 && player.mdir) {   // 放開搖桿：再滑一小步停下來
         const bx = player.x, bz = player.z;
         tryMove(player.x + player.mdir.x * player.vnow * dt, player.z + player.mdir.z * player.vnow * dt);
-        if (hitObstacle(player.x, player.z, player.y) || (blocked && blocked(player.x, player.z, player.y))) { player.x = bx; player.z = bz; player.vnow = 0; }
+        if (hitObstacle(player.x, player.z, player.y) || (blocked && !onRampNow() && blocked(player.x, player.z, player.y))) { player.x = bx; player.z = bz; player.vnow = 0; }
         player.speed = player.vnow; moved = true;
       } else { player.speed = 0; player.vnow = 0; }
+      // 卡住偵測：在手扶梯中間按著方向卻 2 秒都沒動，自動放到最近的地板
+      if (mag > .3 && !player.auto) {
+        const d = Math.hypot(player.x - (player.lastX ?? player.x), player.z - (player.lastZ ?? player.z));
+        stuckT = d < .01 && onRampNow() && !onFloor() ? stuckT + dt : 0;
+        if (stuckT > 2) { stuckT = 0; unstuck(true); }
+      } else stuckT = 0;
+      player.lastX = player.x; player.lastZ = player.z;
       // 電扶梯會自己把人往上／往下帶
       const cv = conveyorAt(player.x, player.z);
       if (cv) { tryMove(player.x + cv * dt, player.z); if (!moved) player.speed = 0; }
@@ -358,6 +391,7 @@ const World = (() => {
     // 鏡頭：在手扶梯／樓梯、車廂、房間、和人說話時自動轉到好看的角度（玩家剛拖曳過就不自動）
     autoCamera(z, dt);
     const inTrain = z.kind === 'train';
+    let sitLook = false;
     const dist = inTrain ? Math.min(cam.dist, 2.6) : z.room ? Math.min(cam.dist, 2.2) : cam.dist;
     const pitch = inTrain ? Math.min(cam.pitch, .12) : cam.pitch;
     const tx = player.x, ty = player.y + 1.5, tz = player.z;
@@ -374,8 +408,20 @@ const World = (() => {
       }
       px = Math.min(ctx + 30, Math.max(ctx - 30, px)); pz = Math.min(ctz + lim, Math.max(ctz - lim, pz)); py = Math.min(player.y + 2.15, py);
       if (Math.hypot(px - tx, pz - tz) < .9) { py = player.y + 2.1; const b = Math.atan2(px - tx, pz - tz); px = tx + Math.sin(b) * .9; pz = Math.min(ctz + lim, Math.max(ctz - lim, tz + Math.cos(b) * .9)); }
+      if (player.sitting) {   // 坐著：鏡頭在走道對面、稍微偏一點，看著坐在椅子上的自己（不會跟椅背重疊）
+        const fx = Math.sin(player.face), fz = Math.cos(player.face), drag = performance.now() - cam.lastDrag < 1500;
+        const side = Math.sin(cam.yaw - player.face) >= 0 ? 1 : -1, off = drag ? side * 1.2 : .7;   // 玩家拖曳過：照拖曳的方向偏左或偏右
+        px = tx + fx * 2.0 + fz * off; pz = Math.min(ctz + lim, Math.max(ctz - lim, tz + fz * 2.0 - fx * off)); py = player.y + 1.45;
+        sitLook = true;
+      }
     } else if (z.kind === 'platform') {
       pz = Math.min(z.P.z + 6.5, Math.max(z.P.z - 6.5, pz)); py = Math.min(player.y + (z.P.under ? 3.2 : 3.6), py);
+      if (z.P.under) for (const r of z.P.ramps) {   // 在電扶梯底下：鏡頭壓低，不穿過電扶梯
+        if (Math.abs(player.z - r.z) < 1.95 && player.x > Math.min(r.xa, r.xb) && player.x < Math.max(r.xa, r.xb)) {
+          py = Math.min(py, player.y + underRampH(r, player.x) - .35);
+          pz = Math.min(r.z + 1.7, Math.max(r.z - 1.7, pz));
+        }
+      }
     } else if (z.room) {   // 在房間裡：鏡頭拉近、不穿牆；靠近門口時鏡頭可以退到門外（沿著門洞），太擠就改從上面往下看
       const r = z.room, out = r.door.wx === r.x0 ? -1 : 1;
       const halfDoor = r.door.w / 2 - .12, nearDoor = Math.abs(player.z - r.door.z) < halfDoor + .5 && Math.abs(player.x - r.door.wx) < 3.5;
@@ -404,7 +450,7 @@ const World = (() => {
     const k = Math.min(1, dt * 7);
     cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * k; cam.pos.z += (pz - cam.pos.z) * k;
     camera.position.copy(cam.pos);
-    if (shake) camera.position.y += Math.sin(now / 45) * .006 * shake + Math.sin(now / 97) * .008 * shake;
+    // 搭車時鏡頭不再上下晃（手機上看會暈）
     const fp = VIEWS[cam.mode].fp && !player.sitting;
     if (rig) rig.root.visible = !fp;
     if (fp) {   // 第一人稱：鏡頭在眼睛的位置，往前看
@@ -412,7 +458,8 @@ const World = (() => {
       cam.pos.set(player.x + fx * .12, ey, player.z + fz * .12);
       camera.position.copy(cam.pos);
       camera.lookAt(player.x + fx * 3, ey - (cam.pitch - .3) * 3, player.z + fz * 3);
-    } else camera.lookAt(tx, ty, tz);
+    } else if (sitLook) camera.lookAt(tx, player.y + .95, tz);
+    else camera.lookAt(tx, ty, tz);
     if (plight && plight.intensity > 0) plight.position.set(player.x + Math.sin(player.face) * .4, player.y + 1.7, player.z + Math.cos(player.face) * .4);
     for (const fn of tickers) fn(dt, now);
     if (warmQ.length) warmStep();
@@ -454,6 +501,8 @@ const World = (() => {
     if (pitch != null && !VIEWS[cam.mode].fp) cam.pitch += (pitch - cam.pitch) * Math.min(1, dt * rate);
   }
   // 玩家所在的電扶梯（含兩端一點點）
+  // 地下月台：電扶梯在 x 處離月台地板多高
+  function underRampH(r, x) { return (r.yb - r.ya) * Math.min(1, Math.max(0, (x - r.xa) / (r.xb - r.xa))); }
   function rampAt(x, z) {
     if (!layout) return null;
     for (const P of layout.platforms) for (const r of P.ramps) if (Math.abs(z - r.z) < 2 && x > Math.min(r.xa, r.xb) - 1 && x < Math.max(r.xa, r.xb) + 1) return { P, r };
@@ -573,6 +622,7 @@ const World = (() => {
     onRecenter(fn) { recenterHooks.push(fn); },
     get running() { return runToggle || joyRun || !!keys.run; },
     get quality() { return quality; },
+    unstuck() { return unstuck(false); },
     get camYaw() { return cam.yaw; },
     get fps() { return Math.round(perf.fps); },
     get pixelRatio() { return pr; },

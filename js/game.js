@@ -1262,6 +1262,12 @@ function init() {
   const QNAME = { auto: '自動', high: '高', low: '省電' };
   const qLabel = () => { $('#btnQuality').innerHTML = `<i aria-hidden="true">⚙️</i>畫質 ${QNAME[World.quality] || '自動'}`; };
   qLabel();
+  $('#btnUnstuck').onclick = () => {
+    if (Game.ride && Game.ride.moving) return toast('<b>列車行駛中</b><span>到站之後再試</span>');
+    if (Dialog.with) Dialog.close();
+    if (World.sitting) World.sit(null);
+    World.unstuck(); Sound.click(); if (ctl) tickStation();
+  };
   $('#btnQuality').onclick = () => { const order = ['auto', 'high', 'low'], q = order[(order.indexOf(World.quality) + 1) % 3]; World.setQuality(q); qLabel(); toast(`<b>畫質：${QNAME[q]}</b><span>${{ auto: '依手機效能自動調整解析度', high: '最清楚，比較耗電', low: '解析度較低、最高 30 fps、人潮少一點，比較省電不發燙' }[q]}${q === 'low' ? '（人潮在下一站生效）' : ''}</span>`); };
   $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').innerHTML = `<i aria-hidden="true">${on ? '🔊' : '🔇'}</i>音效 ${on ? '開' : '關'}`; };
   // 選單：手機、紀錄、音效、回到標題
