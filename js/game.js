@@ -95,7 +95,7 @@ function updateHud() {
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
-  $('#hudWhere').textContent = s.current ? s.current : '尚未出發';
+  $('#hudWhere').textContent = s.gondolaAt && typeof Gondola !== 'undefined' && Gondola.mode ? `🚡 貓空纜車・${(Gondola.ST.find(x => x.key === Gondola.mode.key) || {}).zh || ''}${Gondola.mode.scene === 'ride' ? '（搭乘中）' : '站'}` : s.current ? s.current : '尚未出發';
   $('#hudItems').textContent = `${Teleporter.total()}/6`;   // 主線寶物（傳送裝置零件）
   $('#hudQuests').textContent = Object.keys(s.quests.active).length;
 }
@@ -176,6 +176,7 @@ Game.onQuestChange = (what, id, o, k) => {
     }, 1500);
   }
   // 主線完成：揭曉這條線的結局
+  if (what === 'done') Gondola.onQuestDone(id);
   if (what === 'done' && /^main_/.test(id) && STORY[q.line]) setTimeout(() => showEnding(q.line), 1200);
   if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); FX.banner('發現秘密任務', q.title, 'secret'); }
   if ((what === 'accept' || what === 'done') && ctl) Challenges.spawn(ctl.stationId);
@@ -393,7 +394,7 @@ function ensureWorld() {
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
   World.onRecenter(W => Passengers.shift(W));
-  World.addTicker((dt, now) => { FogCity.tick(dt, now); Teleporter.tick(dt, now); NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Onsen.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Nav.tick(now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
+  World.addTicker((dt, now) => { FogCity.tick(dt, now); Teleporter.tick(dt, now); NPCManager.tick(dt, now); Crowd.tick(dt); Festival.tick(dt, now); ArtInstall.tick(dt, now); Onsen.tick(dt); Passengers.tick(dt, now); Pickups.tick(now); Nav.tick(now); Gondola.tick(dt, now); Challenges.tick(dt, now); Secrets.tick(); Achievements.tick(); Life.tick(dt, now); if (now - lastDaily > 60000) { lastDaily = now; Daily.refresh(); Phone.deliverFollowups(); } });
   worldReady = true;
 }
 function enterGame(stationId) {
@@ -409,7 +410,8 @@ function enterGame(stationId) {
   World.spawnInConcourse();
   Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
   startStation(stationId);
-  opening();
+  if (Game.state.gondolaAt && Gondola.unlocked()) Gondola.enter(Game.state.gondolaAt);   // 上次停在貓空纜車站
+  else opening();
 }
 // 開場：先收到委託（序章），再由秀蔅說明；一定要選板南線或文湖線（迷霧時段先跳過，天亮後再補）
 function opening() {
@@ -465,6 +467,7 @@ function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = htm
 let ctl = null;
 let lastDaily = 0;
 function startStation(stationId, carry) {
+  Gondola.exitMode();   // 離開貓空纜車
   const id = newSession();
   clearInterval(Game.ctlTimer);
   ctl = { id, stationId, busy: new Set(), chimed: new Set(), doors: new Map() };
@@ -592,6 +595,9 @@ function renderPanel(z, L) {
   } else if (z.kind === 'concourse') {
     setPart('pTitle', `${head}<span class="mini-sub">大廳</span>`);
     hint = lines.length > 1 ? `跟著指標走：${lines.map(l => LINES[l.line].zh).join('、')}月台` : '跟著指標搭電扶梯到月台';
+  } else if (z.kind === 'mall') {
+    setPart('pTitle', `${head}<span class="mini-sub">${esc(z.level.name)}</span>`);
+    hint = '逛逛商店；電扶梯下去是大廳和閘門';
   } else if (z.kind === 'unpaid') {
     setPart('pTitle', `${head}<span class="mini-sub">非付費區</span>`);
     hint = '刷卡進閘門才能到月台';
@@ -628,7 +634,7 @@ function doorInteractions() {
       run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
     });
   }
-  list.push(FogCity.interaction, Teleporter.interaction, exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, ArtInstall.interaction, Onsen.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
+  list.push(Gondola.interaction, FogCity.interaction, Teleporter.interaction, exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, ArtInstall.interaction, Onsen.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
   World.setInteractions(list);
 }
 let doorSeq = 0;
@@ -797,13 +803,13 @@ const dropInteraction = {
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
   guide: '路線指南', cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
-  feature: '特色大廳', onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
+  feature: '特色大廳', mallshop: '商店', malldir: '樓層指南', onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
-const SPOT_VERB = { stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
+const SPOT_VERB = { mallshop: '逛商店', malldir: '看樓層指南', stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
-  get label() { const sp = nearSpot(World.player); return sp ? (sp.kind === 'feature' ? `欣賞：${sp.name}` : SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
+  get label() { const sp = nearSpot(World.player); return sp ? (sp.kind === 'feature' ? `欣賞：${sp.name}` : sp.kind === 'mallshop' ? `逛：${sp.name}` : SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
   when: p => !Dialog.with && !!nearSpot(p) && !NPCManager.nearest(p, 1.2),
   run: () => {
     const sp = nearSpot(World.player), st = ctl.stationId;
@@ -828,6 +834,8 @@ const spotInteraction = {
 };
 // 車站設施
 const FACILITY = {
+  mallshop: sp => { Sound.click(); BigStations.shopMenu(sp); },
+  malldir: () => { Sound.click(); BigStations.dirInfo(); },
   feature: (sp, st) => { Sound.click(); Dialog.info(`✨ ${sp.name}`, `${esc(sp.text)}<br><small>${esc(st)}站的特色大廳</small>`); const s = Game.state, f = (s.col = s.col || {}).halls = s.col.halls || {}; if (!f[st]) { f[st] = 1; saveState(); toast(`<b>✨ 特色大廳 ${Object.keys(f).length} / ${Object.keys(SpecialHalls.HALLS).length}</b><span>${esc(sp.name)}</span>`, 'level'); } },
   fountain: () => { Sound.click(); toast(['<b>喝了幾口水</b><span>冰冰涼涼的。</span>', '<b>喝了幾口水</b><span>出水有點小，要湊很近。</span>', '<b>喝了幾口水</b><span>精神好一點了。</span>'][(Math.random() * 3) | 0]); },
   aed: () => Dialog.info('AED', '自動體外心臟電擊去顫器。打開箱門會有警報聲，裡面的機器會用語音一步一步教你怎麼用。<br>旁邊貼著站務員的分機號碼。'),
@@ -1157,7 +1165,7 @@ function openMap() {
     document.querySelectorAll('#mapLines .ml').forEach(x => x.setAttribute('aria-pressed', x.dataset.l === solo));
   };
   Map3D.open($('#map3d'), {
-    visited: s.visited, current: s.current, char: s.char, compass: $('#compassN').parentElement, mistLine: !!s.flags.mistLine, hiddenMap: !!s.flags.hiddenMap,
+    visited: s.visited, current: s.current, char: s.char, compass: $('#compassN').parentElement, mistLine: !!s.flags.mistLine, hiddenMap: !!s.flags.hiddenMap, gondola: !!s.flags.gondola,
     onPick: id => {
       const lines = MRT.linesAt(id);
       const here = id === s.current, been = !!s.visited[id];

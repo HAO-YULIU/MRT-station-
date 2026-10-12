@@ -65,15 +65,19 @@ const Nav = (() => {
     L = L || World.layout; if (!L) return null;
     if (L._floors) return L._floors;
     const under = L.platforms.filter(P => P.under).sort((a, b) => b.y - a.y), el = L.platforms.filter(P => !P.under).sort((a, b) => a.y - b.y);
-    const hall = under.length && !el.length ? 'B1' : '1F', byK = {};
-    under.forEach((P, i) => { byK[P.k] = 'B' + (i + (hall === 'B1' ? 2 : 1)); });
-    el.forEach((P, i) => { byK[P.k] = (i + 2) + 'F'; });
-    return (L._floors = { hall, byK });
+    // 大型車站：非付費區上方多一層（地下站：上層 B1、大廳 B2；有高架的站：大廳 1F、上層 2F）
+    const mallUp = !!(L.levels && L.levels.length), allU = under.length && !el.length;
+    const hall = allU ? (mallUp ? 'B2' : 'B1') : '1F', byK = {}, hb = allU ? +hall.slice(1) : 0;
+    under.forEach((P, i) => { byK[P.k] = 'B' + (i + (allU ? hb + 1 : 1)); });
+    el.forEach((P, i) => { byK[P.k] = (i + (mallUp ? 3 : 2)) + 'F'; });
+    const mall = mallUp ? (allU ? 'B1' : '2F') : null;
+    return (L._floors = { hall, byK, mall });
   }
   function floorOf(z) {
     const f = floors(); if (!f || !z) return '';
     if ((z.kind === 'platform' || z.kind === 'train') && z.P) return f.byK[z.P.k];
     if (z.kind === 'concourse' || z.kind === 'unpaid') return f.hall;
+    if (z.kind === 'mall') return f.mall;
     return '';
   }
   const termName = (P, side) => { const d = P.sides[side] && P.sides[side][0]; return d ? MRT.label(d.terminal, P.line).zh : ''; };
@@ -95,6 +99,8 @@ const Nav = (() => {
       const side = Math.abs(t.z - P.z) > .6 ? `・往${termName(P, sideOf(P, t.z))}那側` : '';
       return `${f.byK[P.k]} ${LINES[P.line].zh}月台${side}${end}`;
     }
+    const lv = (L.levels || []).find(l => Math.abs(t.y - l.y) < .8);
+    if (lv) return `${f.mall} ${lv.name}`;
     if (Math.abs(t.y) < .8) {
       const room = (L.rooms || []).find(r => t.x > Math.min(r.x0, r.x1) && t.x < Math.max(r.x0, r.x1) && t.z > r.z0 && t.z < r.z1);
       const area = t.z > L.gateZ + .6 ? '非付費區（閘門外）' : '大廳（閘門內）';
@@ -238,12 +244,14 @@ const Nav = (() => {
   /* ── 導航視窗 ── */
   function open() {
     const L = World.layout; if (!L) return;
+    if (L.custom) return Dialog.info('🧭 導航', `你在${esc2(L.stationId)}。<br>貓空纜車：動物園 → 動物園內 → 指南宮 → 貓空。<br><small>回到捷運站之後就能用完整的站內導航。</small>`);
     const s = S(), f = floors(), z = World.zone(), here = L.stationId, mine = floorOf(z);
     const lines = MRT.linesAt(here);
     const rows = [{ fl: f.hall, y: 0, html: `<b>大廳・閘門・出入口</b><small>售票機、服務台、廁所在閘門外的非付費區；刷卡進閘門到付費區，再搭電扶梯或電梯到月台</small>` }]
+      .concat(f.mall ? [{ fl: f.mall, y: L.levels[0].y, html: `<b>${esc2(L.levels[0].name)}</b><small>從非付費區搭電扶梯上去：${esc2(L.big.shops.slice(0, 5).join('、'))}…${L.big.food ? '、美食廣場' : ''}</small>` }] : [])
       .concat(L.platforms.map(P => ({ fl: f.byK[P.k], y: P.y, html: `${chip(P.line)} <b>${LINES[P.line].zh}月台</b><small>${[1, -1].map(sd => termName(P, sd)).filter((x, i, a) => x && a.indexOf(x) === i).map(x => `往 ${esc2(x)}`).join('　｜　')}</small>` })))
       .sort((a, b) => b.y - a.y);
-    const zname = { platform: '月台', train: '車廂裡', concourse: '大廳（付費區）', unpaid: '非付費區', ramp: '電扶梯' }[z.kind] || '';
+    const zname = { platform: '月台', train: '車廂裡', concourse: '大廳（付費區）', unpaid: '非付費區', ramp: '電扶梯', mall: L.levels ? L.levels[0].name : '' }[z.kind] || '';
     let side = '';
     if (z.kind === 'platform') side = `，你站在 <b>往 ${esc2(termName(z.P, sideOf(z.P, World.player.z)))}</b> 那一側`;
     const transfer = lines.length > 1 ? `<h4 class="bag-h">轉乘</h4><ul class="nav-list">${lines.map(l => { const P = L.platforms.find(P => P.line === l.line); const onIt = z.P && z.P.line === l.line; return `<li>${chip(l.line)} ${LINES[l.line].zh}：${onIt ? '<em>你在這裡</em>' : `到 <b>${f.byK[P.k]}</b>${z.kind === 'platform' || z.kind === 'train' ? `（先搭電扶梯回 ${f.hall} 大廳，跟著${LINES[l.line].zh}的指標走）` : '（跟著大廳的指標搭電扶梯）'}`}</li>`; }).join('')}</ul>` : '';
