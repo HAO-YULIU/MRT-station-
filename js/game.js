@@ -329,13 +329,24 @@ function updateTransferBtn() {
 /* ── 標題畫面 ── */
 function renderTitle() {
   const s = Game.state;
-  const lines = MRT.segments().map(g => `<line x1="${STATIONS[g.a].x}" y1="${STATIONS[g.a].y}" x2="${STATIONS[g.b].x}" y2="${STATIONS[g.b].y}" stroke="${LINES[g.line].color}" stroke-width="6" stroke-linecap="round"/>`).join('');
+  // 背景路網：載入時一條一條畫出來
+  const lines = MRT.segments().map((g, i) => `<line pathLength="1" style="--d:${(i % 40) * 22}ms" x1="${STATIONS[g.a].x}" y1="${STATIONS[g.a].y}" x2="${STATIONS[g.b].x}" y2="${STATIONS[g.b].y}" stroke="${LINES[g.line].color}" stroke-width="6" stroke-linecap="round"/>`).join('');
   $('#titleMap').innerHTML = `<svg viewBox="20 10 1000 930" preserveAspectRatio="xMidYMid slice">${lines}</svg>`;
+  // 站名牌：每一條線的站碼都是 00——一個不存在的車站
+  $('#titleChips').innerHTML = LINE_ORDER.map(l => `<span style="--c:${LINES[l].color}"${['O', 'Y'].includes(l) ? ' class="dark"' : ''}>${l}<i>00</i></span>`).join('');
+  $('#titleBand').innerHTML = LINE_ORDER.map(l => `<i style="--c:${LINES[l].color}"></i>`).join('');
   const hasSave = s.char && s.current;
-  $('#titleActions').innerHTML = hasSave
-    ? `<button class="btn primary" id="btnContinue">繼續旅程<small>${CHARACTERS[s.char].name}・目前在 ${s.current}</small></button>
-       <button class="btn ghost" id="btnNew">重新開始</button>`
-    : `<button class="btn primary" id="btnStart">開始</button>`;
+  if (hasSave) {
+    const c = CHARACTERS[s.char], lv = Economy.levelInfo(s.xp || 0).lv, got = Object.keys(s.items || {}).length;
+    const chips = (STATIONS[s.current] ? MRT.linesAt(s.current) : []).map(l => lineChip(l.line, l.code)).join('');
+    $('#titleActions').innerHTML = `
+      <button class="ez-card" id="btnContinue">
+        <img class="ez-face" src="${Human3D.snapshot(s.char, 'head', s.wardrobe && s.wardrobe.wear)}" alt="">
+        <span class="ez-main"><b>繼續旅程</b><span class="ez-where">${chips}<span>${esc(s.gondolaAt ? s.current + '（貓空纜車）' : s.current)}</span></span></span>
+        <span class="ez-side"><em>NT$ ${s.money}</em><small>${esc(c.name)}・Lv ${lv}</small><small>終點的東西 ${got} / ${LINE_ORDER.length}</small></span>
+      </button>
+      <button class="btn-text" id="btnNew">重新開始（清除進度）</button>`;
+  } else $('#titleActions').innerHTML = `<button class="btn primary ts-start" id="btnStart">開始旅程</button>`;
   const go = () => { Sound.unlock(); goFullscreen(); renderCharSelect(); showScreen('charSelect'); };
   $('#btnStart') && ($('#btnStart').onclick = go);
   $('#btnNew') && ($('#btnNew').onclick = () => {
@@ -343,6 +354,22 @@ function renderTitle() {
     Game.state = newState(); MRT.closeAirport(); Daily.refresh(); saveState(); go();
   });
   $('#btnContinue') && ($('#btnContinue').onclick = () => { Sound.unlock(); goFullscreen(); enterGame(s.current); });
+  titleTick(true);
+}
+// 標題的下一班車看板：倒數到 00:30；迷霧時段顯示營運結束
+let ledIdx = 0;
+function titleTick(force) {
+  if (!force && document.body.dataset.screen !== 'title') return;
+  const t = TaipeiTime.now(), fog = TaipeiTime.state() !== 'open', led = $('#titleLed'); if (!led) return;
+  led.classList.toggle('ts-off', fog);
+  document.body.classList.toggle('title-fog', fog);
+  if (fog) { $('#ledDir').textContent = '本日營運結束'; $('#ledTime').textContent = '--:--'; }
+  else { $('#ledDir').textContent = '往 迷霧'; $('#ledTime').textContent = '00:30'; }
+  const left = ((24 * 60 + 30) - (t.hour * 60 + t.minute) + 1440) % 1440;
+  const msgs = fog
+    ? ['霧散之前，請不要離開月台。', '06:00 首班車發車。', '廣播裡的站名，你查不到。']
+    : ['末班車開走以後，月台上還有一班車。', `距離 00:30 還有 ${Math.floor(left / 60)} 小時 ${left % 60} 分`, '請站在黃線後方候車。'];
+  if (force || t.second % 9 === 0) { const run = $('#ledRun'); run.textContent = msgs[ledIdx++ % msgs.length]; run.style.animation = 'none'; void run.offsetWidth; run.style.animation = ''; }
 }
 
 /* ── 選角色 ── */
@@ -1255,6 +1282,7 @@ function init() {
     if (st !== Game.service) onServiceChange(st);
     if (!$('#closedOverlay').hidden && st !== 'open') showClosed();
     $('#titleClock').textContent = `台灣時間 ${TaipeiTime.date()} ${TaipeiTime.clockSec()}`;
+    titleTick();
   }, 1000);
   $('#titleClock').textContent = `台灣時間 ${TaipeiTime.date()} ${TaipeiTime.clockSec()}`;
 

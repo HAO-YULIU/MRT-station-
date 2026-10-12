@@ -18,7 +18,16 @@
     <div class="title-map" id="titleMap" aria-hidden="true"></div>
     <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
     <div class="title-inner">
-      <h1 class="logo">迷霧</h1>
+      <!-- 一個不存在的車站：站名牌（每條線的站碼都是 00）＋月台的下一班車看板 -->
+      <div class="ts-sign" id="titleSign">
+        <div class="ts-chips" id="titleChips" aria-hidden="true"></div>
+        <div class="ts-name"><h1 class="logo">迷霧</h1><span class="ts-en" lang="en">Mist</span></div>
+      </div>
+      <div class="ts-band" id="titleBand" aria-hidden="true"></div>
+      <div class="ts-led" id="titleLed" role="status" aria-live="off">
+        <div class="ts-led-row"><span id="ledDir">往 迷霧</span><b id="ledTime">00:30</b></div>
+        <div class="ts-led-run"><span id="ledRun">末班車開走以後，月台上還有一班車。</span></div>
+      </div>
       <p class="tagline">從南港展覽館出發，搭遍台北捷運。<br>每條路線的終點，都留著一件東西。</p>
       <div class="title-actions" id="titleActions"></div>
       <p class="title-clock" id="titleClock"></p>
