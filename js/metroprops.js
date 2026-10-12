@@ -199,6 +199,7 @@ const MetroProps = (() => {
   }
 
   // 收集幾何：每種材質一桶
+  const binTex = {};   // 垃圾桶標籤貼圖（各站共用）
   function batcher() {
     const B = new Map();
     const m4 = new T.Matrix4(), nm = new T.Matrix3(), q = new T.Quaternion(), e = new T.Euler(), S = new T.Vector3(), P = new T.Vector3(), v = new T.Vector3();
@@ -517,11 +518,59 @@ const MetroProps = (() => {
       }
     }
 
+    /* ── 11) 垃圾桶：一般垃圾＋資源回收（大廳、非付費區、每個月台） ── */
+    {
+      const lab = (txt, en, bg) => { const key = 'bin_' + txt; if (!binTex[key]) binTex[key] = M('#ffffff', { map: K.canvasTex(128, 96, x => { x.fillStyle = bg; x.fillRect(0, 0, 128, 96); x.fillStyle = '#fff'; x.textAlign = 'center'; x.font = '700 30px "Noto Sans TC", sans-serif'; x.fillText(txt, 64, 44); x.font = '500 18px "Barlow Semi Condensed", sans-serif'; x.fillText(en, 64, 74); }), r: .5 }); return binTex[key]; };
+      const steel = M('#9aa2a8', { r: .35, m: .7 }), dark = M('#3a3f44', { r: .5, m: .3 });
+      const pair = (x, y, z, ry) => {   // 兩個並排的桶子：一般垃圾（灰）、資源回收（藍）
+        const W = loc(x, z, ry);
+        [[-.26, '#5a6066', '一般垃圾', 'Trash'], [.26, '#2a6fb8', '資源回收', 'Recycle']].forEach(([dx, c, t, en]) => {
+          const [bx, bz] = W(dx, 0);
+          add(steel, 'cyl', bx, y + .42, bz, .44, .84, .44);
+          add(M(c, { r: .45 }), 'cyl', bx, y + .87, bz, .47, .07, .47);
+          add(dark, 'cyl', bx, y + .91, bz, .2, .02, .2);
+          const [lx, lz] = W(dx, .222); add(lab(t, en, c), 'plane', lx, y + .55, lz, .3, .22, 1, 0, ry, 0);
+        });
+      };
+      let nb = 0;
+      const tryHall = (x, z, ry) => {
+        const side = Math.abs(Math.sin(ry)) > .5, a = side ? R2(x - .26, x + .26, z - .52, z + .52) : R2(x - .52, x + .52, z - .26, z + .26);
+        if (!floorFree(a, .2)) return false;
+        if (placed.some(o => o.bin && Math.hypot(o.cx - x, o.cz - z) < 9)) return false;
+        pair(x, 0, z, ry); solid(x, z, side ? .52 : 1.04, side ? 1.04 : .52, 0, 'trash'); Object.assign(placed[placed.length - 1], { bin: true, cx: x, cz: z }); nb++; return true;
+      };
+      // 大廳（付費區）沿牆、非付費區沿牆，各找兩組
+      const hallC = [], unpC = [];
+      for (let z = C.z0 + 3; z < gz - 2; z += .7) { hallC.push([C.x0 + .3, z, Math.PI / 2]); hallC.push([C.x1 - .3, z, -Math.PI / 2]); }
+      for (let x = C.x0 + 3; x < C.x1 - 3; x += .7) hallC.push([x, C.z0 + .3, 0]);
+      for (let z = U.z0 + 1; z < U.z1 - 1; z += .7) { unpC.push([U.x0 + .3, z, Math.PI / 2]); unpC.push([U.x1 - .3, z, -Math.PI / 2]); }
+      for (let x = U.x0 + 2; x < U.x1 - 2; x += .7) unpC.push([x, gz + .5, 0]);
+      for (let x = U.x0 + 2; x < U.x1 - 2; x += .7) unpC.push([x, U.z1 - .32, Math.PI]);   // 出口端牆，出口之間
+      for (const list of [hallC, unpC]) {
+        for (let i = list.length - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; [list[i], list[j]] = [list[j], list[i]]; }
+        let k = 0; for (const c of list) { if (k >= 2) break; if (tryHall(...c)) k++; }
+      }
+      // 月台：中線上、柱子與座椅之間的空位（離月台門遠、不擋通道）
+      for (const P of L.platforms) {
+        let k = 0;
+        for (const lx of [4.5, -4.5, 26, -26, 32, -32, 13, -13, 22, -22]) {   // 兩座電扶梯之間、月台兩端（避開電扶梯、柱子、電梯、座椅）
+          if (k >= 2) break;
+          const x = P.x + lx, z = P.z, a = R2(x - .55, x + .55, z - .3, z + .3);
+          if (Math.abs(lx) > K.LEN / 2 - 1) continue;
+          if ((L.obstacles || []).some(o => Math.abs((o.y || 0) - P.y) < .5 && hit(R2(a.x0 - .3, a.x1 + .3, a.z0 - .3, a.z1 + .3), o))) continue;
+          if (P.ramps.some(r => x > Math.min(r.xa, r.xb) - 2.5 && x < Math.max(r.xa, r.xb) + 2.5)) continue;
+          if (L.spots.some(sp => Math.abs((sp.y || 0) - P.y) < .5 && Math.hypot(sp.x - x, sp.z - z) < 1.6)) continue;
+          pair(x, P.y, z, k % 2 ? Math.PI : 0); K.solid(x, z, 1.04, .52, P.y); placed.push({ ...a, y: P.y }); info.items.push(['trash', +x.toFixed(2), +z.toFixed(2)]); k++; nb++;
+        }
+      }
+      info.bins = nb;
+    }
+
     // 導盲磚（最後加，在同一個透明網格裡畫在其他地貼上面）
     for (const [k, x, z, rz, len] of tacTiles) add(R.flr, 'plane', x, .016, z, k === 'bar' ? len + .002 : .3, .3, 1, -Math.PI / 2, 0, rz, k === 'bar' ? uv.Fbar : uv.Fdot);
 
     const meshes = b.finish(g);
-    L.metroprops = { meshes, parts: b.count, tactile: tacN, tiles: tacTiles.length, items: info.items };
+    L.metroprops = { meshes, parts: b.count, tactile: tacN, tiles: tacTiles.length, items: info.items, bins: info.bins };
   }
   return { build };
 })();

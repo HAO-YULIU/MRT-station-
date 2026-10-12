@@ -669,7 +669,8 @@ const Station3D = (() => {
       const Lc = LINES[P.line].color;
       const fullPSD = P.under || P.line === 'BR';
       // 地板（扣掉電扶梯口）
-      const holes = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return r.b > 0 ? { x0: a + .25, x1: b, z0: -1.85, z1: 1.85 } : { x0: a, x1: b - .25, z0: -1.85, z1: 1.85 }; });
+      // 只有電扶梯往下穿過地板時才挖洞（高架站：月台在大廳上面）；往上走的電扶梯底下保留地板，不會看到黑洞
+      const holes = P.y <= .5 ? [] : P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return r.b > 0 ? { x0: a + .25, x1: b, z0: -1.85, z1: 1.85 } : { x0: a, x1: b - .25, z0: -1.85, z1: 1.85 }; });
       slab(rectsMinus({ x0: -LEN / 2, x1: LEN / 2, z0: -3.05, z1: 3.05 }, holes), 0, M('#ffffff', { map: TEX.floor, r: .34 }), pg, .4);
       // 軌道、月台邊
       for (const s of [-1, 1]) {
@@ -760,7 +761,7 @@ const Station3D = (() => {
 
     /* 大廳 */
     const C = L.concourse;
-    const hallHoles = L.platforms.flatMap(P => P.ramps.map(r => {
+    const hallHoles = L.platforms.filter(P => P.y < -.5).flatMap(P => P.ramps.map(r => {   // 大廳只在電扶梯往下到地下月台時挖洞
       const a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
       return r.b > 0 ? { x0: a, x1: b - .25, z0: r.z - 1.85, z1: r.z + 1.85 } : { x0: a + .25, x1: b, z0: r.z - 1.85, z1: r.z + 1.85 };
     }));
@@ -909,6 +910,7 @@ const Station3D = (() => {
 
     furnish(L, g, night);
     decorate(L, g);
+    if (typeof SpecialHalls !== 'undefined') try { SpecialHalls.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night }); } catch (e) { console.error('specialhalls', e); }   // 特殊車站大廳（先放，後面的裝飾會避開）
     if (typeof Decor !== 'undefined') try { Decor.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD }); } catch (e) { console.error('decor', e); }   // 額外裝飾（花、植栽、藝術品）
     if (typeof MetroProps !== 'undefined') try { MetroProps.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD, sign }); } catch (e) { console.error('metroprops', e); }   // 台北捷運實際會有的設施
     for (const k of placesOf(L.stationId)) buildPlace(L, g, k);

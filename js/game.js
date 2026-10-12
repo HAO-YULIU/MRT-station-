@@ -90,6 +90,7 @@ function updateHud() {
   const dl = Object.values(s.quests.active).map(q => q.deadline).filter(Boolean).sort()[0];
   $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${s.gold ? `<span class="money gold">🪙 ${s.gold}</span>` : ''}${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
+    if (typeof Titles !== 'undefined') Titles.check();   // 得到新稱號時通知、還是新手乘客就自動換上
     $('#hudName').innerHTML = `${esc(CHARACTERS[s.char].name)} <small class="hud-title">${esc(Progress.titleName())}</small>`;
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
@@ -791,13 +792,13 @@ const dropInteraction = {
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
   guide: '路線指南', cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
-  onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
+  feature: '特色大廳', onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
 const SPOT_VERB = { stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
-  get label() { const sp = nearSpot(World.player); return sp ? (SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
+  get label() { const sp = nearSpot(World.player); return sp ? (sp.kind === 'feature' ? `欣賞：${sp.name}` : SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
   when: p => !Dialog.with && !!nearSpot(p) && !NPCManager.nearest(p, 1.2),
   run: () => {
     const sp = nearSpot(World.player), st = ctl.stationId;
@@ -822,6 +823,7 @@ const spotInteraction = {
 };
 // 車站設施
 const FACILITY = {
+  feature: (sp, st) => { Sound.click(); Dialog.info(`✨ ${sp.name}`, `${esc(sp.text)}<br><small>${esc(st)}站的特色大廳</small>`); const s = Game.state, f = (s.col = s.col || {}).halls = s.col.halls || {}; if (!f[st]) { f[st] = 1; saveState(); toast(`<b>✨ 特色大廳 ${Object.keys(f).length} / ${Object.keys(SpecialHalls.HALLS).length}</b><span>${esc(sp.name)}</span>`, 'level'); } },
   fountain: () => { Sound.click(); toast(['<b>喝了幾口水</b><span>冰冰涼涼的。</span>', '<b>喝了幾口水</b><span>出水有點小，要湊很近。</span>', '<b>喝了幾口水</b><span>精神好一點了。</span>'][(Math.random() * 3) | 0]); },
   aed: () => Dialog.info('AED', '自動體外心臟電擊去顫器。打開箱門會有警報聲，裡面的機器會用語音一步一步教你怎麼用。<br>旁邊貼著站務員的分機號碼。'),
   art: (sp, st) => Dialog.info('公共藝術', `這幅作品叫《${esc(st)}・${['晨光', '流動', '交會', '回聲', '城市的呼吸', '月台之間'][st.length % 6]}》。<br>藝術家用${esc(LINES[MRT.linesAt(st)[0].line].zh)}的顏色畫了一條穿過城市的線。${TaipeiTime.state() !== 'open' ? '' : TaipeiTime.now().hour >= 23 ? '<br>……夜深了，畫裡好像多了一個戴紅色貝雷帽的小人影。' : ''}`),
@@ -1157,7 +1159,7 @@ function openMap() {
       card.innerHTML = `<div class="here">${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(id)}</b></div>
         <small>${esc(STATIONS[id].en)}</small>
         <p>${here ? '你現在在這裡' : been ? '去過了，可以傳送' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>
-        ${been && !here ? `<button class="btn primary small" id="tpBtn">傳送到這裡</button>` : ''}
+        ${been && !here ? `<button class="btn primary small" id="tpBtn">傳送到這裡（車資 NT$ ${Economy.fare(s.current, id)}）</button>` : ''}
         ${been && !here && Game.ride ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}${been && !here && FogCity.locked() ? '<p class="warn-text">迷霧之城：06:00 以前離不開這一站</p>' : ''}`;
       card.hidden = false;
       Sound.click();
@@ -1181,8 +1183,14 @@ async function teleport(id) {
   await sleep(450);
   World.loadStation(id);
   World.spawnInConcourse();
-  settleTrip(true); s.current = id; s.trip = null; saveState(); updateHud();
+  settleTrip(true);
+  // 傳送也算搭了一趟車：依兩站距離扣車資
+  const from = s.current, fare = Economy.fare(from, id);
+  s.money -= fare; s.rides = (s.rides || 0) + 1;
+  s.current = id; s.trip = null; saveState(); updateHud();
   startStation(id);
+  toast(`<b>扣款 NT$ ${fare}</b><span>傳送 ${esc(from)} → ${esc(id)}（視同搭車）　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
+  if (fare >= 65) Quests.secret('sec_maxfare');
   fx.classList.add('out');
   await sleep(600);
   fx.hidden = true;

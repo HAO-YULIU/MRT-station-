@@ -111,7 +111,7 @@ const Progress = (() => {
     return { parts, pct };
   }
   const titles = () => TITLES.filter(t => { try { return t.cond(S()); } catch (e) { return false; } });
-  function titleName() { const s = S(), t = TITLES.find(t => t.id === s.title); return t && titles().includes(t) ? t.name : '新手乘客'; }
+  function titleName() { const s = S(), t = TITLES.find(t => t.id === s.title); let ok = false; try { ok = !!t && t.cond(s); } catch (e) { /* 條件壞掉 */ } return ok ? t.name : '新手乘客'; }
 
   /* 畫面 */
   let tab = 'char';
@@ -124,7 +124,7 @@ const Progress = (() => {
       body = `<div class="rc-hero"><b>${esc(CHARACTERS[s.char].name)}</b><span class="rc-title">「${esc(titleName())}」</span>
         <p>Lv ${lv.lv}　調查經驗 ${lv.cur} / ${lv.need}　能力點：<b>${s.points}</b></p></div>
         <ul class="rc-stats">${STATS.map(([k, n, d]) => `<li><b>${n}</b><span class="rc-bar"><i style="width:${Math.min(100, stat(k) * 10)}%"></i></span><em>${stat(k)}</em>${s.points > 0 ? `<button class="btn small" data-pt="${k}">＋</button>` : ''}<small>${d}</small></li>`).join('')}</ul>
-        <h4 class="bag-h">稱號</h4><div class="rc-titles">${titles().map(t => `<button class="wd-chip" data-title="${t.id}" aria-pressed="${titleName() === t.name}">${esc(t.name)}</button>`).join('')}</div>`;
+        <h4 class="bag-h">稱號</h4>${typeof Titles !== 'undefined' ? Titles.html(s.title || 't_rookie') : `<div class="rc-titles">${titles().map(t => `<button class="wd-chip" data-title="${t.id}" aria-pressed="${titleName() === t.name}">${esc(t.name)}</button>`).join('')}</div>`}`;
     }
     if (tab === 'life') body = Life.html();
     if (tab === 'explore') {
@@ -166,7 +166,7 @@ const Progress = (() => {
       const t = e.target.closest('[data-tab]'), pt = e.target.closest('[data-pt]'), ti = e.target.closest('[data-title]');
       if (t) { tab = t.dataset.tab; render(); }
       if (pt) { addPoint(pt.dataset.pt); Sound.click(); render(); }
-      if (ti) { S().title = ti.dataset.title; saveState(); updateHud(); render(); }
+      if (ti) { S().title = ti.dataset.title; saveState(); Sound.click(); toast(`<b>🎖️ 換上稱號「${esc(titleName())}」</b>`); updateHud(); render(); }
     };
   }
   return { price, friendBonus, applySpeed, onArrive, deduceHint, markAnswer, onLevel, addRep, onQuestDone, onTalk, open, titleName, regionOf };
