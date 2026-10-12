@@ -49,8 +49,12 @@
     <div class="scene" id="scene"></div>
     <header class="hud">
       <div class="hud-me">
-        <div class="hud-avatar" id="hudAvatar"></div>
-        <div><b id="hudName"></b><small id="hudWhere"></small></div>
+        <div class="hud-face" title="等級與經驗">
+          <svg class="xp-ring" viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="25.5"/><circle id="hudXp" cx="28" cy="28" r="25.5" pathLength="100"/></svg>
+          <div class="hud-avatar" id="hudAvatar"></div>
+          <span class="hud-lv" id="hudLv">1</span>
+        </div>
+        <div class="hud-id"><b id="hudName"></b><small id="hudWhere"></small></div>
       </div>
       <button class="hud-hp" id="hudHp" hidden title="生命值（點一下看本站活動）"></button>
       <div class="hud-time">
@@ -208,6 +212,7 @@
   <script src="js/fogcontent2.js"></script>
   <script src="js/fogspecial.js"></script>
   <script src="js/map3d.js"></script>
+  <script src="js/limited.js"></script>
   <script src="js/gondola.js"></script>
   <script src="js/rewards.js"></script>
   <script src="js/titles.js"></script>

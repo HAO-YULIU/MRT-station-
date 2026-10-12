@@ -41,6 +41,7 @@ const Titles = (() => {
     t_expo: ['迷霧之城：看完第零展區。', 4, true],
     t_fogwalker: ['在 06:00 前離開迷霧 5 次。', 3],
     t_halls: ['欣賞過全部的特色大廳。', 3],
+    t_limited: ['收集 15 種車站限定商品。', 3],
   };
   const info = t => {
     if (INFO[t.id]) return { desc: INFO[t.id][0], rare: INFO[t.id][1], secret: !!INFO[t.id][2] };

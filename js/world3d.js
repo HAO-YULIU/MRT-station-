@@ -97,8 +97,14 @@ const World = (() => {
         if (inR(null, r.x0 + .3, r.x1 - .3, r.z0 + .25, r.z1 - .25)) consider(0);
         if (Math.abs(z - r.door.z) < r.door.w / 2 - .12 && Math.abs(x - r.door.wx) < .7) consider(0);
       }
-      // 閘門通道
-      if (z >= layout.gateZ - .05 && z <= layout.gateZ + 1.25 && layout.gates.some(g => Math.abs(x - g) < .32)) consider(0);
+      // 閘門通道（機箱之間 .8 公尺寬）
+      if (z >= layout.gateZ - .05 && z <= layout.gateZ + 1.25 && layout.gates.some(g => Math.abs(x - g) < .36)) consider(0);
+      // 閘門兩側的玻璃隔欄：地板一路鋪到隔欄前（不會在隔欄前半公尺就被看不見的牆擋住）
+      { const gs = layout.gates, gz = layout.gateZ;
+        if (gs.length && (x < gs[0] - 2.02 || x > gs[gs.length - 1] + 2.02) && x > U.x0 + .3 && x < U.x1 - .3) {
+          if (z > gz - .06 && z < gz + .5) consider(0);          // 付費區這一側
+          if (z > gz + .7 && z < U.z0 + .1) consider(0);         // 非付費區這一側
+        } }
       // 非付費區（扣掉售票機、詢問處）
       if (inR(null, U.x0 + .3, U.x1 - .3, U.z0 - .05, U.z1 - 1.1) && !inXramp(x, z) && !(x > U.x1 - 5.6 && z > U.z0 + 2 && z < U.z0 + 4) && !(x > U.x1 - 9.8 && x < U.x1 - 6.6 && z > U.z0 + 2 && z < U.z0 + 4)) consider(0);
       // 大型車站的上層（商店街）與往上層的電扶梯
