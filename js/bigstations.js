@@ -93,7 +93,7 @@ const BigStations = (() => {
     box(W, .3, D, M('#d9dcdf', { r: .8 }), cx, Y + H + .15, cz, g);
     // 天花板燈條、主題色飾帶
     const lightM = M('#ffffff', { e: '#fff3dc', ei: 1.3 });
-    for (let x = lv.x0 + 3; x < lv.x1 - 2; x += 5) for (const z of [cz - 3, cz + 3]) box(3, .04, .3, lightM, x, Y + H - .03, z, g);
+    for (let x = lv.x0 + 3; x < lv.x1 - 2; x += 5) for (const z of [cz - 3, cz + 3]) box(3, .04, .3, lightM, x, Y + H - .005, z, g);
     for (const z of [lv.z0 + .02, lv.z1 - .02]) box(W, .2, .04, M(theme, { e: theme, ei: .3 }), cx, Y + H - .5, z, g);
     // 柱子
     const colM = M('#f4f1ea', { r: .5 });
@@ -179,7 +179,7 @@ const BigStations = (() => {
         const m = box(len, .12, stair ? 1.3 : .95, M('#ffffff', { map: tiled(stair ? TEX.stairs : TEX.steps, 1, len / 1.5), r: .6 }), mx, my, r.z + lz, g);
         m.rotation.z = ang; m.material.map.rotation = Math.PI / 2;
         for (const sz of [-1, 1]) {
-          const w = stair ? .7 : .52;
+          const w = stair ? .62 : .52;   // 樓梯扶手往內，不跟電扶梯扶手重疊
           const rail = box(len, .9, .04, M('#cfe3ec', { t: true, o: .25, dw: false }), mx, my + .5, r.z + lz + sz * w, g); rail.rotation.z = ang;
           const hand = box(len, .06, .1, M(stair ? '#9aa1a8' : '#1c1c1e', { r: .4 }), mx, my + .97, r.z + lz + sz * w, g); hand.rotation.z = ang;
         }

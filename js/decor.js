@@ -161,7 +161,7 @@ const Decor = (() => {
     }
     // 圓盆（回傳土面高度）
     function pot(x, y, z, r, h, col = style.pot, rimC = style.potRim) {
-      b.add('pot', 'pot', x, y + h / 2, z, r * 2, h, r * 2, 0, 0, 0, col, .3);
+      b.add('pot', 'pot', x, y + (h - .03) / 2, z, r * 2, h - .03, r * 2, 0, 0, 0, col, .3);   // 盆身頂面低於盆緣、土面，不會共面閃爍
       b.add('pot', 'disk', x, y + h - .02, z, r * 2 + .05, .05, r * 2 + .05, 0, 0, 0, rimC);
       b.add('plant', 'disk', x, y + h - .03, z, r * 1.9, .02, r * 1.9, 0, 0, 0, '#3b2a1e');
       return y + h - .02;
