@@ -91,6 +91,7 @@ const Crowd = (() => {
     let n = h >= 7 && h < 9 ? 95 : h >= 17 && h < 20 ? 100 : h >= 12 && h < 14 ? 65 : h >= 9 && h < 17 ? 55 : h >= 20 && h < 23 ? 45 : 18;
     n *= .75 + .25 * L.platforms.length;
     if (window.matchMedia && matchMedia('(pointer: coarse)').matches) n *= .8;   // 手機稍微少一點
+    if (World.quality === 'low') n *= .55;   // 省電模式：人再少一點
     return Math.min(MAX, Math.round(n));
   }
 

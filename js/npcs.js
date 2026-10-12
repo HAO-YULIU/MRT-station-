@@ -807,7 +807,7 @@ const Pickups = (() => {
     saveState(); updateHud();
     spawn(it.station);   // 下一步可能要在同一站找別的東西
   }
-  return { spawn, clear, tick, near, take };
+  return { spawn, clear, tick, near, take, get items() { return items; } };
 })();
 
 /* ── 主線站點委託：該線主線進行中、這一站還沒完成時，月台上會有紙條或委託人

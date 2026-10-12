@@ -165,7 +165,25 @@ const World = (() => {
   /* ── 輸入 ── */
   const keys = {};
   const KEYMAP = { ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ShiftLeft: 'run', ShiftRight: 'run' };
-  let runToggle = false;
+  let runToggle = false, joyEdge = 0, joyRun = false;
+  const coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  /* ── 畫質：自動（依幀率調整解析度）／高／省電（解析度低、30 fps、人少一點） ── */
+  let quality = 'auto'; try { quality = localStorage.getItem('quality') || 'auto'; } catch (e) { /* 無法存取 */ }
+  const DPR = window.devicePixelRatio || 1;
+  const capFor = q => (q === 'high' ? Math.min(2, DPR) : q === 'low' ? Math.max(.6, Math.min(1, DPR) * .75) : Math.min(coarse ? 1.5 : 2, DPR));
+  let pr = capFor(quality), lastRender = 0, lastBtn = 0;
+  const perf = { t0: 0, n: 0, fps: 60, changed: 0 };
+  function setPR(v) { pr = v; if (renderer) { renderer.setPixelRatio(v); resize(); } }
+  function adapt(now) {
+    perf.n++;
+    if (!perf.t0) { perf.t0 = now; return; }
+    const el = now - perf.t0; if (el < 2000) return;
+    perf.fps = perf.n * 1000 / el; perf.t0 = now; perf.n = 0;
+    if (quality !== 'auto') return;
+    const cap = capFor('auto'), min = coarse ? .6 : .75;
+    if (perf.fps < 40 && pr > min + .01) { setPR(Math.max(min, pr - .15)); perf.changed = now; }
+    else if (perf.fps > 57 && pr < cap - .01 && now - perf.changed > 8000) { setPR(Math.min(cap, pr + .1)); perf.changed = now; }
+  }
   const joy = { x: 0, y: 0 };
   function bindInput() {
     window.addEventListener('keydown', e => {
@@ -184,9 +202,18 @@ const World = (() => {
     let pinch = null;
     const zoomTo = d => { cam.dist = Math.min(9, Math.max(1.2, d)); };
     const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    let lastTap = null;
     container.addEventListener('pointerdown', e => {
       if (e.target.closest('.joystick')) return;
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      // 手機：左下角任何地方按下去就是搖桿（搖桿跟著手指出現）
+      if (e.pointerType === 'touch' && joyFloat && !pts.size && e.clientX < innerWidth * .45 && e.clientY > innerHeight * .42 && joyFloat(e)) return;
+      // 點兩下：鏡頭轉回角色背後
+      if (e.pointerType === 'touch' && !pts.size) {
+        const t = e.timeStamp;
+        if (lastTap && t - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) { cam.yaw = player.face + Math.PI; cam.lastDrag = 0; lastTap = null; }
+        else lastTap = { t, x: e.clientX, y: e.clientY };
+      }
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, touch: e.pointerType === 'touch' });
       try { container.setPointerCapture(e.pointerId); } catch (_) {}
       if (pts.size === 2) pinch = { d: spread(), dist: cam.dist };
     });
@@ -195,14 +222,16 @@ const World = (() => {
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       p.x = e.clientX; p.y = e.clientY;
       if (pts.size >= 2) { if (pinch) zoomTo(pinch.dist * pinch.d / Math.max(20, spread())); return; }
-      cam.yaw -= dx * .006;
-      cam.pitch = Math.min(.9, Math.max(VIEWS[cam.mode].fp ? -.5 : .05, cam.pitch + dy * .004));
+      const k = p.touch ? Math.min(1.6, Math.max(1.1, 900 / Math.max(320, Math.min(innerWidth, innerHeight * 1.6)))) : 1;   // 手機螢幕小：轉得快一點
+      cam.yaw -= dx * .006 * k;
+      cam.pitch = Math.min(.9, Math.max(VIEWS[cam.mode].fp ? -.5 : .05, cam.pitch + dy * .004 * k));
       cam.lastDrag = performance.now();
     });
     const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
     container.addEventListener('pointerup', end); container.addEventListener('pointercancel', end);
     container.addEventListener('wheel', e => { zoomTo(cam.dist + e.deltaY * .003); e.preventDefault(); }, { passive: false });
   }
+  let joyFloat = null;
   function bindJoystick(el) {
     const knob = el.querySelector('.knob');
     let id = null, cx = 0, cy = 0;
@@ -212,6 +241,16 @@ const World = (() => {
       const r = el.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
       move(e); e.stopPropagation();
     });
+    // 浮動搖桿：在手指按下的地方出現
+    joyFloat = e => {
+      if (id != null) return false;
+      const box = el.offsetParent ? el.offsetParent.getBoundingClientRect() : { left: 0, top: 0 }, w = el.offsetWidth || 132;
+      el.classList.add('floating');
+      el.style.left = (e.clientX - box.left - w / 2) + 'px'; el.style.top = (e.clientY - box.top - w / 2) + 'px'; el.style.bottom = 'auto';
+      id = e.pointerId; try { el.setPointerCapture(id); } catch (_) { /* 有些瀏覽器不能轉移 */ }
+      cx = e.clientX; cy = e.clientY; move(e);
+      return true;
+    };
     const move = e => {
       if (e.pointerId !== id) return;
       let dx = e.clientX - cx, dy = e.clientY - cy;
@@ -220,7 +259,7 @@ const World = (() => {
       joy.x = dx / R; joy.y = -dy / R;
     };
     el.addEventListener('pointermove', move);
-    const up = e => { if (e.pointerId !== id) return; id = null; joy.x = joy.y = 0; knob.style.transform = ''; };
+    const up = e => { if (e.pointerId !== id) return; id = null; joy.x = joy.y = 0; knob.style.transform = ''; el.classList.remove('floating', 'run'); el.style.left = el.style.top = el.style.bottom = ''; };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   }
   function pstate() { return { x: player.x, y: player.y, z: player.z, zone: zone() }; }
@@ -236,7 +275,7 @@ const World = (() => {
     if (btn.dataset.id !== it.id) {
       btn.dataset.id = it.id;
       btn.innerHTML = `${it.label}<kbd>E</kbd>`;
-      btn.onclick = () => { const c = currentInteraction(); if (c) c.run(); };
+      btn.onclick = () => { const c = currentInteraction(); if (c) { if (navigator.vibrate && coarse) try { navigator.vibrate(12); } catch (e) { /* 不支援 */ } c.run(); } };
     }
     btn.hidden = false;
   }
@@ -245,6 +284,8 @@ const World = (() => {
   function frame(now) {
     requestAnimationFrame(frame);
     if (!renderer || !container.offsetParent) { last = now; return; }
+    if (quality === 'low' && now - lastRender < 1000 / 31) return;   // 省電：最多 30 fps
+    lastRender = now; adapt(now);
     const dt = Math.min(.12, (now - (last || now)) / 1000); last = now;   // 低幀率裝置也不會變慢動作
     let moved = false;
     if (player.auto) {
@@ -261,8 +302,12 @@ const World = (() => {
       if (keys.l) ix -= 1; if (keys.r) ix += 1; if (keys.u) iy += 1; if (keys.d) iy -= 1;
       ix += joy.x; iy += joy.y;
       const mag = Math.min(1, Math.hypot(ix, iy));
+      // 搖桿推到底超過半秒：自動跑步（放開就恢復走路）
+      const jm = Math.hypot(joy.x, joy.y);
+      joyEdge = jm > .96 ? joyEdge + dt : 0;
+      if (joyRun !== joyEdge > .5) { joyRun = joyEdge > .5; const j = document.getElementById('joystick'); if (j) j.classList.toggle('run', joyRun); }
       // 起步加速、放開減速（不會一按就全速、一放就急停）
-      const want = mag > .08 ? (keys.run || runToggle ? 5.2 : 2.6) * mag * speedMul : 0;   // 跑步 5.2 m/s、走路 2.6 m/s（體力越高越快）
+      const want = mag > .08 ? (keys.run || runToggle || joyRun ? 5.2 : 2.6) * mag * speedMul : 0;   // 跑步 5.2 m/s、走路 2.6 m/s（體力越高越快）
       player.vnow = (player.vnow || 0) + (want - (player.vnow || 0)) * Math.min(1, dt * (want > (player.vnow || 0) ? 7 : 11));
       if (mag > .08) {
         const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
@@ -371,7 +416,7 @@ const World = (() => {
     if (plight && plight.intensity > 0) plight.position.set(player.x + Math.sin(player.face) * .4, player.y + 1.7, player.z + Math.cos(player.face) * .4);
     for (const fn of tickers) fn(dt, now);
     if (warmQ.length) warmStep();
-    updateActionBtn();
+    if (now - lastBtn > 90) { lastBtn = now; updateActionBtn(); }   // 互動按鈕不用每一幀檢查
     renderer.render(scene, camera);
   }
   function tryMove(nx, nz) {
@@ -462,8 +507,9 @@ const World = (() => {
   return {
     init(el) {
       container = el;
-      renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-      renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      // 高解析度手機螢幕本身就很細，不開反鋸齒省下很多效能
+      renderer = new T.WebGLRenderer({ antialias: !(coarse && DPR >= 2), powerPreference: 'high-performance' });
+      renderer.setPixelRatio(pr);
       renderer.outputColorSpace = T.SRGBColorSpace;
       renderer.toneMapping = T.ACESFilmicToneMapping;
       renderer.toneMappingExposure = .94;
@@ -525,7 +571,12 @@ const World = (() => {
     trainOf: (x, z, y) => trainOf(x, z, y),
     addTicker(fn) { tickers.push(fn); },
     onRecenter(fn) { recenterHooks.push(fn); },
-    get running() { return runToggle; },
+    get running() { return runToggle || joyRun || !!keys.run; },
+    get quality() { return quality; },
+    get camYaw() { return cam.yaw; },
+    get fps() { return Math.round(perf.fps); },
+    get pixelRatio() { return pr; },
+    setQuality(q) { quality = q; try { localStorage.setItem('quality', q); } catch (e) { /* 無法存取 */ } setPR(capFor(q)); perf.changed = performance.now(); },
     groundAt: (x, z, y) => groundAt(x, z, y),
     // 拍照：把目前的畫面縮小成一張圖
     snap: (w = 200) => { renderer.render(scene, camera); const c = document.createElement('canvas'); c.width = w; c.height = Math.round(w * renderer.domElement.height / renderer.domElement.width); c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', .6); },
