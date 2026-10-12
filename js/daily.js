@@ -97,7 +97,10 @@ const Furniture = (() => {
   return { has, buy, use, usedToday, owned: () => Object.keys(S().own) };
 })();
 
-/* ── 委託所的林姐 ── */
+/* ── 委託所的林姐 ──
+ * 林姐沿用 id 'lin'（每日委託、手機聯絡人都用它），原本 npcs.js 的上班族林先生改用 'linsir'，
+ * 否則「遺失的皮夾」接不到、也交不回去。 */
+if (NPCS.lin && NPCS.lin.name === '林先生') NPCS.linsir = NPCS.lin;
 Object.assign(NPCS, {
   lin: {
     name: '林姐', role: '城市委託所', station: '台北車站', spot: 'concourse', hours: [[7, 23]], speed: 0,

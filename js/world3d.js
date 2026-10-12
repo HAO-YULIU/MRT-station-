@@ -530,33 +530,19 @@ const World = (() => {
     h = groundAt(nx, player.z, player.y); if (h != null) { player.x = nx; player.y = h; return; }
     h = groundAt(player.x, nz, player.y); if (h != null) { player.z = nz; player.y = h; }
   }
+  // 自動轉鏡頭：一般情況都不轉（會暈），只剩必要的時候——剛走進廁所、站務室這種小房間，
+  // 不轉的話鏡頭會被牆擋住、什麼都看不到。玩家自己剛拖過鏡頭就不動。
   function autoCamera(z, dt) {
     if (player.auto) return;
     const free = performance.now() - cam.lastDrag > 1500;
-    let yaw = null, pitch = null, rate = 2.2;
-    const behind = face => face + Math.PI;   // 鏡頭在玩家背後
-    const talk = typeof Dialog !== 'undefined' && Dialog.with && Dialog.with.rig && Dialog.with.x != null ? Dialog.with : null;
-    if (talk) {   // 說話：從玩家肩膀後面看著對方
-      yaw = Math.atan2(-(talk.x - player.x), -(talk.z - player.z)) + .35; pitch = .2; rate = 3;
-    } else if (z.kind === 'ramp' && player.speed > .1) {   // 手扶梯、樓梯：轉到行進方向，下樓時從高一點往下看
-      const goingDown = Math.sin(player.face) * (rampSlope(player.x, player.z) || 0) < 0;
-      yaw = behind(Math.abs(Math.sin(player.face)) > .5 ? Math.sign(Math.sin(player.face)) * Math.PI / 2 : player.face); pitch = goingDown ? .5 : .14; rate = 3;
-    } else if (z.kind === 'ramp') {   // 站在電扶梯上不動：跟著電扶梯的方向
-      const cv = conveyorAt(player.x, player.z);
-      if (cv) { yaw = behind(Math.sign(cv) * Math.PI / 2); pitch = (rampSlope(player.x, player.z) || 0) * cv < 0 ? .5 : .14; }
-    } else if (z.kind === 'train' && !free) {
-      // 剛拖過：不動
-    } else if (z.kind === 'train') {   // 車廂：沿著車廂長邊看
-      const s = Math.sin(cam.yaw) >= 0 ? 1 : -1; yaw = s * Math.PI / 2; pitch = Math.min(cam.pitch, .12); rate = 1.5;
-    } else if (z.room) {   // 剛走進房間：轉向房間裡面
+    let yaw = null;
+    if (z.room) {
       const key = z.room.kind;
-      if (cam.roomKey !== key) { cam.roomKey = key; cam.roomT = 1.4; }
-      if (cam.roomT > 0) { cam.roomT -= dt; const dir = z.room.door.wx === z.room.x0 ? 1 : -1; yaw = behind(dir * Math.PI / 2); }
-    }
-    if (!z.room) cam.roomKey = '';
-    if (!free && !talk) return;
-    if (yaw != null) cam.yaw = lerpAngle(cam.yaw, yaw, Math.min(1, dt * rate));
-    if (pitch != null && !VIEWS[cam.mode].fp) cam.pitch += (pitch - cam.pitch) * Math.min(1, dt * rate);
+      if (cam.roomKey !== key) { cam.roomKey = key; cam.roomT = 1.2; }
+      if (cam.roomT > 0) { cam.roomT -= dt; const dir = z.room.door.wx === z.room.x0 ? 1 : -1; yaw = dir * Math.PI / 2 + Math.PI; }
+    } else cam.roomKey = '';
+    if (!free || yaw == null) return;
+    cam.yaw = lerpAngle(cam.yaw, yaw, Math.min(1, dt * 2.2));
   }
   // 玩家所在的電扶梯（含兩端一點點）
   // 地下月台：電扶梯在 x 處離月台地板多高

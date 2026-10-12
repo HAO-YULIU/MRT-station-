@@ -561,6 +561,8 @@ const Station3D = (() => {
         const p = plane(1.8, .9, M('#ffffff', { map: mon, e: '#ffffff', ei: .4 }), g); p.position.set(far - dir * .02, 1.7, cz); p.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
         box(.5, 1.9, 1.2, M('#9aa3aa', { m: .5 }), far - dir * .3, .95, r.z1 - .7, g); solid(far - dir * .3, r.z1 - .7, .5, 1.2);   // 置物櫃
       }
+      if (/^toilet/.test(r.kind)) toiletExtras(r, dir, far, cx, cz, w, d);
+      if (r.kind === 'office') officeExtras(r, dir, far, fx, cx, cz, w, d);
       if (r.kind === 'onsen') buildOnsen(r, dir, far, fx, cx, cz, w, d, H);
       if (r.kind === 'lab') {   // 時空研究室：牆上的儀表板、電纜、藍色燈條
         L.lab = { x: cx - dir * .6, z: cz };
@@ -617,6 +619,49 @@ const Station3D = (() => {
       sign(plainSign('湯之庭', '新北投溫泉 Hot Spring', '#3a2a1a', '#f6e8c8', { bg: '#c4512a', fg: '#fff', text: '♨' }), 2.6, .65, fx(.9), 2.6, r.door.z - 2.2, g, dir > 0 ? Math.PI / 2 : -Math.PI / 2);
       // 暖簾（門口，掛在頭頂上方）
       for (const dz of [-.55, 0, .55]) { const n = plane(.5, .7, M('#2a4a7a', { r: .9, side: T.DoubleSide }), g); n.position.set(r.door.wx + dir * .4, 2.1, r.door.z + dz); n.rotation.y = Math.PI / 2; }
+    }
+    // 廁所：下半牆的小磁磚、鏡子、烘手機、地磚、垃圾桶；男廁小便斗之間的隔板
+    function toiletExtras(r, dir, far, cx, cz, w, d) {
+      const tile = canvasTex(128, 128, (x) => { x.fillStyle = '#e9eef1'; x.fillRect(0, 0, 128, 128); x.strokeStyle = '#b8c4cc'; x.lineWidth = 2; for (let i = 0; i <= 128; i += 32) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, 128); x.moveTo(0, i); x.lineTo(128, i); x.stroke(); } }, [1, 1]);
+      const tm = (rw, rh) => { const t = tile.clone(); t.needsUpdate = true; t.repeat.set(rw / .4, rh / .4); return M('#ffffff', { map: t, r: .35, po: 1 }); };
+      for (const [z, ry] of [[r.z0 + .093, 0], [r.z1 - .093, Math.PI]]) { const p = plane(w - .5, 1.3, tm(w - .5, 1.3), g); p.position.set(cx, .66, z); p.rotation.y = ry; }
+      { const p = plane(d - .2, 1.3, tm(d - .2, 1.3), g); p.position.set(far - dir * .012, .66, cz); p.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2; }
+      { const ft = tile.clone(); ft.needsUpdate = true; ft.repeat.set(w / .5, d / .5); const p = plane(w - .1, d - .1, M('#d4dade', { map: ft, r: .5, po: 1 }), g); p.rotation.x = -Math.PI / 2; p.position.set(cx, .004, cz); }
+      // 洗手台在哪面牆：男廁、女廁、無障礙廁所各不同
+      const sx = r.kind === 'toilet_a' ? r.door.wx + dir * 1.6 : r.door.wx + dir * 1.4, sz = r.kind === 'toilet_m' ? r.z1 - .3 : r.z0 + .3, sw = sz > cz ? -1 : 1, zw = sw > 0 ? r.z0 : r.z1;   // zw：洗手台靠的那面牆
+      const mirror = plane(.62, .72, M('#cfe0ea', { m: .9, r: .08, po: 1 }), g); mirror.position.set(sx, 1.5, zw + sw * .113); mirror.rotation.y = sw > 0 ? 0 : Math.PI;
+      box(.68, .78, .015, M('#9aa6ae', { m: .6 }), sx, 1.5, zw + sw * .1025, g);   // 鏡框
+      box(.26, .3, .16, M('#f2f2f0', { r: .3 }), sx + dir * .62, 1.15, zw + sw * .2, g);   // 烘手機
+      box(.22, .03, .02, M('#3a4a54'), sx + dir * .62, 1.0, zw + sw * .28, g);
+      box(.26, .42, .26, M('#7c8a92', { m: .4 }), sx - dir * .5, .21, sz, g);   // 垃圾桶
+      if (r.kind === 'toilet_m') for (let i = 0; i < 2; i++) box(.42, .85, .03, M('#b9c4cc', { r: .4 }), far - dir * .25, 1.0, r.z0 + .725 + i * .55, g);
+    }
+    // 站務室：辦公椅、行控台、檔案櫃、飲水機、牆上的時鐘和路網圖、值班表
+    function officeExtras(r, dir, far, fx, cx, cz, w, d) {
+      const chairM = M('#2e3a46', { r: .6 }), legM = M('#55606a', { m: .6 });
+      for (const z of [r.z0 + 1.1, r.z1 - 1.1]) {
+        const cz2 = z + (z < cz ? .62 : -.62), bz = cz2 + (z < cz ? .22 : -.22);
+        box(.46, .07, .44, chairM, cx, .47, cz2, g); box(.46, .5, .06, chairM, cx, .8, bz, g); box(.06, .44, .06, legM, cx, .22, cz2, g);
+        box(.4, .02, .3, M('#30363c'), cx, .76, z + (z < cz ? .12 : -.12), g);   // 鍵盤
+        box(.2, .02, .26, M('#f4f1e6'), cx + .45, .76, z, g);                     // 文件
+      }
+      // 行控台（監視器下方）
+      box(.5, .85, 1.7, M('#59646e', { m: .4, r: .5 }), far - dir * .3, .425, cz, g); solid(far - dir * .3, cz, .5, 1.7);
+      for (let i = 0; i < 8; i++) box(.04, .04, .04, M(['#3ad06a', '#ffcc33', '#e94b4b', '#3ad06a'][i % 4], { e: ['#3ad06a', '#ffcc33', '#e94b4b', '#3ad06a'][i % 4], ei: 1 }), far - dir * .45, .87, cz - .7 + i * .2, g);
+      // 檔案櫃（彩色資料夾）
+      const fz = r.z0 + .55;
+      box(.42, 1.6, .9, M('#b8bec2', { m: .3 }), far - dir * .25, .8, fz, g); solid(far - dir * .25, fz, .42, .9);
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 6; i++) box(.3, .3, .1, M(['#2a7de1', '#e07a3a', '#2a9d8f', '#f2c200'][(i + j) % 4], { r: .7 }), far - dir * .47, .45 + j * .45, fz - .3 + i * .12, g);
+      // 飲水機（門口旁）
+      const wx = fx(.65), wz = r.z1 - .32;
+      box(.32, 1.05, .32, M('#eef1f3', { r: .3 }), wx, .525, wz, g); box(.26, .36, .26, M('#7fb8e6', { t: true, o: .7, r: .1 }), wx, 1.24, wz, g); solid(wx, wz, .34, .34);
+      // 牆上：時鐘、路網圖、值班表
+      const clock = canvasTex(128, 128, (x) => { x.fillStyle = '#ffffff'; x.beginPath(); x.arc(64, 64, 60, 0, 7); x.fill(); x.lineWidth = 6; x.strokeStyle = '#2b2f33'; x.stroke(); x.lineWidth = 3; for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283; x.beginPath(); x.moveTo(64 + Math.cos(a) * 46, 64 + Math.sin(a) * 46); x.lineTo(64 + Math.cos(a) * 54, 64 + Math.sin(a) * 54); x.stroke(); } x.lineWidth = 5; x.beginPath(); x.moveTo(64, 64); x.lineTo(64, 28); x.moveTo(64, 64); x.lineTo(92, 70); x.stroke(); });
+      const ck = plane(.42, .42, M('#ffffff', { map: clock, t: true, po: 1 }), g); ck.position.set(cx, 2.35, r.z0 + .1);
+      const map = canvasTex(256, 160, (x) => { x.fillStyle = '#f7f7f4'; x.fillRect(0, 0, 256, 160); x.lineWidth = 7; x.lineCap = 'round'; for (const [c, pts] of [['#e3002c', [[30, 20], [110, 70], [130, 150]]], ['#0070bd', [[10, 90], [240, 80]]], ['#008659', [[60, 10], [120, 80], [200, 150]]], ['#f8b61c', [[40, 140], [130, 85], [220, 20]]], ['#c48c31', [[160, 10], [170, 90], [250, 130]]]]) { x.strokeStyle = c; x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(a, b) : x.moveTo(a, b)); x.stroke(); } x.fillStyle = '#333'; x.font = '700 14px sans-serif'; x.fillText('台北捷運路網', 8, 154); });
+      const mp = plane(1.3, .8, M('#ffffff', { map, r: .8, po: 1 }), g); mp.position.set(cx, 1.75, r.z1 - .1); mp.rotation.y = Math.PI;
+      const duty = canvasTex(128, 160, (x) => { x.fillStyle = '#fffbe8'; x.fillRect(0, 0, 128, 160); x.fillStyle = '#c4162a'; x.font = '700 16px sans-serif'; x.fillText('值班表', 34, 22); x.strokeStyle = '#999'; for (let i = 0; i < 6; i++) { x.strokeRect(8, 32 + i * 20, 112, 20); } x.fillStyle = '#333'; x.font = '12px sans-serif'; ['早班 06–14', '中班 14–22', '晚班 22–06', '站長', '副站長', '站務員'].forEach((t, i) => x.fillText(t, 14, 46 + i * 20)); });
+      const dt = plane(.5, .62, M('#ffffff', { map: duty, r: .9, po: 1 }), g); dt.position.set(cx + 1.15, 1.7, r.z1 - .1); dt.rotation.y = Math.PI;
     }
     function stall(x, z, dir) {   // 廁所隔間（門朝向房門）
       const pm = M('#b9c4cc', { r: .4 });
@@ -883,7 +928,7 @@ const Station3D = (() => {
         const mx = left + dx;
         if (mx < U.x0 + 1) continue;
         box(.9, 1.75, .55, M('#2a7de1', { r: .4, m: .2 }), mx, .875, zL, g); solid(mx, zL, .9, .55);
-        const f = plane(.8, 1.2, M('#ffffff', { map: topT, e: '#ffffff', ei: .25 }), g); f.position.set(mx, 1.05, zL + .28);
+        const f = plane(.8, 1.2, M('#ffffff', { map: topT, e: '#ffffff', ei: .25, po: 1 }), g); f.position.set(mx, 1.05, zL + .295);
       }
       const ruleT = canvasTex(320, 420, x => { x.fillStyle = '#f6f4ee'; x.fillRect(0, 0, 320, 420); x.fillStyle = '#23272b'; x.fillRect(0, 0, 320, 64); x.fillStyle = '#fff'; x.font = '700 34px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('乘車須知', 160, 44); x.fillStyle = '#23272b'; x.font = '24px "Noto Sans TC", sans-serif'; ['禁止飲食・嚼口香糖', '手扶梯靠右站穩', '請勿奔跑・推擠', '先下後上・排隊候車', '博愛座請禮讓'].forEach((t, i) => { x.fillStyle = ['#c8202a', '#2a7de1', '#e07a3a', '#3a8a5a', '#8a4ab0'][i]; x.fillRect(22, 98 + i * 62, 12, 34); x.fillStyle = '#23272b'; x.textAlign = 'left'; x.fillText(t, 46, 124 + i * 62); }); });
       if (right > U.x0 + 1) {
@@ -1140,7 +1185,7 @@ const Station3D = (() => {
     { bg: '#23272b', fg: '#f2c200', zh: '請勿在月台奔跑', en: 'Please do not run on the platform' },
   ];
   function adTex(i) {
-    const a = ADS[((i % ADS.length) + ADS.length) % ADS.length];
+    const a = typeof DayCalm !== 'undefined' ? DayCalm.ad(ADS[((i % ADS.length) + ADS.length) % ADS.length]) : ADS[((i % ADS.length) + ADS.length) % ADS.length];   // 白天：迷霧廣告換成一般廣告
     return canvasTex(512, 256, g => {
       g.fillStyle = a.bg; g.fillRect(0, 0, 512, 256);
       g.fillStyle = 'rgba(255,255,255,.12)'; for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(420 - k * 30, 60 + k * 25, 80 - k * 8, 0, Math.PI * 2); g.fill(); }
@@ -1187,8 +1232,8 @@ const Station3D = (() => {
     // 廣告燈箱
     for (const [x, i] of [[C.x1 - 15, 0], [C.x0 + 22, 3]]) if (x > 5 || x < -5) { box(3.2, 1.7, .12, M('#e8e8e4'), x, 1.7, fz, g); const p = plane(3, 1.5, M('#ffffff', { map: adTex(i + L.stationId.length), e: '#ffffff', ei: .15 }), g); p.position.set(x, 1.7, fz + .07); }
     // 公共藝術（牆面大畫）
-    const art = plane(5, 2.5, M('#ffffff', { map: artTex(L.stationId, LINES[L.platforms[0].line].color) }), g); art.position.set(C.x0 + 14, 2.1, C.z0 + .03);
-    box(5.2, .08, .1, darkM, C.x0 + 14, .82, C.z0 + .05, g);
+    const art = plane(5, 2.2, M('#ffffff', { map: artTex(L.stationId, LINES[L.platforms[0].line].color) }), g); art.position.set(C.x0 + 14, 2.3, C.z0 + .07);   // 公共藝術：掛在護牆板上面、往前一點，不被飾條切過
+    box(5.2, .08, .12, darkM, C.x0 + 14, 1.16, C.z0 + .07, g);
     // 哺集乳室、站務室（側牆上的門）
     for (const [x, zh, en, col, rot] of [[C.x1 - .02, '哺集乳室', 'Nursing room', '#e08aa8', -Math.PI / 2], [C.x0 + .02, '站務室', 'Staff only', '#5d6b7a', Math.PI / 2]]) {
       sign(plainSign(zh, en, '#23272b', '#fff', { bg: col, fg: '#fff', text: zh === '站務室' ? '⚙' : '♡' }), 1.8, .45, x + (rot < 0 ? -.05 : .05), 2.75, C.z0 + 5, g, rot);
@@ -1244,7 +1289,7 @@ const Station3D = (() => {
     const bin = (x, y, z) => { solid(x, z, .42, .42, y); box(.42, .75, .42, M('#5d6b7a', { m: .4, r: .4 }), x, y + .375, z, g); box(.44, .06, .44, darkM, x, y + .78, z, g); box(.16, .02, .2, M('#1c2126'), x, y + .81, z, g); };
     for (const x of [-5.2, 5.2]) bin(x, 0, C.z0 + .45);                                   // 大廳站名牆兩側
     bin(U.x0 + .5, 0, U.z0 + 3.4); bin(U.x1 - 5.8, 0, U.z1 - .5);                         // 非付費區
-    const adW = (x, z, rot, i) => { L.ads.push({ x: x + Math.sin(rot) * 1.1, y: 0, z: z + Math.cos(rot) * 1.1, ad: ((i % ADS.length) + ADS.length) % ADS.length }); const b = box(.12, 1.7, 3.2, M('#e8e8e4'), x, 1.7, z, g); b.rotation.y = rot; const p = plane(3, 1.5, M('#ffffff', { map: adTex(i), e: '#ffffff', ei: .15 }), g); p.position.set(x + Math.sin(rot) * .07, 1.7, z + Math.cos(rot) * .07); p.rotation.y = rot; };
+    const adW = (x, z, rot, i) => { L.ads.push({ x: x + Math.sin(rot) * 1.1, y: 0, z: z + Math.cos(rot) * 1.1, ad: ((i % ADS.length) + ADS.length) % ADS.length }); const b = box(.12, 1.7, 3.2, M('#e8e8e4'), x, 2.1, z, g); b.rotation.y = rot; const p = plane(3, 1.5, M('#ffffff', { map: adTex(i), e: '#ffffff', ei: .15 }), g); p.position.set(x + Math.sin(rot) * .07, 2.1, z + Math.cos(rot) * .07); p.rotation.y = rot; };
     // 牆上的廣告：不要擋到房間的門口
     const freeWall = (wx, z) => !(L.rooms || []).some(r => Math.abs(r.door.wx - wx) < .5 && Math.abs(r.door.z - z) < r.door.w / 2 + 1.9);
     for (const [k, z0] of [C.z0 + 12, C.z0 + 20].entries()) for (const [wx, rot, i] of [[C.x0, Math.PI / 2, k + 1], [C.x1, -Math.PI / 2, k + 4]]) {
@@ -1252,7 +1297,7 @@ const Station3D = (() => {
       const z = [z0, z0 + 4, z0 - 4].find(zz => zz < L.gateZ - 2.5 && zz > C.z0 + 1.8 && freeWall(wx, zz));
       if (z != null) adW(wx + (wx === C.x0 ? .08 : -.08), z, rot, i);
     }
-    { const p = plane(3, 1.5, M('#ffffff', { map: adTex(5), e: '#ffffff', ei: .15 }), g); p.position.set(8.5, 1.7, U.z1 - .16); p.rotation.y = Math.PI; box(3.2, 1.7, .1, M('#e8e8e4'), 8.5, 1.7, U.z1 - .08, g); }
+    { const p = plane(3, 1.5, M('#ffffff', { map: adTex(5), e: '#ffffff', ei: .15 }), g); p.position.set(8.5, 2.1, U.z1 - .16); p.rotation.y = Math.PI; box(3.2, 1.7, .1, M('#e8e8e4'), 8.5, 2.1, U.z1 - .08, g); }   // 廣告整個在護牆板上面，不跟牆面裝飾重疊
     // 路線指南看板（閘門內側）
     { const gx = -10.5, gz = L.gateZ - 1.4;
       if (!L.platforms.some(P => Math.abs(P.z - gz) < 3)) {

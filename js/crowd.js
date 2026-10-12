@@ -95,13 +95,15 @@ const Crowd = (() => {
     return Math.min(MAX, Math.round(n));
   }
 
-  function spawn(layout) {
+  // quiet：搭車抵達的那個月台——一開始不放人（不會看著空月台突然冒出一群人），人從大廳走下來、從車上下來
+  function spawn(layout, quiet = null) {
     if (!meshes) build();
     L = layout; people = [];
     if (!root.parent) World.scene.add(root);
     const n = count();
     for (let i = 0; i < n; i++) {
-      const r = Math.random(), area = r < .32 ? 'hall' : r < .44 ? 'unpaid' : (Math.random() * L.platforms.length) | 0;
+      const r = Math.random(); let area = r < .42 ? 'hall' : r < .56 ? 'unpaid' : (Math.random() * L.platforms.length) | 0;
+      if (quiet != null && area === quiet) area = 'hall';
       const pos = randIn(area); if (!pos) continue;
       const girl = Math.random() < .5, old = Math.random() < .12, kid = !old && Math.random() < .06;
       const p = {

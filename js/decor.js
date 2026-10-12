@@ -380,9 +380,9 @@ const Decor = (() => {
       for (let x = U.x0 + 1; x < U.x1 - 1; x += .8) cands.push([x, U.z1 - 1.75, 'e']);
       // 洗牌（固定種子）後挑互相距離夠遠的位置
       for (let i = cands.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [cands[i], cands[j]] = [cands[j], cands[i]]; }
-      const chosen = [], perWall = {}, maxN = big ? 10 : 8;
+      const chosen = [], perWall = {}, maxN = big ? 13 : 11;
       for (const [x, z, wall] of cands) {
-        if (chosen.length >= maxN || (perWall[wall] || 0) >= (wall === 'w' || wall === 'u' ? 4 : 2)) continue;
+        if (chosen.length >= maxN || (perWall[wall] || 0) >= (wall === 'w' || wall === 'u' ? 5 : 3)) continue;
         if (chosen.some(c => Math.hypot(c[0] - x, c[1] - z) < 5)) continue;
         if (!hallFree(x, z, .35, .35)) continue;
         chosen.push([x, z]); perWall[wall] = (perWall[wall] || 0) + 1;
@@ -394,7 +394,7 @@ const Decor = (() => {
       const cands = [[-9, U.z0 + 6.6], [9.4, U.z0 + 8.2], [-9.2, U.z0 + 9], [9.2, U.z0 + 10.2], [-5.5, U.z0 + 7.5], [5.5, U.z0 + 7.5]];
       let n = 0;
       for (const [x, z] of cands) {
-        if (n >= (big ? 2 : 1 + (hash(L.stationId) % 2))) break;
+        if (n >= (big ? 3 : 2)) break;
         if (!hallFree(x, z, .9, .9)) continue;
         island(x, z, .85, { tree: n === 0 && R() < .6 ? .8 : 0 }); take(x, z, .9, .9); n++;
       }
@@ -403,41 +403,14 @@ const Decor = (() => {
     /* ── 月台 ── */
     for (const P of L.platforms) {
       const ox = P.x, oy = P.y, oz = P.z;
-      const pFree = (lx, lz, hw) => {
-        const a = box2(ox + lx, oz + lz, hw, hw, .12);
-        if ((L.obstacles || []).some(o => Math.abs((o.y || 0) - oy) < .5 && hit(a, o))) return false;
-        if (P.ramps.some(r => hit(a, { x0: Math.min(r.xa, r.xb) - 1, x1: Math.max(r.xa, r.xb) + 1, z0: r.z - 2, z1: r.z + 2 }))) return false;
-        if (Math.abs(lz) + hw > 1.92 && K.DOORS.some(d => Math.abs(d - lx) < hw + 1.2)) return false;   // 車門前留空
-        return true;
-      };
-      const artHere = art && art.level === 'platform' && P === L.platforms[0];
-      const fl = twoColors();
-      // 中央柱子兩側的小花盆（看路網圖的人站在柱子前後，不擋）
-      if (!artHere) for (const sx of [-1, 1]) {
-        const lx = sx * 1.25;
-        if (!pFree(lx, 0, .25)) continue;
-        const top = pot(ox + lx, oy, oz, .24, .42); bed(ox + lx, top, oz, .44, .44, fl, { round: true, dense: 60, spikes: false });
-        solid(ox + lx, oz, .48, .48, oy);
-      }
-      // 電梯與座椅之間、座椅與飲水機之間的盆栽
-      for (const [lx, lz, kind] of [[-22.55, 0, 'snake'], [25.3, -.2, 'snake']]) {
-        if (!pFree(lx, lz, .22)) continue;
-        snake(ox + lx, oy, oz + lz, .9); solid(ox + lx, oz + lz, .44, .44, oy);
-      }
-      // 月台兩端角落的大盆栽
-      for (const ex of [-1, 1]) for (const sz of [-1, 1]) {
-        const lx = ex * 32.35, lz = sz * 2.35;
-        if (!pFree(lx, lz, .3)) continue;
-        (((hash(L.stationId + P.line) + (ex + 1) + (sz + 1) * 2) % 2) ? palm : monstera)(ox + lx, oy, oz + lz, .95);
-        solid(ox + lx, oz + lz, .6, .6, oy);
-      }
+      // 月台只留牆上的綠化：地上的花盆、大盆栽都搬到大廳，月台走道保持寬敞
       if (P.under) {
         // 端牆的綠牆（工作門和消防栓之間）
         for (const ex of [-1, 1]) greenWall(ox + ex * (K.LEN / 2 - .01), oy + 1.65, oz - .18, 1.75, 2.1, ex > 0 ? -Math.PI / 2 : Math.PI / 2);
       } else {
         // 高架月台：屋簷下的吊籃
         const cols = [pick(flowers), pick(flowers), '#ffffff'];
-        for (const [lx, lz] of [[-26, 1.2], [-21, -1.2], [21, 1.2], [26, -1.2]]) basket(ox + lx, oy + 3.3, oz + lz, oy + 3.81, cols);
+        for (const [lx, lz] of [[-26, 1.2], [26, -1.2]]) basket(ox + lx, oy + 3.3, oz + lz, oy + 3.81, cols);
       }
     }
 

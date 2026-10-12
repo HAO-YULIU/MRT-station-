@@ -224,7 +224,9 @@ const Festival = (() => {
     decorate(L);
     // 幽靈：晚上，還沒遇見過
     const gd = HW_GHOSTS[stationId];
-    if (gd && night() && !col('hw_ghosts')[stationId]) {
+    // 「月台上的幽靈」進行中：今天還沒見過的幽靈會再出現（接任務前就見過很多隻的話，任務才湊得滿三隻）
+    const seen = col('hw_ghosts')[stationId], again = seen && seen !== TaipeiTime.date() && Quests.isActive('event_hw_ghost');
+    if (gd && night() && (!seen || again)) {
       const P = L.platforms[hsh(stationId) % L.platforms.length], ex = hsh(stationId) % 2 ? 1 : -1;
       const m = ghostMesh(); const pos = { x: P.x + ex * 22, y: P.y + .25, z: P.z + .6 };
       m.position.set(pos.x, pos.y, pos.z); m.rotation.y = ex > 0 ? -Math.PI / 2 : Math.PI / 2; group.add(m);
