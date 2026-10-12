@@ -90,6 +90,7 @@ function updateHud() {
   const dl = Object.values(s.quests.active).map(q => q.deadline).filter(Boolean).sort()[0];
   $('#hudStats').innerHTML = `<span class="lv">Lv ${lv.lv}</span><span class="xpbar"><i style="width:${Math.round(lv.cur / lv.need * 100)}%"></i></span><span class="money">NT$ ${s.money}</span>${s.gold ? `<span class="money gold">🪙 ${s.gold}</span>` : ''}${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
+    if (typeof Titles !== 'undefined') Titles.check();   // 得到新稱號時通知、還是新手乘客就自動換上
     $('#hudName').innerHTML = `${esc(CHARACTERS[s.char].name)} <small class="hud-title">${esc(Progress.titleName())}</small>`;
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
@@ -148,13 +149,15 @@ Game.reward = (r = {}, label = '') => {
   if (r.place) { (s.places = s.places || {})[r.place] = TaipeiTime.date(); parts.push(`特殊地點紀錄：${r.place}`); }
   saveState(); updateHud();
   if (label || parts.length) { toast(`<b>${label}</b>${parts.length ? `<span>${parts.join('　')}</span>` : ''}`, 'reward'); Sound.itemGet(); }
+  FX.reward(r);   // FX：硬幣飛進餘額、物品飛進背包
   const after = Economy.levelInfo(s.xp).lv;
-  if (after > before) setTimeout(() => { toast(`<b>升級！Lv ${after}</b>`, 'level'); Sound.itemGet(); Progress.onLevel(before, after); }, 900);
+  if (after > before) setTimeout(() => { toast(`<b>升級！Lv ${after}</b>`, 'level'); Sound.itemGet(); Progress.onLevel(before, after); FX.levelUp(after); }, 900);
 };
 Game.onQuestChange = (what, id, o, k) => {
   const q = QUESTS[id];
   if (what === 'next') toast(`<b>收到後續委託</b><span>${q.title}</span>`, 'level');
   if (what === 'done') {
+    FX.questDone(q.title);   // FX：任務完成橫幅與彩帶
     Life.log(`完成「${q.title}」${k ? `（${(o && o.name) || Quests.OUTCOME_NAME[k] || ''}）` : ''}`);
     SideQuests.onDone(id);
     Progress.onQuestDone(id, o, k);
@@ -174,7 +177,7 @@ Game.onQuestChange = (what, id, o, k) => {
   }
   // 主線完成：揭曉這條線的結局
   if (what === 'done' && /^main_/.test(id) && STORY[q.line]) setTimeout(() => showEnding(q.line), 1200);
-  if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); }
+  if (what === 'secret') { toast(`<b>發現秘密任務！</b><span>${q.title}</span>`, 'level'); Sound.itemGet(); FX.banner('發現秘密任務', q.title, 'secret'); }
   if ((what === 'accept' || what === 'done') && ctl) Challenges.spawn(ctl.stationId);
   updateHud();
 };
@@ -191,10 +194,12 @@ function openQuests() {
     const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密', timed: '限時', daily: '每日', weekly: '每週' }[q.type];
     return `<li class="quest q-${q.type}">
       <div class="q-head"><span class="q-tag"${q.line ? ` style="--c:${LINES[q.line].color}"` : ''}>${q.line ? q.line + ' ' : ''}${tag}</span><b>${q.title}</b></div>
+      ${QuestEffort.label(q)}
       <p>${q.desc}</p>
       <ol>${q.steps.map((p, i) => `<li class="${i < st.step ? 'ok' : i === st.step ? 'now' : ''}">${p.text}${i === st.step ? stepNote(q, st, p) : ''}</li>`).join('')}</ol>
       <div class="q-reward">報酬：${[q.reward.money && `NT$ ${q.reward.money}`, q.reward.xp && `經驗 ${q.reward.xp}`, q.reward.gold && `🪙 黃金 ${q.reward.gold}`, ...Object.keys(q.reward.items || {}).map(i => ITEMS[i].name)].filter(Boolean).join('、')}</div>
       ${st.deadline ? `<div class="q-timer">⏱ 剩下 ${fmtLeft(st.deadline)}</div>` : ''}
+      <button class="btn ghost small" data-track="${id}" aria-pressed="${trackedQuest() === id}">${trackedQuest() === id ? '📍 追蹤中' : '追蹤'}</button>
       ${['side', 'timed', 'daily', 'weekly'].includes(q.type) ? `<button class="btn ghost small" data-abandon="${id}">放棄</button>` : ''}
     </li>`;
   };
@@ -208,7 +213,7 @@ function openQuests() {
     ${ids.length ? `<ul class="quests">${ids.map(card).join('')}</ul>` : '<p class="empty-q">目前沒有任務。到處和人說話，看看誰需要幫忙。</p>'}
     ${done.length ? `<h4 class="q-done-h">已完成</h4><ul class="q-done">${done.map(id => `<li>${QUESTS[id].title}</li>`).join('')}</ul>` : ''}
     ${Achievements.html()}`;
-  $('#questBody').onclick = e => { const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
+  $('#questBody').onclick = e => { const t = e.target.closest('[data-track]'); if (t) { Game.state.flags.track = t.dataset.track; saveState(); Sound.click(); openQuests(); if (ctl) panelCache.pQuest = null; return; } const b = e.target.closest('[data-abandon]'); if (b && confirm(`放棄「${QUESTS[b.dataset.abandon].title}」？`)) { Quests.abandon(b.dataset.abandon); openQuests(); } };
   $('#questLog').hidden = false;
 }
 
@@ -382,6 +387,7 @@ if (window.ResizeObserver) window.addEventListener('DOMContentLoaded', () => { c
 function ensureWorld() {
   if (worldReady) return;
   World.init(sceneEl());
+  FX.init();   // 互動效果（粒子、光圈、閘門翼片、月台門警示燈）
   World.bindJoystick($('#joystick'));
   World.onGate = onGate;
   World.blocker = (x, z, y) => NPCManager.blocks(x, z, y) || Passengers.blocks(x, z, y) || Crowd.blocks(x, z, y);
@@ -439,6 +445,7 @@ function buildPanel() {
   const fh = $('#fogHud'); if (fh) $('#game').appendChild(fh);   // 迷霧 HUD 平常住在資訊框裡，重建前先拿出來
   $('#panel').innerHTML = `<div class="mini">
       <div class="mini-title" id="pTitle"></div>
+      <div class="mini-quest" id="pQuest"></div>
       <div class="mini-rows" id="pRows"></div>
       <div class="mini-hint" id="pHint"></div>
       <div class="mini-btns" id="pBtns"></div>
@@ -447,7 +454,7 @@ function buildPanel() {
   const pn = $('#panel');
   let col = null; try { col = localStorage.getItem('panelCollapsed'); } catch (e) { /* 無法存取 */ }
   pn.classList.toggle('collapsed', col == null ? window.matchMedia('(orientation: portrait) and (pointer: coarse)').matches : col === '1');
-  pn.onclick = e => { if (e.target.closest('button, a')) return; pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
+  pn.onclick = e => { if (e.target.closest('button, a')) return; if (e.target.closest('#pQuest')) { Sound.click(); return openQuests(); } pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
 }
 const panelCache = {};
 function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = html; $('#' + id).innerHTML = html; } }
@@ -528,7 +535,7 @@ function tickStation() {
   if (P) {
     for (const side of [-1, 1]) {
       const dirs = sideDirs(P, side);
-      World.setLed(P.k, side, dirs.map(d => ({ text: '往 ' + MRT.label(d.terminal, d.line).zh, eta: open ? fmtEta(d.eta) : '--' })));
+      World.setLed(P.k, side, FX.led(P.k, side, open && dirs[0] ? dirs[0].eta : null, dirs.map(d => ({ text: '往 ' + MRT.label(d.terminal, d.line).zh, eta: open ? fmtEta(d.eta) : '--' }))));   // FX：即將進站時閃爍
       const key = trackKey(P.k, side);
       if (!open || ctl.busy.has(key) || !dirs[0] || dirs[0].eta == null) continue;
       const d = dirs[0];
@@ -547,8 +554,24 @@ function tickStation() {
   renderPanel(z, L);
 }
 
+// 追蹤中的任務：資訊框裡顯示目前這一步、目標在哪裡（收起時也看得到）
+function trackedQuest() {
+  const s = Game.state, act = s.quests.active;
+  if (s.flags.track && act[s.flags.track]) return s.flags.track;
+  const order = ['main', 'timed', 'weekly', 'event', 'side', 'secret', 'daily'];
+  return Object.keys(act).filter(id => QUESTS[id]).sort((a, b) => order.indexOf(QUESTS[a].type) - order.indexOf(QUESTS[b].type))[0] || null;
+}
+function trackerHtml() {
+  const id = trackedQuest(); if (!id) return '';
+  const q = QUESTS[id], st = Game.state.quests.active[id], step = q.steps[st.step]; if (!step) return '';
+  const g = step.goal || {}, here = Game.state.current;
+  const target = g.station === '@treasure' ? st.treasure : g.station || (g.npc && NPCS[g.npc] && NPCS[g.npc].station) || null;
+  const where = !target ? '' : target === here ? '<em class="here">就在這一站</em>' : `<em>${esc(target)}・約 ${Math.max(1, Math.round(Economy.distance(here, target)))} 公里</em>`;
+  return `<span class="mq-ico">📋</span><span class="mq-text"><b>${esc(q.title)}</b>${esc(step.text.replace(/<[^>]+>/g, ''))}</span>${where}`;
+}
 function renderPanel(z, L) {
   const st = ctl.stationId, lines = MRT.linesAt(st);
+  setPart('pQuest', trackerHtml());
   const head = `${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(st)}</b>`;
   if (Game.ride && Game.ride.moving) return;   // 行駛中由搭乘流程顯示
   let rows = '', hint = '';
@@ -639,6 +662,7 @@ async function dwell(tr, dir, id, ride) {
   if (ctl.doorHint === tr) ctl.doorHint = false;
   // 關門
   Sound.doorClose();
+  FX.doorWarn(tr);   // FX：月台門警示燈閃爍、關門提示
   await sleep(1900); if (!alive(id)) return;
   ctl.doors.delete(tr); doorInteractions();
   World.clearDoorway(tr);
@@ -762,19 +786,19 @@ const dropInteraction = {
   get id() { const d = Passengers.dropNear(World.player); return d ? 'drop:' + d.item : 'drop'; },
   get label() { const d = Passengers.dropNear(World.player); return d ? `撿起：${d.item === 'coin' ? '硬幣' : ITEMS[d.item].name}` : '撿起'; },
   when: p => !World.sitting && !!Passengers.dropNear(p),
-  run: () => Passengers.takeDrop(),
+  run: () => { const d = Passengers.dropNear(World.player); if (d) FX.pickup(d, d.item === 'coin' ? '' : ITEMS[d.item].icon); Passengers.takeDrop(); },
 };
 // 查看告示牌、塗鴉、路線圖
 const SPOT_NAME = {
   notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
   guide: '路線指南', cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
-  onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
+  feature: '特色大廳', onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
 const SPOT_VERB = { stamp: '蓋紀念章', breakfast: '買早餐', cafe: '點咖啡', elevator: '搭電梯', ticket: '查看售票機', toilet: '上廁所', shop: '逛商店', fountain: '喝水', vending: '買飲料', phone: '打電話' };
 function nearSpot(p) { const L = World.layout; return L && L.spots.find(sp => Math.abs(sp.y - p.y) < .6 && Math.hypot(sp.x - p.x, sp.z - p.z) < 1.6); }
 const spotInteraction = {
   get id() { const sp = nearSpot(World.player); return sp ? 'spot:' + sp.kind + sp.x + sp.z : 'spot'; },
-  get label() { const sp = nearSpot(World.player); return sp ? (SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
+  get label() { const sp = nearSpot(World.player); return sp ? (sp.kind === 'feature' ? `欣賞：${sp.name}` : SPOT_VERB[sp.kind] || '查看' + SPOT_NAME[sp.kind]) : '查看'; },
   when: p => !Dialog.with && !!nearSpot(p) && !NPCManager.nearest(p, 1.2),
   run: () => {
     const sp = nearSpot(World.player), st = ctl.stationId;
@@ -799,6 +823,7 @@ const spotInteraction = {
 };
 // 車站設施
 const FACILITY = {
+  feature: (sp, st) => { Sound.click(); Dialog.info(`✨ ${sp.name}`, `${esc(sp.text)}<br><small>${esc(st)}站的特色大廳</small>`); const s = Game.state, f = (s.col = s.col || {}).halls = s.col.halls || {}; if (!f[st]) { f[st] = 1; saveState(); toast(`<b>✨ 特色大廳 ${Object.keys(f).length} / ${Object.keys(SpecialHalls.HALLS).length}</b><span>${esc(sp.name)}</span>`, 'level'); } },
   fountain: () => { Sound.click(); toast(['<b>喝了幾口水</b><span>冰冰涼涼的。</span>', '<b>喝了幾口水</b><span>出水有點小，要湊很近。</span>', '<b>喝了幾口水</b><span>精神好一點了。</span>'][(Math.random() * 3) | 0]); },
   aed: () => Dialog.info('AED', '自動體外心臟電擊去顫器。打開箱門會有警報聲，裡面的機器會用語音一步一步教你怎麼用。<br>旁邊貼著站務員的分機號碼。'),
   art: (sp, st) => Dialog.info('公共藝術', `這幅作品叫《${esc(st)}・${['晨光', '流動', '交會', '回聲', '城市的呼吸', '月台之間'][st.length % 6]}》。<br>藝術家用${esc(LINES[MRT.linesAt(st)[0].line].zh)}的顏色畫了一條穿過城市的線。${TaipeiTime.state() !== 'open' ? '' : TaipeiTime.now().hour >= 23 ? '<br>……夜深了，畫裡好像多了一個戴紅色貝雷帽的小人影。' : ''}`),
@@ -992,7 +1017,7 @@ const collectInteraction = {
   get id() { const it = Achievements.near(World.player); return it ? 'col:' + it.kind : 'col'; },
   get label() { const it = Achievements.near(World.player); return it ? (it.kind === 'drop' ? '撿起：別人的包包' : `撿起：${COLLECT[it.kind].name}`) : '撿起'; },
   when: p => !Dialog.with && !!Achievements.near(p),
-  run: () => { const it = Achievements.near(World.player); if (it) Achievements.take(it); },
+  run: () => { const it = Achievements.near(World.player); if (it) { FX.pickup(it, it.kind === 'drop' ? '👜' : COLLECT[it.kind].icon); Achievements.take(it); } },
 };
 // 主線謎題
 const puzzleInteraction = {
@@ -1007,7 +1032,7 @@ const pickupInteraction = {
   get id() { const it = nearPickup(World.player); return it ? 'pick:' + it.item : 'pick'; },
   get label() { const it = nearPickup(World.player); return it ? `撿起：${ITEMS[it.item].name}` : '撿起'; },
   when: p => !!nearPickup(p),
-  run: () => { const it = nearPickup(World.player); if (it) Pickups.take(it); },
+  run: () => { const it = nearPickup(World.player); if (it) { FX.pickup(it, ITEMS[it.item].icon); Pickups.take(it); } },
 };
 
 // 出口（地面世界之後開放）
@@ -1033,6 +1058,7 @@ function showItemGet(line) {
     <button class="btn primary" id="itemOk">收進背包</button>
   </div>`;
   ov.hidden = false;
+  FX.confetti(70);   // FX：彩帶
   return new Promise(res => { $('#itemOk').onclick = () => { ov.hidden = true; res(); }; $('#itemOk').focus(); });
 }
 
@@ -1133,7 +1159,7 @@ function openMap() {
       card.innerHTML = `<div class="here">${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(id)}</b></div>
         <small>${esc(STATIONS[id].en)}</small>
         <p>${here ? '你現在在這裡' : been ? '去過了，可以傳送' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>
-        ${been && !here ? `<button class="btn primary small" id="tpBtn">傳送到這裡</button>` : ''}
+        ${been && !here ? `<button class="btn primary small" id="tpBtn">傳送到這裡（車資 NT$ ${Economy.fare(s.current, id)}）</button>` : ''}
         ${been && !here && Game.ride ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}${been && !here && FogCity.locked() ? '<p class="warn-text">迷霧之城：06:00 以前離不開這一站</p>' : ''}`;
       card.hidden = false;
       Sound.click();
@@ -1157,8 +1183,14 @@ async function teleport(id) {
   await sleep(450);
   World.loadStation(id);
   World.spawnInConcourse();
-  settleTrip(true); s.current = id; s.trip = null; saveState(); updateHud();
+  settleTrip(true);
+  // 傳送也算搭了一趟車：依兩站距離扣車資
+  const from = s.current, fare = Economy.fare(from, id);
+  s.money -= fare; s.rides = (s.rides || 0) + 1;
+  s.current = id; s.trip = null; saveState(); updateHud();
   startStation(id);
+  toast(`<b>扣款 NT$ ${fare}</b><span>傳送 ${esc(from)} → ${esc(id)}（視同搭車）　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
+  if (fare >= 65) Quests.secret('sec_maxfare');
   fx.classList.add('out');
   await sleep(600);
   fx.hidden = true;

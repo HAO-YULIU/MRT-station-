@@ -296,8 +296,8 @@ const World = (() => {
       const side = player.z > layout.gateZ + .6 ? 1 : -1;
       if (lastGateSide && side !== lastGateSide && layout.gates.some(g => Math.abs(player.x - g) < .4)) {
         // side = 1 出站、-1 進站；遊戲可以拒絕（例如餘額不足）
-        if (gateCheck && !gateCheck(side)) { player.z = layout.gateZ + (side > 0 ? .2 : 1.1); player.auto = null; }
-        else { Sound.gate(); lastGateSide = side; }
+        if (gateCheck && !gateCheck(side)) { player.z = layout.gateZ + (side > 0 ? .2 : 1.1); player.auto = null; if (typeof FX !== 'undefined') FX.gate(side, player.x, false); }
+        else { Sound.gate(); lastGateSide = side; if (typeof FX !== 'undefined') FX.gate(side, player.x, true); }   // FX：感應區亮燈、浮出「嗶！」
       } else lastGateSide = side;
     }
     if (rig) {
@@ -564,6 +564,7 @@ const World = (() => {
     },
     placePlayer(x, y, z, face = Math.PI) { player.x = x; player.y = y; player.z = z; player.face = face; player.vnow = 0; cam.pos.set(x, y + 2.6, z + 4); },
     get player() { return pstate(); },
+    get raw() { return player; },   // FX：每幀讀位置、速度（唯讀，不配置新物件）
     zone,
     // 列車
     spawnTrain(k, side, line, travel, livery) {
@@ -582,6 +583,7 @@ const World = (() => {
       return tween(ms, k => { tr.x = tr.travel * 200 * k; placeTrain(tr); }, t => t * t * t).then(() => this.removeTrain(tr));
     },
     setDoors(tr, open, ms = 1100) {
+      if (typeof FX !== 'undefined') FX.doors(tr, open, ms);   // FX：月台門上方警示燈閃爍
       const from = tr.doorAmt, to = open ? 1 : 0;
       return tween(ms, k => { tr.doorAmt = from + (to - from) * k; applyDoors(tr); });
     },

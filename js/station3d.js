@@ -36,7 +36,7 @@ const Station3D = (() => {
 
   const TEX = {};
   function textures() {
-    if (TEX.tactile) { if (!TEX.floor) applyStyle(null); return; }
+    if (TEX.tactile) { if (!TEX.floor && !styling) applyStyle(null); return; }
     // 花崗石地磚：每塊磚的色調略有不同，有細小的斑點與深色磚縫
     const granite = (g, w, h, n, base, grout) => {
       const s = w / n;
@@ -71,10 +71,10 @@ const Station3D = (() => {
     });
   }
   /* ── 每站不同的風格（StationStyle）：地磚、牆磚、柱子、天花板 ── */
-  let STY = null;
+  let STY = null, styling = false;   // styling：applyStyle 進行中，避免 textures() ↔ applyStyle() 互相呼叫
   const styleCache = new Map();
   function applyStyle(id) {
-    textures();
+    styling = true; textures(); styling = false;
     const st = (typeof StationStyle !== 'undefined' && StationStyle.of(id)) || null;
     STY = st || { floor: [40, 8, 76], grout: '#8e897f', hall: [38, 7, 80], floorPat: 'grid', hallPat: 'grid', tiles: 4, wall: '#e4e0d6', wallGrout: '#c9c3b6', wallTile: 'square', col: '#e9e5dc', colLine: '#c8c1b4', ceil: 'grid', ceilC: '#b9bec4', light: '#fff6e0', dado: '#8f887b', trim: '#3c4249', accent: '#2a7de1' };
     const key = st ? st.key : '_';
@@ -669,7 +669,8 @@ const Station3D = (() => {
       const Lc = LINES[P.line].color;
       const fullPSD = P.under || P.line === 'BR';
       // 地板（扣掉電扶梯口）
-      const holes = P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return r.b > 0 ? { x0: a + .25, x1: b, z0: -1.85, z1: 1.85 } : { x0: a, x1: b - .25, z0: -1.85, z1: 1.85 }; });
+      // 只有電扶梯往下穿過地板時才挖洞（高架站：月台在大廳上面）；往上走的電扶梯底下保留地板，不會看到黑洞
+      const holes = P.y <= .5 ? [] : P.ramps.map(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return r.b > 0 ? { x0: a + .25, x1: b, z0: -1.85, z1: 1.85 } : { x0: a, x1: b - .25, z0: -1.85, z1: 1.85 }; });
       slab(rectsMinus({ x0: -LEN / 2, x1: LEN / 2, z0: -3.05, z1: 3.05 }, holes), 0, M('#ffffff', { map: TEX.floor, r: .34 }), pg, .4);
       // 軌道、月台邊
       for (const s of [-1, 1]) {
@@ -760,7 +761,7 @@ const Station3D = (() => {
 
     /* 大廳 */
     const C = L.concourse;
-    const hallHoles = L.platforms.flatMap(P => P.ramps.map(r => {
+    const hallHoles = L.platforms.filter(P => P.y < -.5).flatMap(P => P.ramps.map(r => {   // 大廳只在電扶梯往下到地下月台時挖洞
       const a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
       return r.b > 0 ? { x0: a, x1: b - .25, z0: r.z - 1.85, z1: r.z + 1.85 } : { x0: a + .25, x1: b, z0: r.z - 1.85, z1: r.z + 1.85 };
     }));
@@ -909,6 +910,7 @@ const Station3D = (() => {
 
     furnish(L, g, night);
     decorate(L, g);
+    if (typeof SpecialHalls !== 'undefined') try { SpecialHalls.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night }); } catch (e) { console.error('specialhalls', e); }   // 特殊車站大廳（先放，後面的裝飾會避開）
     if (typeof Decor !== 'undefined') try { Decor.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD }); } catch (e) { console.error('decor', e); }   // 額外裝飾（花、植栽、藝術品）
     if (typeof MetroProps !== 'undefined') try { MetroProps.build(L, g, { T, M, box, plane, solid, tiled, canvasTex, TEX, night, LEN, TRACK, DOORS, PSD, sign }); } catch (e) { console.error('metroprops', e); }   // 台北捷運實際會有的設施
     for (const k of placesOf(L.stationId)) buildPlace(L, g, k);
@@ -1339,101 +1341,547 @@ const Station3D = (() => {
     stripCanvas = document.createElement('canvas'); stripCanvas.width = 1024; stripCanvas.height = 128;
     stripTex = new T.CanvasTexture(stripCanvas); stripTex.colorSpace = T.SRGBColorSpace;
   }
+  // ── 列車外觀 ──
+  // 車型：hc＝高運量（淡水信義、松山新店、中和新蘆、板南）：不鏽鋼車身、黑色窗帶、路線色飾帶、平頭駕駛室；第三軌集電，車頂沒有集電弓
+  //       a＝機場捷運：白色車身、斜頭；y＝環狀線：白色車身、黃色飾帶、流線圓頭（無人駕駛，車頭是一大片窗）
+  //       mc＝文湖線（中運量）：白色車身、棕色飾帶、大片圓弧擋風玻璃、膠輪轉向架（無人駕駛）
+  const TR_KIND_OF = { BR: 'mc', Y: 'y', A: 'a' };
+  const TR_KIND = {
+    hc: { base: null, cab: 'flat', CL: 1.2, rake: .22, seat: '#5b8ec9', prio: '#1c2f66', floor: '#8b9298' },
+    a: { base: '#eef0f3', cab: 'flat', CL: 1.4, rake: .5, seat: '#7d8fb8', prio: '#2a2f6e', floor: '#8a8e97', accent: '#2a5fb0' },
+    y: { base: '#f4f4f0', cab: 'round', seat: '#6d9bc3', prio: '#1c3566', floor: '#8c9196', accent: '#8a8f94',
+      nose: { lower: [[-.45, 1.05], [.3, 1.28], [.92, 1.38]], glass: [[.92, 1.38], [1.9, 1.1]], upper: [[1.9, 1.1], [2.3, .86]], th: 1.1, led: [1.95, 2.17, .015] } },
+    mc: { base: '#f5f5f0', cab: 'round', seat: '#5a6b7b', prio: '#1e3a66', floor: '#80878e', rubber: true, accent: '#6a4a24',
+      nose: { lower: [[-.45, .95], [.2, 1.22], [.72, 1.4]], glass: [[.72, 1.4], [1.55, 1.3], [2.12, 1.02]], upper: [[2.12, 1.02], [2.3, .9]], th: Math.PI / 2, led: [1.86, 2.06, -.14] } },
+  };
+  // 車體外板貼圖（每種塗裝一張）：左邊 1664px 是側面（沿車長 ±11.6 m，從車外看由左到右），接著 256px 車頭正面、128px 車門內側
+  const SK = { W: 2048, H: 256, X: 11.6, Y0: -.45, Y1: 2.45, S: 1664, F0: 1664, F1: 1920, D0: 1920, D1: 2048 };
+  const WIN0 = .98, WIN1 = 1.85, TOPY = 2.32, SKZ = HALF_W + .045, INZ = HALF_W - .045;
+  const skU = (x, s) => ((s > 0 ? x : -x) + SK.X) / (2 * SK.X) * SK.S / SK.W;
+  const skV = y => (y - SK.Y0) / (SK.Y1 - SK.Y0);
+  const skF = (z, sx) => (SK.F0 + (SK.F1 - SK.F0) * ((sx > 0 ? -1 : 1) * Math.max(-1.5, Math.min(1.5, z)) + 1.5) / 3) / SK.W;
+  const trTint = (c, k) => '#' + new T.Color(c).multiplyScalar(k).getHexString();
+  const trMats = new Map();
+  const trMat = (k, fn) => { if (!trMats.has(k)) trMats.set(k, fn()); return trMats.get(k); };
+
+  // 四邊形（自訂 UV）；n＝希望的法線方向，順序反了會自動翻面
+  function trQuad(mat, p, n, uv, parent) {
+    const e1 = new T.Vector3().subVectors(new T.Vector3(...p[1]), new T.Vector3(...p[0]));
+    const e2 = new T.Vector3().subVectors(new T.Vector3(...p[2]), new T.Vector3(...p[0]));
+    const flip = e1.cross(e2).dot(new T.Vector3(...n)) < 0;
+    const uvs = typeof uv === 'function' ? p.map(uv) : uv || [[0, 0], [1, 0], [1, 1], [0, 1]];
+    const pos = [], u = [];
+    for (const i of flip ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]) { pos.push(...p[i]); u.push(...uvs[i]); }
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new T.Float32BufferAttribute(u, 2));
+    geo.computeVertexNormals();
+    const m = new T.Mesh(geo, mat); parent && parent.add(m); return m;
+  }
+  // 網格曲面（車頂、圓弧車頭）：at(j, i) → [x, y, z]，平滑法線
+  function trGrid(rows, cols, at, flip, uvf) {
+    const pos = [], uv = [], idx = [];
+    for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) { const p = at(j, i); pos.push(...p); uv.push(...(uvf ? uvf(p) : [i / cols, j / rows])); }
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const a = j * (cols + 1) + i, b = a + 1, c = a + cols + 1, d = c + 1;
+      if (flip) idx.push(a, d, b, a, c, d); else idx.push(a, b, d, a, d, c);
+    }
+    const geo = new T.BufferGeometry(); geo.setIndex(idx);
+    geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+    geo.computeVertexNormals();
+    return geo;
+  }
+  // 方塊：沿長邊的 UV 乘上 n（座椅貼圖一格一個座位）
+  function trBoxU(w, h, d, n) {
+    const geo = new T.BoxGeometry(w, h, d), uv = geo.attributes.uv, nm = geo.attributes.normal;
+    for (let i = 0; i < uv.count; i++) if (Math.abs(nm.getX(i)) < .5) uv.setX(i, uv.getX(i) * n);
+    return geo;
+  }
+  const trRoofGeo = (x0, x1) => trGrid(1, 12, (j, i) => { const th = Math.PI * i / 12; return [j ? x1 : x0, 2.3 + .49 * Math.sin(th), 1.54 * Math.cos(th)]; }, x1 > x0);
+  function trRoofCap(parent, x, ex, mat) {
+    const c = new T.Mesh(new T.CircleGeometry(1.54, 12, 0, Math.PI), mat);
+    c.rotation.y = ex > 0 ? Math.PI / 2 : -Math.PI / 2; c.scale.y = .32; c.position.set(x, 2.3, 0); parent.add(c);
+  }
+  const trShared = {};
+  function trSharedGeo() {
+    if (trShared.handle) return trShared;
+    trShared.handle = new T.TorusGeometry(.07, .012, 3, 3);              // 三角形拉環
+    trShared.bar = new T.CylinderGeometry(.018, .018, CAR_LEN - .5, 6, 1, true);
+    trShared.pole = new T.CylinderGeometry(.02, .02, 2.3, 6, 1, true);
+    trShared.wheel = new T.CylinderGeometry(.43, .43, .11, 12);
+    trShared.tire = new T.CylinderGeometry(.4, .4, .26, 12);
+    trShared.guide = new T.CylinderGeometry(.17, .17, .1, 10);
+    trShared.rail = new T.CylinderGeometry(.02, .02, 1.5, 6, 1, true);
+    return trShared;
+  }
+  // 車門：外側直接取車身貼圖（關門時彩繪是連續的），內側用車門內側那一格（門邊有黃色警示條）
+  const trLeafGeos = {};
+  function trLeafGeo(d, sx, side) {
+    const k = d + ':' + sx + ':' + side;
+    if (trLeafGeos[k]) return trLeafGeos[k];
+    const geo = new T.BoxGeometry(.65, 2.05, .05), p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
+    for (let i = 0; i < p.count; i++) {
+      const lx = p.getX(i), y = 1.03 + p.getY(i), nz = n.getZ(i);
+      if (nz * side > .5) uv.setXY(i, skU(d + sx * .325 + lx, side), skV(y));
+      else { const t = Math.abs(nz) > .5 ? Math.max(0, Math.min(1, (sx * .325 - lx) * sx / .65)) : .05; uv.setXY(i, (SK.D0 + (SK.D1 - SK.D0) * t) / SK.W, skV(y)); }
+    }
+    return (trLeafGeos[k] = geo);
+  }
+
+  /* 貼圖 */
+  function trSkinTexture(K, lv, stripeC, L) {
+    return canvasTex(SK.W, SK.H, (g, W, H) => {
+      const X = xs => (xs + SK.X) / (2 * SK.X) * SK.S, Y = y => (1 - skV(y)) * H;
+      const FX = zs => SK.F0 + (zs + 1.5) / 3 * (SK.F1 - SK.F0);
+      const wrap = lv.wrap, base = lv.body || K.base;
+      const areas = [[0, SK.S], [SK.F0, SK.F1]];
+      const region = (x, y, w, h, fn) => { if (w <= 0 || h <= 0) return; g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.translate(x, y); fn(w, h); g.restore(); };
+      const band = (y0, y1, col, x0, x1) => { g.fillStyle = col; g.fillRect(x0, Y(y1), x1 - x0, Y(y0) - Y(y1)); };
+      // 底色：不鏽鋼（細直紋）或烤漆
+      for (const [x0, x1] of areas) {
+        const gr = g.createLinearGradient(0, 0, 0, H);
+        if (base) { gr.addColorStop(0, trTint(base, 1.06)); gr.addColorStop(.6, base); gr.addColorStop(1, trTint(base, .86)); }
+        else { gr.addColorStop(0, '#e6e9ec'); gr.addColorStop(.55, '#cdd2d6'); gr.addColorStop(1, '#a9b0b6'); }
+        g.fillStyle = gr; g.fillRect(x0, 0, x1 - x0, H);
+        if (!base) for (let x = x0; x < x1; x += 6) { g.fillStyle = 'rgba(255,255,255,.28)'; g.fillRect(x, Y(WIN0 - .1), 1, Y(SK.Y0) - Y(WIN0 - .1)); g.fillStyle = 'rgba(0,0,0,.07)'; g.fillRect(x + 3, Y(WIN0 - .1), 1, Y(SK.Y0) - Y(WIN0 - .1)); }
+      }
+      // 彩繪：蓋滿窗戶以外的整片側板（窗下、窗間、窗上）與車頭
+      if (wrap) {
+        const full = wrap.type !== 'icons' && wrap.type !== 'flags';
+        for (const [x0, x1] of areas) {
+          const w = x1 - x0;
+          if (full) region(x0, 0, w, H, (w, h) => Liveries.paint(g, w, h, wrap));
+          else {
+            g.fillStyle = wrap.type === 'flags' ? '#ffffff' : wrap.bg || '#ffffff'; g.fillRect(x0, 0, w, H);
+            region(x0, Y(WIN0 - .04), w, H - Y(WIN0 - .04), (w, h) => Liveries.paint(g, w, h, wrap));
+            region(x0, 0, w, Y(WIN1 + .07), (w, h) => Liveries.paint(g, w, h, wrap));
+          }
+          band(SK.Y0, SK.Y0 + .1, stripeC, x0, x1);          // 彩繪車只留細細的路線色
+          band(WIN0 - .1, WIN0 - .05, stripeC, x0, x1);
+        }
+      } else {
+        // 黑色窗帶（車門上不畫）
+        const xs = [-SK.X, ...DOOR_OFF.flatMap(d => [d - .7, d + .7]), SK.X];
+        for (let i = 0; i < xs.length; i += 2) band(WIN0 - .07, WIN1 + .08, '#15191c', X(xs[i]), X(xs[i + 1]));
+        band(WIN0 - .07, WIN1 + .08, '#15191c', SK.F0, SK.F1);
+        for (const [x0, x1] of areas) {
+          band(.6, .86, stripeC, x0, x1);                     // 路線色飾帶
+          if (K.accent) band(.5, .56, K.accent, x0, x1);
+          band(WIN1 + .12, WIN1 + .17, stripeC, x0, x1);
+        }
+      }
+      // 車門：每扇各一個窗、中間的橡膠條
+      for (const d of DOOR_OFF) {
+        g.fillStyle = 'rgba(0,0,0,.45)';
+        for (const e of [-.65, .65]) g.fillRect(X(d + e) - 1, Y(2.05), 2, Y(0) - Y(2.05));
+        g.fillStyle = '#1e2327'; g.fillRect(X(d) - 2, Y(2.05), 4, Y(0) - Y(2.05));
+        for (const sx of [-1, 1]) {
+          const a = Math.min(d + sx * .1, d + sx * .55), b = Math.max(d + sx * .1, d + sx * .55);
+          const gr = g.createLinearGradient(0, Y(1.83), 0, Y(1.02)); gr.addColorStop(0, '#36444f'); gr.addColorStop(1, '#151d23');
+          g.fillStyle = gr; roundRect(g, X(a), Y(1.83), X(b) - X(a), Y(1.02) - Y(1.83), 5); g.fill();
+          g.strokeStyle = '#0b0e10'; g.lineWidth = 2; g.stroke();
+        }
+      }
+      // 平頭駕駛室側面的小窗
+      if (K.cab === 'flat') for (const e of [-1, 1]) {
+        const a = Math.min(e * 10.2, e * (10 + K.CL - .25)), b = Math.max(e * 10.2, e * (10 + K.CL - .25));
+        g.fillStyle = '#1b242b'; roundRect(g, X(a), Y(1.8), X(b) - X(a), Y(1.02) - Y(1.8), 6); g.fill();
+        g.strokeStyle = '#9aa2a8'; g.lineWidth = 2; g.stroke();
+      }
+      // 車頭正面：頭燈／尾燈燈座、路線標誌
+      for (const e of [-1, 1]) { g.fillStyle = '#111417'; roundRect(g, FX(e > 0 ? .74 : -1.36), Y(.68), FX(1.36) - FX(.74), Y(.42) - Y(.68), 8); g.fill(); }
+      g.fillStyle = '#ffffff'; g.beginPath(); g.arc(FX(0), Y(.26), 15, 0, 7); g.fill();
+      g.strokeStyle = L.color; g.lineWidth = 5; g.stroke();
+      g.fillStyle = '#23272b'; g.font = '800 15px "Barlow Semi Condensed", sans-serif'; g.textAlign = 'center'; g.fillText(L.id, FX(0), Y(.26) + 5); g.textAlign = 'left';
+      // 車門內側（右緣是兩扇門相接的那一邊）
+      {
+        const x0 = SK.D0, w = SK.D1 - SK.D0;
+        const gr = g.createLinearGradient(x0, 0, x0 + w, 0); gr.addColorStop(0, '#c4c9ce'); gr.addColorStop(1, '#dde1e4');
+        g.fillStyle = gr; g.fillRect(x0, 0, w, H);
+        g.fillStyle = '#1d2830'; roundRect(g, x0 + w * .14, Y(1.83), w * .66, Y(1.02) - Y(1.83), 6); g.fill();
+        g.fillStyle = '#f2c200'; g.fillRect(x0 + w * .86, Y(2.05), w * .11, Y(0) - Y(2.05));
+        g.fillStyle = '#2a2f33'; g.fillRect(x0 + w - 4, 0, 4, H); g.fillRect(x0, 0, 3, H);
+      }
+    });
+  }
+  function trFloorTexture(K) {
+    return canvasTex(1024, 128, (g, w, h) => {
+      const X = x => (x + CAR_LEN / 2) / CAR_LEN * w, Z = z => (HALF_W - z) / (2 * HALF_W) * h;
+      const rect = (x0, x1, z0, z1) => g.fillRect(X(x0), Math.min(Z(z0), Z(z1)), X(x1) - X(x0), Math.abs(Z(z1) - Z(z0)));
+      g.fillStyle = K.floor; g.fillRect(0, 0, w, h); noise(g, w, h, 16);
+      g.fillStyle = 'rgba(255,255,255,.07)'; rect(-CAR_LEN / 2, CAR_LEN / 2, -.5, .5);
+      for (const s of [-1, 1]) {
+        for (const d of DOOR_OFF) {   // 車門口：深色踏墊＋黃色警示線
+          g.fillStyle = 'rgba(0,0,0,.16)'; rect(d - .7, d + .7, s * 1.08, s * 1.5);
+          g.fillStyle = '#e8b800'; rect(d - .64, d + .64, s * 1.02, s * 1.08);
+        }
+        for (const [a, b, wheel] of [[-CAR_LEN / 2, DOOR_OFF[0] - .7, false], [DOOR_OFF[3] + .7, CAR_LEN / 2, s < 0]]) {   // 博愛座、輪椅區的地面標示
+          g.fillStyle = wheel ? 'rgba(31,74,160,.8)' : 'rgba(42,95,176,.5)'; rect(a + .1, b - .1, s * .6, s * 1.46);
+          g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.strokeRect(X(a + .1) + 2, Math.min(Z(s * .6), Z(s * 1.46)) + 2, X(b - .1) - X(a + .1) - 4, Math.abs(Z(s * 1.46) - Z(s * .6)) - 4);
+          const cx = X((a + b) / 2), cy = Z(s * 1.03);
+          g.fillStyle = '#ffffff';
+          if (wheel) {   // 輪椅圖示
+            g.lineWidth = 3; g.strokeStyle = '#fff';
+            g.beginPath(); g.arc(cx - 2, cy + 6, 9, 0, 7); g.stroke();
+            g.beginPath(); g.arc(cx - 4, cy - 14, 3.5, 0, 7); g.fill();
+            g.beginPath(); g.moveTo(cx - 4, cy - 9); g.lineTo(cx - 3, cy + 2); g.lineTo(cx + 9, cy + 2); g.lineTo(cx + 13, cy + 13); g.stroke();
+          } else { g.font = '700 15px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillText('博愛座', cx, cy + 5); g.textAlign = 'left'; }
+        }
+      }
+    });
+  }
+  function trSeatTexture() {
+    const t = canvasTex(128, 64, (g, w, h) => {
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+      const rg = g.createRadialGradient(w / 2, h / 2, 6, w / 2, h / 2, w * .6); rg.addColorStop(0, 'rgba(255,255,255,0)'); rg.addColorStop(1, 'rgba(0,0,0,.22)');
+      g.fillStyle = rg; g.fillRect(0, 0, w, h);
+      g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(0, 0, 3, h); g.fillRect(w - 3, 0, 3, h);
+    });
+    t.wrapS = T.RepeatWrapping; return t;
+  }
+  function trBellowsTexture() {
+    const t = canvasTex(64, 8, (g, w, h) => { for (let x = 0; x < w; x += 8) { g.fillStyle = '#3c4044'; g.fillRect(x, 0, 5, h); g.fillStyle = '#212427'; g.fillRect(x + 5, 0, 3, h); } });
+    return t;
+  }
+  function trLedTexture(L) {
+    return canvasTex(256, 48, (g, w, h) => {
+      g.fillStyle = '#07090a'; g.fillRect(0, 0, w, h);
+      g.fillStyle = L.color; roundRect(g, 6, 8, 44, 32, 5); g.fill();
+      g.fillStyle = L.text || '#fff'; g.font = '800 20px "Barlow Semi Condensed", sans-serif'; g.textAlign = 'center'; g.fillText(L.id, 28, 31);
+      g.fillStyle = '#ffb12a'; g.font = '700 24px "Noto Sans TC", sans-serif'; g.fillText(L.zh, 152, 32);
+      g.fillStyle = 'rgba(0,0,0,.35)'; for (let x = 0; x < w; x += 3) g.fillRect(x, 0, 1, h); for (let y = 0; y < h; y += 3) g.fillRect(0, y, w, 1);
+    });
+  }
+  // 車廂廣告框：8 格（6 則廣告＋博愛座、輪椅區標示）
+  function trAdTexture() {
+    return canvasTex(1024, 512, g => {
+      const list = [...ADS.slice(0, 6), { bg: '#1d3f8a', fg: '#fff', zh: '博愛座', en: 'Priority Seats　請讓座給需要的人', icon: 'prio' }, { bg: '#1d3f8a', fg: '#fff', zh: '輪椅停靠區', en: 'Wheelchair Space', icon: 'wheel' }];
+      list.forEach((a, i) => {
+        const x = (i % 2) * 512, y = (i >> 1) * 128;
+        g.save(); g.beginPath(); g.rect(x, y, 512, 128); g.clip();
+        g.fillStyle = a.bg; g.fillRect(x, y, 512, 128);
+        if (!a.icon) {
+          g.fillStyle = 'rgba(255,255,255,.13)'; for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(x + 440 - k * 34, y + 30 + k * 22, 60 - k * 10, 0, 7); g.fill(); }
+          g.fillStyle = a.fg; g.font = 'bold 40px "Noto Sans TC", sans-serif'; g.fillText(a.zh, x + 24, y + 64);
+          g.font = '22px "Barlow Semi Condensed", sans-serif'; g.fillText(a.en, x + 26, y + 100);
+        } else {
+          g.fillStyle = '#fff'; g.beginPath(); g.arc(x + 64, y + 64, 44, 0, 7); g.fill();
+          g.fillStyle = a.bg; g.font = 'bold 50px sans-serif'; g.textAlign = 'center'; g.fillText(a.icon === 'prio' ? '♥' : '♿', x + 64, y + 82); g.textAlign = 'left';
+          g.fillStyle = a.fg; g.font = 'bold 44px "Noto Sans TC", sans-serif'; g.fillText(a.zh, x + 130, y + 64);
+          g.font = '22px "Noto Sans TC", sans-serif'; g.fillText(a.en, x + 132, y + 100);
+        }
+        g.restore();
+      });
+    });
+  }
+  function trMaterials(lineId, K, lv, L) {
+    const stripeC = lv.stripe || L.color, base = lv.body || K.base;
+    const skinTex = trSkinTexture(K, lv, stripeC, L);
+    const seatC = lv.seat || K.seat, prioC = lv.seat ? trTint(lv.seat, .55) : K.prio;
+    const metal = !base && !lv.wrap;
+    return {
+      skin: M('#ffffff', { map: skinTex, r: metal ? .3 : .45, m: metal ? .55 : .08 }),
+      roof: M(base ? trTint(base, .88) : '#a9b0b6', { r: .5, m: base ? .1 : .6 }),
+      mask: M('#0e1215', { r: .18, m: .5 }),
+      wind: M('#1b2730', { t: true, o: .5, r: .05, m: .5, side: T.DoubleSide }),
+      glass: M('#24313a', { t: true, o: .35, r: .05, m: .3, side: T.DoubleSide }),
+      rubber: M('#272b2f', { r: .8 }),
+      inner: M('#eceeec', { r: .8 }),
+      cabIn: M('#3a4047', { r: .8 }),
+      floor: trMat('floor:' + K.floor, () => M0('#ffffff', { map: trFloorTexture(K), r: .85 })),
+      floorBase: M('#272b2f', { r: .8 }),
+      seat: trMat('seat:' + seatC, () => M0(seatC, { map: trMat('seatTex', trSeatTexture), r: .6 })),
+      prio: trMat('seat:' + prioC, () => M0(prioC, { map: trMat('seatTex', trSeatTexture), r: .6 })),
+      steel: M('#c8cdd2', { r: .25, m: .9 }),
+      handle: M('#e2e5e8', { r: .7, side: T.DoubleSide }),
+      strap: M('#e2e5e8', { r: .7, side: T.DoubleSide }),
+      light: M('#ffffff', { e: '#fffbea', ei: 1.6 }),
+      vent: M('#eceeec', { r: .8 }),
+      lcd: trMat('lcd', () => new T.MeshBasicMaterial({ map: lcdTex })),
+      strip: trMat('strip', () => new T.MeshBasicMaterial({ map: stripTex })),
+      ad: trMat('ads', () => { const t = trAdTexture(); return M0('#ffffff', { map: t, em: t, e: '#ffffff', ei: .25, r: .5 }); }),
+      frame: M('#b9bfc4', { r: .35, m: .7 }),
+      yellow: M('#f2c200', { r: .6 }),
+      red: M('#ff3020', { e: '#ff2a14', ei: 1.8 }),
+      part: M('#d6e4ea', { t: true, o: .55, r: .2, side: T.DoubleSide }),
+      led: trMat('led:' + lineId, () => new T.MeshBasicMaterial({ map: trLedTexture(L) })),
+      head: M('#fff6d0', { e: '#fff6d0', ei: 2 }),
+      tail: M('#ff3020', { e: '#ff2a14', ei: 1.8 }),
+      doorLamp: M('#ff3020', { e: '#ff2a14', ei: 1.8 }),
+      screen: M('#ffffff', { e: '#fffbea', ei: 1.6 }),
+      dark: M('#272b2f', { r: .8 }),
+      under: M('#272b2f', { r: .8 }),
+      equip: M('#272b2f', { r: .8 }),
+      bogie: M('#272b2f', { r: .8 }),
+      wheel: M('#55595d', { r: .45, m: .7 }),
+      tire: M('#151618', { r: .9 }),
+      ac: M('#b9bfc4', { r: .35, m: .7 }),
+      acTop: M('#272b2f', { r: .8 }),
+      bellows: trMat('bellows', () => M0('#ffffff', { map: trBellowsTexture(), r: .9 })),
+      gangIn: M('#3a4047', { r: .8 }),
+      plate: M('#c8cdd2', { r: .25, m: .9 }),
+      cabDoor: M('#b9bfc4', { r: .35, m: .7 }),
+    };
+  }
+  // 頭燈（白）／尾燈（紅）：兩顆合成一個網格，依行進方向切換顯示
+  function trLamp(car, m, type, end, boxes) {
+    const tmp = new T.Group();
+    for (const b of boxes) { const o = box(b[0], b[1], b[2], m[type], b[3], b[4], b[5], tmp); if (b[6]) o.rotation.y = b[6]; }
+    mergeStatic(tmp);
+    const lamp = tmp.children[0];
+    lamp.userData = { lamp: type, end, dynamic: true };
+    lamp.visible = type === 'head';
+    car.add(lamp);
+  }
+
+  /* 一節車廂（車身、車窗、內裝） */
+  function trCar(car, ci, K, m) {
+    const S = trSharedGeo();
+    const x0 = -CAR_LEN / 2, x1 = CAR_LEN / 2;
+    const segs = []; { let prev = x0; for (const d of DOOR_OFF) { segs.push([prev, d - .7]); prev = d + .7; } segs.push([prev, x1]); }
+    // 地板（博愛座／輪椅區／車門口的地面標示）、底架
+    trQuad(m.floor, [[x0, 0, -HALF_W], [x1, 0, -HALF_W], [x1, 0, HALF_W], [x0, 0, HALF_W]], [0, 1, 0], p => [(p[0] - x0) / CAR_LEN, (p[2] + HALF_W) / (2 * HALF_W)], car);
+    box(CAR_LEN, .13, HALF_W * 2, m.floorBase, 0, -.07, 0, car);
+    box(CAR_LEN - .2, .22, 2.7, m.under, 0, -.32, 0, car);
+    for (const [x, l, z, h] of [[-4.2, 2.2, .45, .34], [-1.3, 1.4, -.5, .3], [1.4, 2.6, .35, .38], [4.5, 1.2, -.4, .3]]) box(l, h, 1.3, m.equip, x, -.43 - h / 2, z, car);   // 車底設備箱
+    // 轉向架
+    for (const bx of [-7.1, 7.1]) {
+      if (K.rubber) {   // 文湖線：膠輪＋水平導輪
+        for (const ax of [-1, 1]) for (const s of [-1, 1]) {
+          const w = new T.Mesh(S.tire, m.tire); w.rotation.x = Math.PI / 2; w.position.set(bx + ax * .9, -.58, s * .8); car.add(w);
+          const gw = new T.Mesh(S.guide, m.wheel); gw.position.set(bx + ax * .9, -.84, s * 1.12); car.add(gw);
+        }
+        box(2.5, .24, 1.9, m.bogie, bx, -.5, 0, car);
+        for (const s of [-1, 1]) box(2.2, .1, .3, m.bogie, bx, -.78, s * 1.02, car);
+      } else {
+        for (const ax of [-1, 1]) for (const s of [-1, 1]) {
+          const w = new T.Mesh(S.wheel, m.wheel); w.rotation.x = Math.PI / 2; w.position.set(bx + ax * 1.05, -.55, s * .72); car.add(w);
+          box(.3, .22, .16, m.bogie, bx + ax * 1.05, -.55, s * .95, car);   // 軸箱
+        }
+        for (const s of [-1, 1]) box(2.9, .26, .1, m.bogie, bx, -.52, s * .87, car);   // 側樑
+        box(.5, .2, 1.8, m.bogie, bx, -.42, 0, car);
+        box(.42, .05, .24, m.bogie, bx, -.86, 1.22, car);   // 第三軌集電靴
+      }
+    }
+    // 車頂：弧形頂板、冷氣機（第三軌供電，沒有集電弓）
+    car.add(new T.Mesh(trRoofGeo(x0, x1), m.roof));
+    for (const x of [-5, 5]) { box(K.rubber ? 2.2 : 2.8, .24, K.rubber ? 1.5 : 1.75, m.ac, x, 2.86, 0, car); box(K.rubber ? 1.6 : 2.2, .03, 1.2, m.acTop, x, 2.98, 0, car); }
+    // 天花板、燈條
+    trQuad(m.inner, [[x0, 2.3, -HALF_W], [x1, 2.3, -HALF_W], [x1, 2.3, HALF_W], [x0, 2.3, HALF_W]], [0, -1, 0], null, car);
+    for (const z of [-.55, .55]) box(CAR_LEN - .6, .04, .2, m.light, 0, 2.27, z, car);
+    box(CAR_LEN - 1.2, .02, .34, m.vent, 0, 2.29, 0, car);
+    for (const side of [-1, 1]) {
+      const zo = side * SKZ, zi = side * INZ, sUV = p => [skU(p[0], side), skV(p[1])];
+      const W = (mat, a, b, y0, y1, z, n, uv) => trQuad(mat, [[a, y0, z], [b, y0, z], [b, y1, z], [a, y1, z]], [0, 0, n], uv, car);
+      segs.forEach(([a, b], si) => {
+        const wa = a + (a === x0 ? .18 : .62), wb = b - (b === x1 ? .18 : .62), c = (a + b) / 2;
+        // 外板（彩繪貼在這裡）＋內牆
+        W(m.skin, a, b, SK.Y0, WIN0, zo, side, sUV); W(m.skin, a, b, WIN1, TOPY, zo, side, sUV);
+        W(m.skin, a, wa, WIN0, WIN1, zo, side, sUV); W(m.skin, wb, b, WIN0, WIN1, zo, side, sUV);
+        W(m.inner, a, b, 0, WIN0, zi, -side); W(m.inner, a, b, WIN1, 2.3, zi, -side);
+        W(m.inner, a, wa, WIN0, WIN1, zi, -side); W(m.inner, wb, b, WIN0, WIN1, zi, -side);
+        // 車窗：玻璃＋橡膠窗框
+        W(m.glass, wa, wb, WIN0, WIN1, side * HALF_W, side);
+        for (const [p, n] of [
+          [[[wa, WIN0, zi], [wb, WIN0, zi], [wb, WIN0, zo], [wa, WIN0, zo]], [0, 1, 0]],
+          [[[wa, WIN1, zi], [wb, WIN1, zi], [wb, WIN1, zo], [wa, WIN1, zo]], [0, -1, 0]],
+          [[[wa, WIN0, zi], [wa, WIN1, zi], [wa, WIN1, zo], [wa, WIN0, zo]], [1, 0, 0]],
+          [[[wb, WIN0, zi], [wb, WIN1, zi], [wb, WIN1, zo], [wb, WIN0, zo]], [-1, 0, 0]],
+        ]) trQuad(m.rubber, p, n, null, car);
+        // 座椅：車廂兩端是深藍色博愛座，其中一角是輪椅區
+        const end = si === 0 || si === segs.length - 1, wheel = end && side < 0 && si === segs.length - 1;
+        const sl = (b - a) - .6;
+        if (wheel) {
+          const rail = new T.Mesh(S.rail, m.steel); rail.rotation.z = Math.PI / 2; rail.position.set(c, .92, side * (INZ - .08)); car.add(rail);
+          for (const e of [-.7, .7]) box(.03, .03, .08, m.steel, c + e, .92, side * (INZ - .04), car);
+          box(b - a - .8, .3, .06, m.prio, c, .7, side * (INZ - .03), car);   // 靠墊
+        } else if (sl > 1) {
+          const sm = end ? m.prio : m.seat, n = Math.max(1, Math.round(sl / .46));
+          const pan = new T.Mesh(trBoxU(sl, .1, .46, n), sm); pan.position.set(c, .45, side * (HALF_W - .27)); car.add(pan);
+          const back = new T.Mesh(trBoxU(sl, .5, .07, n), sm); back.position.set(c, .78, side * (INZ - .06)); back.rotation.x = side * .08; car.add(back);
+          for (const ex of [a + .3, b - .3]) { box(.03, .62, .5, m.part, ex, .86, side * (HALF_W - .3), car); box(.04, .04, .52, m.steel, ex, 1.18, side * (HALF_W - .3), car); }
+        }
+        // 窗上：路線圖（一側）、廣告框（另一側）、博愛座／輪椅區標示（兩端）
+        if (side < 0 && b - a > 3) { const p = plane(Math.min(3, b - a - 1), .38, m.strip, car); p.position.set(c, 2.05, zi + .012); }
+        else if (b - a > 3) for (const k of [-1, 1]) trAd(car, m, (ci * 3 + si * 2 + (k > 0 ? 1 : 0)) % 6, c + k * .66, 1.18, side);
+        else if (end) trAd(car, m, wheel ? 7 : 6, c, 1.2, side);
+      });
+      for (const d of DOOR_OFF) {
+        W(m.skin, d - .7, d + .7, SK.Y0, 0, zo, side, sUV);
+        W(m.skin, d - .7, d + .7, 2.05, TOPY, zo, side, sUV);
+        W(m.inner, d - .7, d + .7, 2.05, 2.3, zi, -side);
+        for (const sx of [-1, 1]) {
+          box(.12, 2.05, SKZ - INZ, m.rubber, d + sx * .7, 1.025, side * HALF_W, car);              // 門框
+          box(.03, 1.98, .012, m.yellow, d + sx * .655, 1.0, side * (INZ - .006), car);            // 門邊黃色警示條
+          const pole = new T.Mesh(S.pole, m.steel); pole.position.set(d + sx * .92, 1.15, side * 1.2); car.add(pole);
+        }
+        box(1.52, .05, SKZ - INZ, m.rubber, d, 2.075, side * HALF_W, car);
+        box(1.4, .012, .16, m.plate, d, .006, side * (HALF_W - .08), car);                         // 門口踏板
+        box(.2, .055, .03, m.doorLamp, d, 2.19, side * (SKZ + .012), car);                         // 車門上方的指示燈
+        box(.13, .2, .03, m.yellow, d - 1.1, 1.45, side * (INZ - .015), car);                     // 緊急對講機
+        box(.05, .05, .02, m.red, d - 1.1, 1.42, side * (INZ - .035), car);
+        const lcd = plane(.9, .22, m.lcd, car); lcd.position.set(d, 2.17, side * (INZ - .012)); lcd.rotation.y = side > 0 ? Math.PI : 0;
+      }
+    }
+    // 扶手、三角形拉環
+    for (const z of [-.8, .8]) {
+      const bar = new T.Mesh(S.bar, m.steel); bar.rotation.z = Math.PI / 2; bar.position.set(0, 1.95, z); car.add(bar);
+      for (let x = x0 + .6; x < x1 - .4; x += .5) {
+        if (DOOR_OFF.some(d => Math.abs(x - d) < .75)) continue;
+        trQuad(m.strap, [[x, 1.73, z - .013], [x, 1.73, z + .013], [x, 1.94, z + .013], [x, 1.94, z - .013]], [1, 0, 0], null, car);
+        const h = new T.Mesh(S.handle, m.handle); h.position.set(x, 1.66, z); h.rotation.set(0, Math.PI / 2, Math.PI / 2); car.add(h);
+      }
+    }
+  }
+  function trAd(car, m, slot, cx, w, side) {
+    const h = .3, y = 2.08, zi = side * (INZ - .012), u0 = (slot % 2) / 2, v1 = 1 - (slot >> 1) / 4, v0 = v1 - .25;
+    const xl = side > 0 ? cx + w / 2 : cx - w / 2, xr = side > 0 ? cx - w / 2 : cx + w / 2;
+    trQuad(m.ad, [[xl, y - h / 2, zi], [xr, y - h / 2, zi], [xr, y + h / 2, zi], [xl, y + h / 2, zi]], [0, 0, -side], [[u0, v0], [u0 + .5, v0], [u0 + .5, v1], [u0, v1]], car);
+    box(w + .05, h + .05, .012, m.frame, cx, y, side * (INZ - .005), car);
+  }
+  // 車廂之間：端牆（貫通道開口）、車頂端蓋
+  function trCarEnd(car, ex, m) {
+    const x = ex * (CAR_LEN / 2 - .04);
+    for (const s of [-1, 1]) box(.08, 2.3, .7, m.inner, x, 1.15, s * 1.1, car);
+    box(.08, .25, 1.5, m.inner, x, 2.175, 0, car);
+    trRoofCap(car, ex * CAR_LEN / 2, ex, m.roof);
+  }
+  // 平頭駕駛室（高運量、機場捷運）
+  function trCabFlat(car, sx, K, m) {
+    const E = sx * CAR_LEN / 2, XF = E + sx * K.CL, XT = XF - sx * K.rake;
+    const mx = y => XF - sx * K.rake * Math.max(0, (y - .9) / (TOPY - .9));
+    for (const s of [-1, 1]) {
+      const sUV = p => [skU(p[0], s), skV(p[1])];
+      trQuad(m.skin, [[E, SK.Y0, s * SKZ], [XF, SK.Y0, s * SKZ], [XF, .9, s * SKZ], [E, .9, s * SKZ]], [0, 0, s], sUV, car);
+      trQuad(m.skin, [[E, .9, s * SKZ], [XF, .9, s * SKZ], [XT, TOPY, s * SKZ], [E, TOPY, s * SKZ]], [0, 0, s], sUV, car);
+      trQuad(m.cabIn, [[E, 0, s * INZ], [XF, 0, s * INZ], [XT, 2.3, s * INZ], [E, 2.3, s * INZ]], [0, 0, -s], null, car);
+    }
+    const fUV = p => [skF(p[2], sx), skV(p[1])];
+    trQuad(m.skin, [[XF, SK.Y0, -SKZ], [XF, SK.Y0, SKZ], [XF, .9, SKZ], [XF, .9, -SKZ]], [sx, 0, 0], fUV, car);
+    // 黑色面罩（斜）、擋風玻璃、目的地顯示器
+    const gz = 1.22, gy0 = 1.02, gy1 = 1.84, P = (y, z, o = 0) => [mx(y) + sx * o, y, z], F = (mat, p, uv) => trQuad(mat, p, [sx, 0, 0], uv, car);
+    F(m.mask, [P(.9, -SKZ), P(.9, SKZ), P(gy0, SKZ), P(gy0, -SKZ)]);
+    F(m.mask, [P(gy1, -SKZ), P(gy1, SKZ), P(TOPY, SKZ), P(TOPY, -SKZ)]);
+    for (const s of [-1, 1]) F(m.mask, [P(gy0, s * gz), P(gy0, s * SKZ), P(gy1, s * SKZ), P(gy1, s * gz)]);
+    F(m.wind, [P(gy0, -gz, -.01), P(gy0, gz, -.01), P(gy1, gz, -.01), P(gy1, -gz, -.01)]);
+    F(m.led, [P(1.92, -.62, .012), P(1.92, .62, .012), P(2.18, .62, .012), P(2.18, -.62, .012)], p => [(-sx * p[2] + .62) / 1.24, (p[1] - 1.92) / .26]);
+    // 車頂延伸＋端蓋
+    car.add(new T.Mesh(trRoofGeo(E, XT), m.roof)); trRoofCap(car, XT, sx, m.roof);
+    trQuad(m.cabIn, [[E, 2.28, -SKZ], [XT, 2.28, -SKZ], [XT, 2.28, SKZ], [E, 2.28, SKZ]], [0, -1, 0], null, car);
+    // 駕駛室內：地板、操作台、螢幕、駕駛座
+    box(K.CL, .06, 2.9, m.cabIn, (E + XF) / 2, -.03, 0, car);
+    box(.42, .46, 2.6, m.dark, XF - sx * .3, .82, 0, car);
+    for (const z of [-.55, .1]) box(.03, .14, .3, m.screen, XF - sx * .5, 1.12, z, car);
+    box(.42, .1, .42, m.dark, XF - sx * .85, .55, -.55, car); box(.08, .6, .42, m.dark, E + sx * .14, .88, -.55, car);
+    // 客室與駕駛室之間的隔間牆（中間是有窗的門）
+    const px = E - sx * .04;
+    for (const s of [-1, 1]) box(.08, 2.3, 1.07, m.inner, px, 1.15, s * .935, car);
+    box(.08, 1.06, .8, m.cabDoor, px, .53, 0, car); box(.08, .46, .8, m.cabDoor, px, 2.07, 0, car);
+    trQuad(m.glass, [[px, 1.06, -.4], [px, 1.06, .4], [px, 1.84, .4], [px, 1.84, -.4]], [-sx, 0, 0], null, car);
+    // 排障器、防爬器、連結器
+    box(.16, .38, 2.7, m.under, XF - sx * .1, SK.Y0 - .17, 0, car);
+    box(.08, .1, 2.3, m.under, XF + sx * .04, -.36, 0, car);
+    box(.55, .12, .16, m.dark, XF + sx * .22, -.6, 0, car); box(.18, .24, .34, m.dark, XF + sx * .5, -.6, 0, car);
+    // 頭燈、尾燈
+    const lx = XF + sx * .016;
+    trLamp(car, m, 'head', sx, [-1, 1].map(s => [.03, .13, .3, lx, .55, s * .95]));
+    trLamp(car, m, 'tail', sx, [-1, 1].map(s => [.03, .13, .16, lx, .55, s * 1.23]));
+  }
+  // 流線圓頭（環狀線、文湖線；無人駕駛，客室直接通到車頭大窗）
+  function trCabRound(car, sx, K, m) {
+    const E = sx * CAR_LEN / 2, N = K.nose, H = Math.PI / 2;
+    const band = (levels, th0, th1, mat, inside, uvf, segs = 14) => car.add(new T.Mesh(trGrid(levels.length - 1, segs, (j, i) => {
+      const [y, a, b = SKZ] = levels[j], th = th0 + (th1 - th0) * i / segs; return [E + sx * a * Math.cos(th), y, b * Math.sin(th)];
+    }, (sx > 0) !== inside, uvf), mat));
+    const aAt = (lv, y) => { for (let j = 0; j < lv.length - 1; j++) if (y <= lv[j + 1][0]) { const t = (y - lv[j][0]) / (lv[j + 1][0] - lv[j][0]); return lv[j][1] + (lv[j + 1][1] - lv[j][1]) * t; } return lv[lv.length - 1][1]; };
+    const fUV = p => [skF(p[2], sx), skV(p[1])];
+    band(N.lower, -H, H, m.skin, false, fUV, 16); band(N.lower, -H, H, m.inner, true, null, 10);
+    band(N.glass, -N.th, N.th, m.wind, false, null, 14);
+    if (N.th < H - .01) for (const s of [-1, 1]) { const r = s > 0 ? [N.th, H] : [-H, -N.th]; band(N.glass, r[0], r[1], m.mask, false, null, 3); band(N.glass, r[0], r[1], m.inner, true, null, 3); }
+    band(N.upper, -H, H, m.mask, false, null, 14); band(N.upper, -H, H, m.inner, true, null, 10);
+    const aT = N.upper[N.upper.length - 1][1];
+    const dome = [0, .4, .8, 1.2, H].map(f => [2.3 + .49 * Math.sin(f), aT * Math.cos(f), 1.54 * Math.cos(f)]);
+    band(dome, -H, H, m.roof, false, null, 14); band(dome, -H, H, m.inner, true, null, 10);
+    // 目的地顯示器（文湖線在玻璃裡面，環狀線貼在面罩上）
+    const [ly0, ly1, lo] = N.led, lvL = [[ly0, aAt(N.glass.concat(N.upper.slice(1)), ly0) + lo], [ly1, aAt(N.glass.concat(N.upper.slice(1)), ly1) + lo]], tl = Math.asin(.55 / SKZ);
+    band(lvL, -tl, tl, m.led, false, p => [(-sx * p[2] + .55) / 1.1, (p[1] - ly0) / (ly1 - ly0)], 6);
+    // 車頭地板、儀表板（車頭窗下）
+    const gy = N.glass[0][0], af = aAt(N.lower, 0) - .02;
+    const fg = new T.Group(); fg.position.set(E, .001, 0); fg.rotation.y = sx > 0 ? 0 : Math.PI; car.add(fg);
+    const disc = new T.Mesh(new T.CircleGeometry(1, 14, -H, Math.PI), m.floorBase); disc.rotation.x = -H; disc.scale.set(af, SKZ, 1); fg.add(disc);
+    box(.4, .08, 2.2, m.dark, E + sx * (aAt(N.lower, gy) - .32), gy - .04, 0, car);
+    // 排障器、連結器
+    box(.5, .3, 2.2, m.under, E + sx * (N.lower[0][1] - .3), SK.Y0 - .15, 0, car);
+    box(.3, .2, .3, m.dark, E + sx * (N.lower[0][1] + .05), -.6, 0, car);
+    // 頭燈、尾燈（沿著曲面轉向）
+    const a = aAt(N.lower, .52), at = z => { const th = Math.asin(z / SKZ), nx = Math.cos(th) / a, nz = Math.sin(th) / SKZ, l = Math.hypot(nx, nz); return [E + sx * (a * Math.cos(th) + .012 * nx / l), z, Math.atan2(-nz, sx * nx)]; };
+    for (const [type, zc, w] of [['head', .95, .3], ['tail', 1.23, .16]]) trLamp(car, m, type, sx, [-1, 1].map(s => { const [x, z, r] = at(s * zc); return [.04, .13, w, x, .55, z, r]; }));
+  }
+
   function trainTemplate(lineId, livId) {
     const lv = (typeof LIVERIES !== 'undefined' && LIVERIES[livId]) || {};
     const key = lineId + '|' + (livId || 'std');
     if (trainCache[key]) return trainCache[key];
-    textures(); sharedScreens();
+    sharedScreens();
     const g = new T.Group();
-    const L = LINES[lineId];
-    const body = M(lv.body || '#e6e9ec', { r: .35, m: .35 });
-    const wrapM = lv.wrap ? M('#ffffff', { map: canvasTex(512, 96, x => Liveries.paint(x, 512, 96, lv.wrap)), r: .5 }) : null;
-    const inner = M('#eceeec', { r: .8 });
-    const glassM = M('#24313a', { t: true, o: .35, r: .05, m: .3 });
-    const stripe = M(lv.stripe || L.color, { r: .5 });
-    const doorM = M('#ffffff', { map: TEX.door, r: .5, m: .2 });
-    const seatM = M(lv.seat || (lineId === 'BR' ? '#5a6b7b' : '#2f5d9e'), { r: .6 });
-    const steel = M('#c8cdd2', { r: .25, m: .9 });
-    const lightM = M('#ffffff', { e: '#fffbea', ei: 1.6 });
-    const floorM = M('#8f9498', { r: .8 });
-    const lcdM = new T.MeshBasicMaterial({ map: lcdTex });
-    const stripM = new T.MeshBasicMaterial({ map: stripTex });
+    const L = LINES[lineId], K = TR_KIND[TR_KIND_OF[lineId] || 'hc'];
+    const m = trMaterials(lineId, K, lv, L);
+    const lightM = m.light;
     for (let ci = 0; ci < CARS; ci++) {
       const cx = CAR_X[ci];
       const car = new T.Group(); car.position.x = cx; g.add(car);
-      const x0 = -CAR_LEN / 2, x1 = CAR_LEN / 2;
-      box(CAR_LEN, .14, HALF_W * 2, floorM, 0, -.07, 0, car);
-      box(CAR_LEN, .5, HALF_W * 2, M('#4c5156'), 0, -.45, 0, car);
-      const roof = new T.Mesh(new T.CylinderGeometry(HALF_W + .04, HALF_W + .04, CAR_LEN, 24, 1, true, -Math.PI / 2, Math.PI), body);
-      roof.rotation.z = Math.PI / 2; roof.scale.set(.32, 1, 1); roof.position.y = 2.3; car.add(roof);
-      const ceil = plane(CAR_LEN, HALF_W * 2, inner, car); ceil.rotation.x = Math.PI / 2; ceil.position.y = 2.3;
-      for (const z of [-.55, .55]) box(CAR_LEN - .6, .04, .2, lightM, 0, 2.27, z, car);
-      for (const side of [-1, 1]) {
-        const z = side * HALF_W;
-        const segs = []; let prev = x0;
-        for (const d of DOOR_OFF) { segs.push([prev, d - .7]); prev = d + .7; }
-        segs.push([prev, x1]);
-        for (const [a, b] of segs) {
-          const w = b - a, c = (a + b) / 2;
-          box(w, .95, .08, body, c, .475, z, car);
-          box(w, .4, .08, body, c, 2.1, z, car);
-          box(w, .12, .085, stripe, c, .82, z, car);
-          if (wrapM) { const wp = plane(w - .05, .62, wrapM, car); wp.position.set(c, .44, z + side * .046); wp.rotation.y = side > 0 ? 0 : Math.PI; }   // 車身彩繪
-          box(w - .3, .95, .03, glassM, c, 1.42, z, car).renderOrder = 1;
-          box(.15, .95, .08, body, a + .075, 1.42, z, car); box(.15, .95, .08, body, b - .075, 1.42, z, car);
-          const sl = w - .6;
-          if (sl > 1) {
-            box(sl, .12, .48, seatM, c, .45, z - side * .3, car);
-            box(sl, .5, .08, seatM, c, .75, z - side * .1, car);
-            box(.08, .5, .5, steel, a + .3, .6, z - side * .3, car); box(.08, .5, .5, steel, b - .3, .6, z - side * .3, car);
-          }
-          if (side < 0 && w > 3) { const p = plane(Math.min(3, w - 1), .38, stripM, car); p.position.set(c, 2.05, z + .05); }
-        }
-        for (const d of DOOR_OFF) {
-          box(1.4, .2, .09, body, d, 2.2, z, car);
-          const lcd = plane(.9, .22, lcdM, car); lcd.position.set(d, 2.08, z - side * .06); lcd.rotation.y = side > 0 ? Math.PI : 0;
-          for (const sx of [-1, 1]) {
-            const leaf = new T.Mesh(new T.BoxGeometry(.65, 2.05, .05), doorM);
-            leaf.position.set(cx + d + sx * .325, 1.03, z + side * .01);
-            leaf.userData = { leaf: true, base: cx + d + sx * .325, sx, side };
-            g.add(leaf);
-            box(.05, 2.25, .05, steel, d + sx * .78, 1.12, z - side * .25, car);
-          }
-        }
+      trCar(car, ci, K, m);
+      for (const ex of [-1, 1]) {
+        if ((ci === 0 && ex < 0) || (ci === CARS - 1 && ex > 0)) (K.cab === 'round' ? trCabRound : trCabFlat)(car, ex, K, m);
+        else trCarEnd(car, ex, m);
       }
-      for (const z of [-.8, .8]) {
-        const bar = new T.Mesh(new T.CylinderGeometry(.018, .018, CAR_LEN - .5, 8), steel); bar.rotation.z = Math.PI / 2; bar.position.set(0, 1.95, z); car.add(bar);
-        for (let x = x0 + .6; x < x1 - .4; x += .45) {
-          if (DOOR_OFF.some(d => Math.abs(x - d) < .7)) continue;
-          box(.03, .2, .015, M('#d9dcdf'), x, 1.84, z, car);
-          const ring = new T.Mesh(new T.TorusGeometry(.06, .012, 6, 12), M('#eceeef')); ring.position.set(x, 1.68, z); car.add(ring);
-        }
-      }
-      if (ci === 0 || ci === CARS - 1) {
-        const sx = ci === 0 ? -1 : 1;
-        box(.12, 2.4, HALF_W * 2, body, sx * CAR_LEN / 2, 1.1, 0, car);
-        box(.9, 1.9, HALF_W * 2 - .1, body, sx * (CAR_LEN / 2 + .45), .95, 0, car);
-        box(.05, .8, 2.4, M('#14191d', { r: .1 }), sx * (CAR_LEN / 2 + .92), 1.45, 0, car);
-        for (const z of [-.9, .9]) box(.05, .12, .3, M('#fff6d0', { e: '#fff6d0', ei: 2 }), sx * (CAR_LEN / 2 + .92), .55, z, car);
-        box(.06, .14, HALF_W * 2 - .2, stripe, sx * (CAR_LEN / 2 + .91), .82, 0, car);
+      // 車門（World 依 userData 開關）
+      for (const side of [-1, 1]) for (const d of DOOR_OFF) for (const sx of [-1, 1]) {
+        const leaf = new T.Mesh(trLeafGeo(d, sx, side), m.skin);
+        leaf.position.set(cx + d + sx * .325, 1.03, side * HALF_W + side * .01);
+        leaf.userData = { leaf: true, base: cx + d + sx * .325, sx, side };
+        g.add(leaf);
       }
     }
+    // 車廂連接處：橡膠風擋、通道、渡板
     for (const gx of [CAR_X[0] + CAR_LEN / 2 + CAR_GAP / 2, CAR_X[1] + CAR_LEN / 2 + CAR_GAP / 2]) {
-      for (const z of [-HALF_W + .1, HALF_W - .1]) box(CAR_GAP + .2, 2.3, .1, M('#2b2f33'), gx, 1.1, z, g);
-      box(CAR_GAP + .2, .1, HALF_W * 2, M('#2b2f33'), gx, 2.25, 0, g);
-      box(CAR_GAP + .2, .05, HALF_W * 2 - .2, floorM, gx, -.03, 0, g);
+      for (const s of [-1, 1]) {
+        box(CAR_GAP + .06, 2.62, .05, m.bellows, gx, 1.0, s * 1.43, g);
+        box(CAR_GAP + .1, 2.05, .04, m.gangIn, gx, 1.025, s * .8, g);
+      }
+      box(CAR_GAP + .06, .05, 2.9, m.bellows, gx, 2.33, 0, g);
+      box(CAR_GAP + .1, .04, 1.64, m.gangIn, gx, 2.07, 0, g);
+      box(CAR_GAP + .2, .03, 1.62, m.plate, gx, -.012, 0, g);
+      box(CAR_GAP + .2, .2, 1.2, m.under, gx, -.35, 0, g);
     }
     mergeStatic(g);
+    for (const o of g.children) if (o.isMesh && o.material === m.skin && !o.userData.leaf) o.userData.probe = true;
     g.userData.lightM = lightM;
     trainCache[key] = g;
     return g;
   }
+  // 依列車實際移動的方向切換頭燈／尾燈：連續 2 格往同一方向移動才換（到站後世界重新對齊的跳動不算）
+  function trainLamps(g) {
+    const u = g.userData, e = g.matrixWorld.elements, x = e[12], z = e[14];
+    if (u.lx === undefined) { u.lx = x; u.lz = z; return; }
+    const along = (x - u.lx) * e[0] + (z - u.lz) * e[2]; u.lx = x; u.lz = z;
+    if (Math.abs(along) < 1e-4) return;
+    if (Math.abs(along) > 150) { u.mv = 0; return; }
+    const d = Math.sign(along);
+    u.mv = u.mvd === d ? (u.mv || 0) + 1 : 1; u.mvd = d;
+    if (u.mv >= 2 && u.front !== d) {
+      u.front = d;
+      for (const l of u.lamps) l.visible = l.userData.lamp === 'head' ? l.userData.end === d : l.userData.end !== d;
+    }
+  }
   // 每次進站複製一列（共用幾何與材質）
   function makeTrain(lineId, livId) {
     const tpl = trainTemplate(lineId, livId), g = tpl.clone(true);
-    const leaves = [];
-    g.traverse(o => { if (o.userData && o.userData.leaf) leaves.push(o); });
-    g.userData = { leaves, line: lineId, lightM: tpl.userData.lightM, livery: livId };
+    const leaves = [], lamps = []; let probe = null;
+    g.traverse(o => { const u = o.userData; if (!u) return; if (u.leaf) leaves.push(o); if (u.lamp) lamps.push(o); if (u.probe) probe = o; });
+    g.userData = { leaves, line: lineId, lightM: tpl.userData.lightM, livery: livId, lamps };
+    if (probe) probe.onBeforeRender = () => trainLamps(g);
     return g;
   }
 

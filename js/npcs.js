@@ -395,6 +395,7 @@ const NPCManager = (() => {
       const look = { skin: SKINS[(rnd() * SKINS.length) | 0], hairColor: HAIRS[(rnd() * HAIRS.length) | 0], height: .94 + rnd() * .12, ...C.gen(rnd) };
       look.hair = look.girl ? ['long', 'bob', 'bun'][(rnd() * 3) | 0] : ['short', 'mush', 'short'][(rnd() * 3) | 0];
       if (look.old) look.hairColor = '#cfcfcf';
+      if (['staff', 'police', 'cleaner', 'delivery', 'office', 'student', 'elder', 'kid'].includes(type)) look.outfit = type;   // 直接告訴人物模型身分（制服）
       if (typeof Festival !== 'undefined') Festival.dress(look, rnd);   // 萬聖節：路人變裝
       if (look.foreign) { look.skin = ['#f2d6c8', '#f5dccf', '#8a5a40'][(rnd() * 3) | 0]; look.hairColor = ['#c8a060', '#8a5a30', '#1a1a1a'][(rnd() * 3) | 0]; }
       if (look.girl && type !== 'student' && type !== 'kid' && rnd() < .4) look.skirt = true;
@@ -1084,6 +1085,8 @@ const Challenges = (() => {
     World.scene.add(rig.root);
     follower = { rig, x: p.x - 1, y: p.y, z: p.z, key: c.giver.name + c.kind, name: c.giver.name };
   }
+  // 帶著的人有沒有跟在身邊（3 公尺內、同一層）
+  function followerNear() { const p = World.player; return !!follower && !follower.lost && Math.hypot(follower.x - p.x, follower.z - p.z) < 3.2 && Math.abs(follower.y - p.y) < 1.2; }
   function dropFollower() { if (follower) { World.scene.remove(follower.rig.root); follower = null; } }
 
   function tick(dt, now) {
@@ -1092,12 +1095,17 @@ const Challenges = (() => {
       if (e.rig) e.rig.update(dt, 0, now / 1000);
     }
     if (follower) {
-      const p = World.player, fx = Math.sin(p.face), fz = Math.cos(p.face);
+      // 跟在主角斜後方（World.player 沒有朝向，用 World.facing）
+      const p = World.player, fa = World.facing || 0, fx = Math.sin(fa), fz = Math.cos(fa);
       const tx = p.x - fx * 1.1 + fz * .4, tz = p.z - fz * 1.1 - fx * .4;
       const dx = tx - follower.x, dz = tz - follower.z, d = Math.hypot(dx, dz);
       let sp = 0;
-      if (d > 6 || Math.abs(follower.y - p.y) > 2.5) { follower.x = tx; follower.z = tz; follower.y = p.y; }
-      else if (d > .15) { sp = Math.min(d * 3, 5.5); const k = Math.min(1, sp * dt / d); follower.x += dx * k; follower.z += dz * k; follower.rig.root.rotation.y = Math.atan2(dx, dz); }
+      // 跟著走（不會瞬間移動）：離太遠就跟丟，停在原地等你回來找他
+      const far = Math.hypot(p.x - follower.x, p.z - follower.z);
+      if (follower.lost) { if (far < 3 && Math.abs(follower.y - p.y) < 1.5) { follower.lost = false; toast(`<b>${esc(follower.name)}</b><span>「啊，你回來了！我跟緊一點。」</span>`); } }
+      else if (far > 12 && !World.riding) { follower.lost = true; toast(`<b>${esc(follower.name)}跟丟了</b><span>走太快了！回頭去找他，要他跟在旁邊才算帶到。</span>`, 'warn'); }
+      else if (Math.abs(follower.y - p.y) > 2.5 && (World.riding || World.zone().kind !== 'ramp')) { follower.x = tx; follower.z = tz; follower.y = p.y; }   // 搭電梯、上車：一起移動
+      else if (d > .15) { sp = Math.min(d * 2.2, World.running ? 4.6 : 3.2); const k = Math.min(1, sp * dt / d); follower.x += dx * k; follower.z += dz * k; follower.rig.root.rotation.y = Math.atan2(dx, dz); }
       follower.y += (p.y - follower.y) * Math.min(1, dt * 8);
       follower.rig.root.position.set(follower.x, follower.y, follower.z);
       follower.rig.update(dt, sp, now / 1000);
@@ -1123,9 +1131,9 @@ const Challenges = (() => {
       const c = Puzzles.challenge(f.line, f.station), z = World.zone();
       if (c.kind === 'escort' && World.layout.stationId === f.station) {
         const sp = World.layout.spots.find(x => x.kind === c.spot && (c.spot !== 'elevator' || x.level === 'hall'));
-        if (sp && Math.abs(sp.y - p.y) < 1 && Math.hypot(sp.x - p.x, sp.z - p.z) < 2.6) return { type: 'escortHere', f, c };
+        if (sp && Math.abs(sp.y - p.y) < 1 && Math.hypot(sp.x - p.x, sp.z - p.z) < 2.6) return followerNear() ? { type: 'escortHere', f, c } : { type: 'waitFollower', f, c };
       }
-      if (c.kind === 'way' && z.kind === 'platform' && z.P.line === f.line && World.layout.stationId === f.station && Math.abs(p.z - z.P.z) > 1.2) return { type: 'wayHere', f, c, P: z.P };
+      if (c.kind === 'way' && z.kind === 'platform' && z.P.line === f.line && World.layout.stationId === f.station && Math.abs(p.z - z.P.z) > 1.2) return followerNear() ? { type: 'wayHere', f, c, P: z.P } : { type: 'waitFollower', f, c };
     }
     return best;
   }
@@ -1144,6 +1152,7 @@ const Challenges = (() => {
       case 'wayHere': return '「在這一邊等車」';
       case 'escortHere': return `「就是這裡」`;
       case 'escapeHere': return '敲站務室的門求救';
+      case 'waitFollower': return `等等${e.c.giver.name}`;
     }
     return '查看';
   }
@@ -1168,7 +1177,7 @@ const Challenges = (() => {
     if (e.type === 'note' && c.kind === 'passage') return say({ line: e.line, station: e.station, role: '秀蔅留下的紙條' }, c.ask);
     if (e.type === 'hidden') {
       return say({ name: '……', role: title(e.line, e.station) }, '你把手貼上牆面。磁磚像霧一樣慢慢散開，後面是一條很窄的通道，盡頭的牆上用粉筆寫著：「你找到了。下一站見。——S」', [
-        { label: '走進去看看', primary: true, run: () => { Dialog.close(); if (typeof Achievements !== 'undefined') Achievements.onPassage(); solve(e.line, e.station, { xp: 40, money: 50 }, '找到神秘通道！'); } },
+        { label: '走進去看看', primary: true, run: () => { Dialog.close(); if (typeof Achievements !== 'undefined') Achievements.onPassage(); solve(e.line, e.station, { xp: 55, money: 100 }, '找到神秘通道！'); } },
       ]);
     }
     if (e.type === 'coin') {
@@ -1187,16 +1196,17 @@ const Challenges = (() => {
     if (e.type === 'friend') {
       const st = chState(e.line, e.station);
       return say({ name: c.friend.name, role: '' }, `咦？${esc(c.giver.name)}在月台等我？我還以為約在大廳！謝謝你特地來告訴我，我現在就過去。`, [
-        { label: '不客氣', primary: true, run: () => { Dialog.close(); if (st) { st.told = true; setCh(e.line, e.station, st); } solve(e.line, e.station, { xp: 35, money: 40 }, '幫忙找到人了！'); } },
+        { label: '不客氣', primary: true, run: () => { Dialog.close(); if (st) { st.told = true; setCh(e.line, e.station, st); } solve(e.line, e.station, { xp: 40, money: 70 }, '幫忙找到人了！'); } },
       ]);
     }
     if (e.type === 'escortHere') return arrived(e.f, e.c);
+    if (e.type === 'waitFollower') return say({ name: '……', role: '' }, follower && follower.lost ? `${esc(e.c.giver.name)}不在你身邊。剛剛走太快，他跟丟了——回頭去找他，帶他一起過來。` : `${esc(e.c.giver.name)}還在後面，等他走過來再說。`);
     if (e.type === 'escapeHere') return resolveEscape(e.line, true);
     if (e.type === 'wayHere') {
       const side = Math.sign(World.player.z - e.P.z);
       const good = (e.P.sides[side] || []).some(d => d.stops.includes(c.dest));
       if (good) return say({ name: c.giver.name }, `「往${esc(MRT.label((e.P.sides[side][0] || {}).terminal || c.dest, e.f.line).zh)}……對，有經過${esc(c.dest)}！謝謝你，我在這裡等車就好。」`, [
-        { label: '路上小心', primary: true, run: () => { Dialog.close(); solve(e.f.line, e.f.station, { xp: 35, money: 30 }, '幫迷路的人找到路了！'); } },
+        { label: '路上小心', primary: true, run: () => { Dialog.close(); solve(e.f.line, e.f.station, { xp: 35, money: 50 }, '幫迷路的人找到路了！'); } },
       ]);
       const wrong = (e.P.sides[side] || [])[0];
       return say({ name: c.giver.name }, `他看了看月台上的 LED 看板：「這邊是往${esc(wrong ? MRT.label(wrong.terminal, e.f.line).zh : '……')}的……好像不會到${esc(c.dest)}耶？」`);
@@ -1224,10 +1234,10 @@ const Challenges = (() => {
     if (c.kind === 'coins') {
       const n = st.coins.filter(Boolean).length;
       if (n < 3) return Dialog.show(who, `找到 ${n} 枚了……還差 ${3 - n} 枚。有的可能滾到別的樓層去了。`, [{ label: '再找找', run: () => Dialog.close() }]);
-      return Dialog.show(who, '三枚都找到了！真的太感謝你了，這是一點心意。', [{ label: '收下', primary: true, run: () => { Dialog.close(); solve(e.line, e.station, { xp: 35, money: 80 }, '幫忙找回零錢了！'); } }]);
+      return Dialog.show(who, '三枚都找到了！真的太感謝你了，這是一點心意。', [{ label: '收下', primary: true, run: () => { Dialog.close(); solve(e.line, e.station, { xp: 50, money: 90 }, '幫忙找回零錢了！'); } }]);
     }
     if (c.kind === 'lost') {
-      if (s.inv[c.item] > 0) return Dialog.show(who, `啊！這就是我的${ITEMS[c.item].name}！你在哪裡找到的？太謝謝你了。`, [{ label: '還給他', primary: true, run: () => { s.inv[c.item]--; Dialog.close(); solve(e.line, e.station, { xp: 40, money: 100 }, '幫忙找回失物了！'); } }]);
+      if (s.inv[c.item] > 0) return Dialog.show(who, `啊！這就是我的${ITEMS[c.item].name}！你在哪裡找到的？太謝謝你了。`, [{ label: '還給他', primary: true, run: () => { s.inv[c.item]--; Dialog.close(); solve(e.line, e.station, { xp: 45, money: 80 }, '幫忙找回失物了！'); } }]);
       return Dialog.show(who, c.ask, [{ label: '我再去找找', run: () => Dialog.close() }]);
     }
     if (c.kind === 'buy') {
@@ -1245,7 +1255,7 @@ const Challenges = (() => {
   function arrived(f, c) {
     if (S().flags.follow !== f) return;
     Dialog.show({ name: c.giver.name, role: '' }, `找到了！就是這裡。謝謝你帶我過來，第一次來這一站就遇到你，真好。`, [
-      { label: '不客氣', primary: true, run: () => { Dialog.close(); solve(f.line, f.station, { xp: 45, money: 60 }, '帶路完成！'); } },
+      { label: '不客氣', primary: true, run: () => { Dialog.close(); solve(f.line, f.station, { xp: 40, money: 60 }, '帶路完成！'); } },
     ]);
   }
   // 問答
@@ -1262,7 +1272,7 @@ const Challenges = (() => {
           ]);
         }
         Dialog.close();
-        solve(e.line, e.station, { xp: 20 }, '答對了！');
+        solve(e.line, e.station, { xp: 25, money: 40 }, '答對了！');
       },
     })).concat([{ label: '等一下再來', run: () => Dialog.close() }]));
     void L;

@@ -111,7 +111,7 @@ const Progress = (() => {
     return { parts, pct };
   }
   const titles = () => TITLES.filter(t => { try { return t.cond(S()); } catch (e) { return false; } });
-  function titleName() { const s = S(), t = TITLES.find(t => t.id === s.title); return t && titles().includes(t) ? t.name : '新手乘客'; }
+  function titleName() { const s = S(), t = TITLES.find(t => t.id === s.title); let ok = false; try { ok = !!t && t.cond(s); } catch (e) { /* 條件壞掉 */ } return ok ? t.name : '新手乘客'; }
 
   /* 畫面 */
   let tab = 'char';
@@ -124,7 +124,7 @@ const Progress = (() => {
       body = `<div class="rc-hero"><b>${esc(CHARACTERS[s.char].name)}</b><span class="rc-title">「${esc(titleName())}」</span>
         <p>Lv ${lv.lv}　調查經驗 ${lv.cur} / ${lv.need}　能力點：<b>${s.points}</b></p></div>
         <ul class="rc-stats">${STATS.map(([k, n, d]) => `<li><b>${n}</b><span class="rc-bar"><i style="width:${Math.min(100, stat(k) * 10)}%"></i></span><em>${stat(k)}</em>${s.points > 0 ? `<button class="btn small" data-pt="${k}">＋</button>` : ''}<small>${d}</small></li>`).join('')}</ul>
-        <h4 class="bag-h">稱號</h4><div class="rc-titles">${titles().map(t => `<button class="wd-chip" data-title="${t.id}" aria-pressed="${titleName() === t.name}">${esc(t.name)}</button>`).join('')}</div>`;
+        <h4 class="bag-h">稱號</h4>${typeof Titles !== 'undefined' ? Titles.html(s.title || 't_rookie') : `<div class="rc-titles">${titles().map(t => `<button class="wd-chip" data-title="${t.id}" aria-pressed="${titleName() === t.name}">${esc(t.name)}</button>`).join('')}</div>`}`;
     }
     if (tab === 'life') body = Life.html();
     if (tab === 'explore') {
@@ -166,7 +166,7 @@ const Progress = (() => {
       const t = e.target.closest('[data-tab]'), pt = e.target.closest('[data-pt]'), ti = e.target.closest('[data-title]');
       if (t) { tab = t.dataset.tab; render(); }
       if (pt) { addPoint(pt.dataset.pt); Sound.click(); render(); }
-      if (ti) { S().title = ti.dataset.title; saveState(); updateHud(); render(); }
+      if (ti) { S().title = ti.dataset.title; saveState(); Sound.click(); toast(`<b>🎖️ 換上稱號「${esc(titleName())}」</b>`); updateHud(); render(); }
     };
   }
   return { price, friendBonus, applySpeed, onArrive, deduceHint, markAnswer, onLevel, addRep, onQuestDone, onTalk, open, titleName, regionOf };
@@ -214,7 +214,7 @@ const STORY_TITLES = { sq_musician: '最忠實的聽眾', sq_leave: '帶走台�
 })();
 
 /* ── 主線報酬（依階段） ── */
-const MAIN_REWARD = { evidence: [200, 110], choice: [200, 110], rescue: [220, 120], hidden: [220, 120], chase: [320, 150], escape: [320, 150], deduce: [400, 200] };
+const MAIN_REWARD = { evidence: [200, 110], choice: [200, 110], rescue: [220, 120], hidden: [220, 120], chase: [260, 130], escape: [260, 130], deduce: [400, 200] };
 for (const l of Object.keys(MAIN_STORY)) { QUESTS['main_' + l].reward = { money: 800, xp: 350, gold: 1, ixp: 120, items: { ['casefile_' + l]: 1 }, friend: { xiuyu: 25 } }; }
 Object.assign(ITEMS, Object.fromEntries(Object.keys(MAIN_STORY).map(l => ['casefile_' + l, { name: `案件卷宗：${MAIN_STORY[l].title}`, desc: `${LINES[l].zh}主線的完整紀錄。獨一無二的收藏。`, icon: '🗂️' }])));
 ITEMS.notebook = { name: '調查筆記本', desc: '秀蔅送的。證據、線索和人物都會記在「紀錄」裡。', icon: '📓' };
