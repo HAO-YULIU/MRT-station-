@@ -40,7 +40,7 @@ const Titles = (() => {
     t_fogmemory: ['迷霧之城：解開台北車站的記憶。', 4, true],
     t_expo: ['迷霧之城：看完第零展區。', 4, true],
     t_fogwalker: ['在 06:00 前離開迷霧 5 次。', 3],
-    t_halls: ['欣賞過全部 22 個特色大廳。', 3],
+    t_halls: ['欣賞過全部的特色大廳。', 3],
   };
   const info = t => {
     if (INFO[t.id]) return { desc: INFO[t.id][0], rare: INFO[t.id][1], secret: !!INFO[t.id][2] };
