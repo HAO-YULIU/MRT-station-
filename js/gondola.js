@@ -280,6 +280,7 @@ const Gondola = (() => {
     World.loadCustom(r.L, r.group, { open: true, fogNear: 120, fogFar: 1400 });
     World.placePlayer(0, .12, .55, Math.PI);
     World.sit({ x: 0, z: .55, face: Math.PI });
+    World.lookToward(0, 5);   // 鏡頭從車廂另一邊看過來：看得到自己和背後窗外的山
     World.setInput(false);
     World.setInteractions([]);
     mode = { key: from, to: toKey, scene: 'ride', r, t0: performance.now(), skip: false };

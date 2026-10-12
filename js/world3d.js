@@ -425,7 +425,7 @@ const World = (() => {
     // 鏡頭：在手扶梯／樓梯、車廂、房間、和人說話時自動轉到好看的角度（玩家剛拖曳過就不自動）
     autoCamera(z, dt);
     const inTrain = z.kind === 'train';
-    let sitLook = false, lookAt = null;
+    let sitLook = false, lookAt = null, hideMe = false;
     const dist = inTrain ? Math.min(cam.dist, 2.6) : z.room ? Math.min(cam.dist, 2.2) : cam.dist;
     const pitch = inTrain ? Math.min(cam.pitch, .12) : cam.pitch;
     const tx = player.x, ty = player.y + 1.5, tz = player.z;
@@ -477,6 +477,7 @@ const World = (() => {
       const lv = z.level, cx = (lv.x0 + lv.x1) / 2, cz = (lv.z0 + lv.z1) / 2;
       px = cx + Math.sin(cam.yaw) * .8; pz = cz + Math.cos(cam.yaw) * .8; py = lv.y + 1.45;
       lookAt = [cx - Math.sin(cam.yaw) * 4, lv.y + 1.05, cz - Math.cos(cam.yaw) * 4];
+      hideMe = Math.hypot(px - player.x, pz - player.z) < .55;   // 鏡頭貼在自己頭後面：先把自己藏起來
     } else if (z.level) {   // 上層商店街、纜車站：鏡頭不穿牆、不穿天花板
       const lv = z.level;
       px = Math.min(lv.x1 - .5, Math.max(lv.x0 + .5, px)); pz = Math.min(lv.z1 - .5, Math.max(lv.z0 + .5, pz)); py = Math.min(lv.y + lv.h - .4, py);
@@ -502,7 +503,7 @@ const World = (() => {
     camera.position.copy(cam.pos);
     // 搭車時鏡頭不再上下晃（手機上看會暈）
     const fp = VIEWS[cam.mode].fp && !player.sitting;
-    if (rig) rig.root.visible = !fp;
+    if (rig) rig.root.visible = !fp && !hideMe;
     if (fp) {   // 第一人稱：鏡頭在眼睛的位置，往前看
       const ey = player.y + (charId === 'aiyun' ? 1.52 : 1.62), fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
       cam.pos.set(player.x + fx * .12, ey, player.z + fz * .12);

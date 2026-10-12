@@ -95,7 +95,7 @@ function updateHud() {
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
-  $('#hudWhere').textContent = s.current ? s.current : '尚未出發';
+  $('#hudWhere').textContent = s.gondolaAt && typeof Gondola !== 'undefined' && Gondola.mode ? `🚡 貓空纜車・${(Gondola.ST.find(x => x.key === Gondola.mode.key) || {}).zh || ''}${Gondola.mode.scene === 'ride' ? '（搭乘中）' : '站'}` : s.current ? s.current : '尚未出發';
   $('#hudItems').textContent = `${Teleporter.total()}/6`;   // 主線寶物（傳送裝置零件）
   $('#hudQuests').textContent = Object.keys(s.quests.active).length;
 }
