@@ -31,6 +31,7 @@ function loadState() {
 }
 function saveState() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.state)); } catch (e) { /* 無法存檔時仍可遊玩 */ } }
 Game.state = loadState();
+PlayerName.gift(Game.state);   // 舊存檔送一張改名卡
 Daily.refresh();
 if (Game.state.flags.mistLine) MRT.openAirport();   // 已經交出寶物：桃園機場捷運加入路網
 
@@ -93,7 +94,7 @@ function updateHud() {
   $('#hudStats').innerHTML = `<span class="money card${s.money < 0 ? ' neg' : ''}" title="悠遊卡餘額">NT$ ${s.money}</span>${s.gold ? `<span class="money gold">🪙 ${s.gold}</span>` : ''}${dl ? `<span class="last">⏱ ${fmtLeft(dl)}</span>` : ''}${left != null && left <= 30 ? `<span class="last">末班車剩 ${left} 分</span>` : ''}`;
   if (s.char) {
     if (typeof Titles !== 'undefined') Titles.check();   // 得到新稱號時通知、還是新手乘客就自動換上
-    $('#hudName').innerHTML = `${esc(CHARACTERS[s.char].name)} <small class="hud-title">${esc(Progress.titleName())}</small>`;
+    $('#hudName').innerHTML = `${esc(playerName(s))} <small class="hud-title">${esc(Progress.titleName())}</small>`;
     const ak = s.char + JSON.stringify(s.wardrobe.wear);
     if ($('#hudAvatar').dataset.c !== ak) { $('#hudAvatar').dataset.c = ak; $('#hudAvatar').innerHTML = `<img class="avatar" src="${Human3D.snapshot(s.char, 'head', s.wardrobe.wear)}" alt="">`; }
   }
@@ -340,9 +341,6 @@ function renderTitle() {
   // 背景路網：載入時一條一條畫出來
   const lines = MRT.segments().map((g, i) => `<line pathLength="1" style="--d:${(i % 40) * 22}ms" x1="${STATIONS[g.a].x}" y1="${STATIONS[g.a].y}" x2="${STATIONS[g.b].x}" y2="${STATIONS[g.b].y}" stroke="${LINES[g.line].color}" stroke-width="6" stroke-linecap="round"/>`).join('');
   $('#titleMap').innerHTML = `<svg viewBox="20 10 1000 930" preserveAspectRatio="xMidYMid slice">${lines}</svg>`;
-  // 站名牌：每一條線的站碼都是 00——一個不存在的車站
-  $('#titleChips').innerHTML = LINE_ORDER.map(l => `<span style="--c:${LINES[l].color}"${['O', 'Y'].includes(l) ? ' class="dark"' : ''}>${l}<i>00</i></span>`).join('');
-  $('#titleBand').innerHTML = LINE_ORDER.map(l => `<i style="--c:${LINES[l].color}"></i>`).join('');
   const hasSave = s.char && s.current;
   if (hasSave) {
     const c = CHARACTERS[s.char], lv = Economy.levelInfo(s.xp || 0).lv, got = Object.keys(s.items || {}).length;
@@ -351,7 +349,7 @@ function renderTitle() {
       <button class="ez-card" id="btnContinue">
         <img class="ez-face" src="${Human3D.snapshot(s.char, 'head', s.wardrobe && s.wardrobe.wear)}" alt="">
         <span class="ez-main"><b>繼續旅程</b><span class="ez-where">${chips}<span>${esc(s.gondolaAt ? s.current + '（貓空纜車）' : s.current)}</span></span></span>
-        <span class="ez-side"><em>NT$ ${s.money}</em><small>${esc(c.name)}・Lv ${lv}</small><small>終點的東西 ${got} / ${LINE_ORDER.length}</small></span>
+        <span class="ez-side"><em>NT$ ${s.money}</em><small>${esc(playerName(s))}・Lv ${lv}</small><small>終點的東西 ${got} / ${LINE_ORDER.length}</small></span>
       </button>
       <button class="btn-text" id="btnNew">重新開始（清除進度）</button>`;
   } else $('#titleActions').innerHTML = `<button class="btn primary ts-start" id="btnStart">開始旅程</button>`;
@@ -386,25 +384,34 @@ function renderCharSelect() {
   const wrap = $('#charCards');
   wrap.innerHTML = Object.values(CHARACTERS).map(c => `
     <button class="char-card${pick === c.id ? ' on' : ''}" data-id="${c.id}" aria-pressed="${pick === c.id}">
-      <div class="char-stage"><img class="char-img" src="${Human3D.snapshot(c.id, 'full')}" alt="${c.name}" draggable="false"></div>
+      <div class="char-stage"><img class="char-img" src="${Human3D.snapshot(c.id, 'full')}" alt="${c.gender === '男' ? '男主' : '女主'}" draggable="false"></div>
       <div class="char-info">
-        <div class="char-name">${c.name}<span>${c.en}</span></div>
-        <div class="char-meta">${c.gender}　${c.age} 歲　${c.role}</div>
+        <div class="char-name">${c.gender === '男' ? '男主' : '女主'}<span>${c.gender === '男' ? 'Boy' : 'Girl'}</span></div>
+        <div class="char-meta">${c.age} 歲　${c.role}</div>
         <p>${c.bio}</p>
       </div>
     </button>`).join('');
-  const confirmBtn = $('#charConfirm');
+  const confirmBtn = $('#charConfirm'), nameIn = $('#charName'), tip = $('#charNameTip');
+  nameIn.value = '';
   const sync = () => {
     wrap.querySelectorAll('.char-card').forEach(b => { b.classList.toggle('on', b.dataset.id === pick); b.setAttribute('aria-pressed', b.dataset.id === pick); });
-    confirmBtn.disabled = !pick;
-    confirmBtn.textContent = pick ? `以${CHARACTERS[pick].name}從南港展覽館出發` : '選一位主角';
+    const n = nameIn.value.trim(), err = nameError(n);
+    tip.textContent = n && err ? err : n ? '可以用這個名字' : '可用中文、英文大小寫，2–6 個字';
+    tip.classList.toggle('bad', !!(n && err));
+    confirmBtn.disabled = !pick || !!err;
+    confirmBtn.textContent = !pick ? '先選男主或女主' : err ? '幫角色取個名字' : `以「${n}」從南港展覽館出發`;
   };
-  wrap.onclick = e => { const b = e.target.closest('.char-card'); if (!b) return; Sound.click(); pick = b.dataset.id; sync(); };
+  wrap.onclick = e => { const b = e.target.closest('.char-card'); if (!b) return; Sound.click(); pick = b.dataset.id; sync(); if (!nameIn.value) nameIn.focus({ preventScroll: true }); };
+  nameIn.oninput = sync;
+  nameIn.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter' && !confirmBtn.disabled) confirmBtn.click(); };
   confirmBtn.onclick = () => {
+    const n = nameIn.value.trim();
+    if (!pick || nameError(n)) return;
     // 每一位玩家都從南港展覽館出發
     const s = Game.state;
     MRT.closeAirport();
-    Object.assign(s, newState(), { char: pick, start: START_STATION, current: START_STATION, visited: { [START_STATION]: true }, trip: null });
+    Object.assign(s, newState(), { char: pick, name: n, start: START_STATION, current: START_STATION, visited: { [START_STATION]: true }, trip: null });
+    s.flags.renameGift = 3;   // 新玩家自己取了名字，不用改名卡
     saveState();
     enterGame(START_STATION);
   };
@@ -445,6 +452,7 @@ function enterGame(stationId) {
   World.spawnInConcourse();
   Game.state.current = stationId; Game.state.visited[stationId] = true; saveState();
   startStation(stationId);
+  setTimeout(() => PlayerName.notice(), 1800);   // 等進站的提示跑完再說
   const ch = $('#controlsHint'); if (ch) { ch.classList.remove('faded'); clearTimeout(enterGame.hintT); enterGame.hintT = setTimeout(() => ch.classList.add('faded'), 20000); }   // 操作說明看 20 秒就淡掉，不擋畫面
   if (Game.state.gondolaAt && Gondola.unlocked()) Gondola.enter(Game.state.gondolaAt);   // 上次停在貓空纜車站
   else opening();
@@ -1138,7 +1146,7 @@ function openBag() {
   $('#bagBody').innerHTML = `
     <div class="wallet"><span>悠遊卡餘額</span><b>NT$ ${s.money}</b></div>
     <div class="wallet"><span>黃金</span><b>🪙 ${s.gold || 0}</b><span>調查</span><b>🔍 ${Investigate.info().name}</b></div>
-    ${inv.length ? ITEM_CATS.map(([cat, name]) => { const list = inv.filter(([id]) => ITEMS[id] && itemCat(id) === cat); return list.length ? `<h4 class="bag-h">${name}</h4><ul class="inv">${list.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}${id === 'detector' ? ' <button class="btn small ghost eat" data-detect="1">使用</button>' : ''}${id === 'hint' ? ' <button class="btn small ghost eat" data-hint="1">使用</button>' : ''}${id === 'tracker' ? ' <button class="btn small ghost eat" data-track="1">使用</button>' : ''}${id === 'clue' ? ' <button class="btn small ghost eat" data-clue="1">使用</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : ''; }).join('') : '<h4 class="bag-h">物品</h4><p class="empty-q">背包是空的。</p>'}
+    ${inv.length ? ITEM_CATS.map(([cat, name]) => { const list = inv.filter(([id]) => ITEMS[id] && itemCat(id) === cat); return list.length ? `<h4 class="bag-h">${name}</h4><ul class="inv">${list.map(([id, n]) => `<li title="${esc(ITEMS[id].desc)}"><span class="ic">${ITEMS[id].icon}</span><b>${ITEMS[id].name}</b><small>×${n}${ITEMS[id].eat ? ` <button class="btn small ghost eat" data-eat="${id}">${ITEMS[id].eat}掉</button>` : ''}${id === 'camera' ? ' <button class="btn small ghost eat" data-photo="1">拍照</button>' : ''}${id === 'detector' ? ' <button class="btn small ghost eat" data-detect="1">使用</button>' : ''}${id === 'hint' ? ' <button class="btn small ghost eat" data-hint="1">使用</button>' : ''}${id === 'tracker' ? ' <button class="btn small ghost eat" data-track="1">使用</button>' : ''}${id === 'clue' ? ' <button class="btn small ghost eat" data-clue="1">使用</button>' : ''}${id === 'rename_card' ? ' <button class="btn small ghost eat" data-rename="1">使用</button>' : ''}</small><p>${ITEMS[id].desc}</p></li>`).join('')}</ul>` : ''; }).join('') : '<h4 class="bag-h">物品</h4><p class="empty-q">背包是空的。</p>'}
     <h4 class="bag-h">換裝</h4>
     ${wardrobeHtml()}
     <h4 class="bag-h">路線收藏</h4>
@@ -1167,6 +1175,7 @@ function openBag() {
     if (e.target.closest('[data-hint]')) { $('#bag').hidden = true; return Phone.useHint(); }
     if (e.target.closest('[data-track]')) { $('#bag').hidden = true; return Phone.useTracker(); }
     if (e.target.closest('[data-clue]')) { $('#bag').hidden = true; return Nav.useClue(); }
+    if (e.target.closest('[data-rename]')) { $('#bag').hidden = true; return PlayerName.use(); }
     const w = e.target.closest('[data-wear]'), f = e.target.closest('[data-eat]');
     if (w) { Sound.click(); putOn(w.dataset.wear); openBag(); }
     if (f) { Sound.click(); eat(f.dataset.eat); openBag(); }

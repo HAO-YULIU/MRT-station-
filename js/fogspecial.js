@@ -34,7 +34,7 @@ ACHIEVEMENTS.push(
 
 const FogSpecial = (() => {
   const S = () => Game.state;
-  const me = () => (S().char === 'aiyun' ? '愛紜' : '軒宇');
+  const me = () => playerName(S());
   const bye = [{ label: '……', run: () => Dialog.close() }];
   const title = id => { const s = S(); (s.titles = s.titles || {})[id] = TaipeiTime.date(); saveState(); };
 

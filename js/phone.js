@@ -153,7 +153,7 @@ const Phone = (() => {
   function home() {
     const s = Game.state, inv = Investigate.info(), d = Daily.status ? Daily.status() : { n: 0 };
     return `<div class="ph-widget">
-        <b>${esc(CHARACTERS[s.char].name)}</b><small>Lv ${Economy.levelInfo(s.xp).lv}　🔍 ${inv.name}（調查 Lv ${inv.lv}）</small>
+        <b>${esc(playerName(s))}</b><small>Lv ${Economy.levelInfo(s.xp).lv}　🔍 ${inv.name}（調查 Lv ${inv.lv}）</small>
         <small>NT$ ${s.money}　🪙 ${s.gold || 0}　今日委託 ${Math.min(3, d.n)} / 3</small>
       </div>
       <div class="ph-grid">${PHONE_APPS.map(([id, ic, name]) => `<button class="ph-app" data-app="${id}"><span>${ic}${id === 'msg' && unread() ? `<i>${unread()}</i>` : ''}</span>${name}</button>`).join('')}</div>`;
