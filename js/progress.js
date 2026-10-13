@@ -121,7 +121,7 @@ const Progress = (() => {
     const tabs = [['char', '角色'], ['life', '生活'], ['explore', '探索'], ['case', '評價'], ['collect', '收藏'], ['rep', '聲望'], ['people', '人物']];
     let body = '';
     if (tab === 'char') {
-      body = `<div class="rc-hero"><b>${esc(CHARACTERS[s.char].name)}</b><span class="rc-title">「${esc(titleName())}」</span>
+      body = `<div class="rc-hero"><b>${esc(playerName(s))}</b><span class="rc-title">「${esc(titleName())}」</span>
         <p>Lv ${lv.lv}　調查經驗 ${lv.cur} / ${lv.need}　能力點：<b>${s.points}</b></p></div>
         <ul class="rc-stats">${STATS.map(([k, n, d]) => `<li><b>${n}</b><span class="rc-bar"><i style="width:${Math.min(100, stat(k) * 10)}%"></i></span><em>${stat(k)}</em>${s.points > 0 ? `<button class="btn small" data-pt="${k}">＋</button>` : ''}<small>${d}</small></li>`).join('')}</ul>
         <h4 class="bag-h">稱號</h4>${typeof Titles !== 'undefined' ? Titles.html(s.title || 't_rookie') : `<div class="rc-titles">${titles().map(t => `<button class="wd-chip" data-title="${t.id}" aria-pressed="${titleName() === t.name}">${esc(t.name)}</button>`).join('')}</div>`}`;

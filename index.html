@@ -13,24 +13,24 @@
 </head>
 <body data-screen="title">
 
-  <!-- 標題 -->
+  <!-- 標題：主視覺封面＋下一班車看板＋開始按鈕 -->
   <section class="screen" id="title">
+    <div class="ts-bg" aria-hidden="true"></div>
     <div class="title-map" id="titleMap" aria-hidden="true"></div>
     <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
     <div class="title-inner">
-      <!-- 一個不存在的車站：站名牌（每條線的站碼都是 00）＋月台的下一班車看板 -->
-      <div class="ts-sign" id="titleSign">
-        <div class="ts-chips" id="titleChips" aria-hidden="true"></div>
-        <div class="ts-name"><h1 class="logo">迷霧</h1><span class="ts-en" lang="en">Mist</span></div>
+      <figure class="ts-poster"><img src="assets/cover.jpg" alt="迷霧　MRT × Mystery × You——在熟悉的捷運裡，藏著不為人知的真相。" width="1254" height="1254" decoding="async"></figure>
+      <div class="ts-side">
+        <h1 class="ts-h1">迷霧</h1>
+        <p class="ts-kicker"><span>大型開放 RPG 網頁遊戲</span></p>
+        <div class="ts-led" id="titleLed" role="status" aria-live="off">
+          <div class="ts-led-row"><span id="ledDir">往 迷霧</span><b id="ledTime">00:30</b></div>
+          <div class="ts-led-run"><span id="ledRun">末班車開走以後，月台上還有一班車。</span></div>
+        </div>
+        <p class="tagline">從南港展覽館出發，搭遍台北捷運。<br>每條路線的終點，都留著一件東西。</p>
+        <div class="title-actions" id="titleActions"></div>
+        <p class="title-clock" id="titleClock"></p>
       </div>
-      <div class="ts-band" id="titleBand" aria-hidden="true"></div>
-      <div class="ts-led" id="titleLed" role="status" aria-live="off">
-        <div class="ts-led-row"><span id="ledDir">往 迷霧</span><b id="ledTime">00:30</b></div>
-        <div class="ts-led-run"><span id="ledRun">末班車開走以後，月台上還有一班車。</span></div>
-      </div>
-      <p class="tagline">從南港展覽館出發，搭遍台北捷運。<br>每條路線的終點，都留著一件東西。</p>
-      <div class="title-actions" id="titleActions"></div>
-      <p class="title-clock" id="titleClock"></p>
     </div>
   </section>
 
@@ -38,10 +38,17 @@
   <section class="screen" id="charSelect">
     <header class="step-head">
       <button class="back" id="charBack" aria-label="返回">‹</button>
-      <h2>選擇主角</h2>
+      <h2>選擇主角・取名字</h2>
     </header>
     <div class="char-cards" id="charCards"></div>
-    <div class="step-foot"><button class="btn primary" id="charConfirm" disabled>選一位主角</button></div>
+    <div class="step-foot">
+      <div class="name-field">
+        <label for="charName">角色名字</label>
+        <input class="name-in" id="charName" maxlength="6" autocomplete="off" spellcheck="false" placeholder="2–6 個字，中文或英文">
+        <small class="name-tip" id="charNameTip">可用中文、英文大小寫，2–6 個字</small>
+      </div>
+      <button class="btn primary" id="charConfirm" disabled>先選男主或女主</button>
+    </div>
   </section>
 
   <!-- 遊戲 -->
@@ -201,6 +208,7 @@
   <script src="js/daycalm.js"></script>
   <script src="js/life.js"></script>
   <script src="js/daily.js"></script>
+  <script src="js/playername.js"></script>
   <script src="js/phone.js"></script>
   <script src="js/festival.js"></script>
   <script src="js/art.js"></script>

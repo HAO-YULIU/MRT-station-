@@ -208,7 +208,7 @@ const FogEvents = (() => {
       K.every(dt => {
         if (ev.done || K.dead) return; t -= dt;
         if (ev.called) { ev.callLeft -= dt; K.hint(`被點名了！${Math.ceil(ev.callLeft)} 秒內到站務室旁關掉廣播`); if (ev.callLeft <= 0) { ev.called = 0; K.hurt(22, '名字被念完了，有東西知道你在哪裡'); } }
-        else if (t <= 0) { t = 45; ev.called = 1; ev.callLeft = 35; K.sound('radio'); K.toast(`<b>📢 「請 ${esc(S().name || (S().char === 'aiyun' ? '愛紜' : '軒宇'))} 旅客……到……」</b><span>廣播在念你的名字。</span>`, 'warn'); }
+        else if (t <= 0) { t = 45; ev.called = 1; ev.callLeft = 35; K.sound('radio'); K.toast(`<b>📢 「請 ${esc(playerName(S()))} 旅客……到……」</b><span>廣播在念你的名字。</span>`, 'warn'); }
       });
     }
     if (d.fakeStaff) {   // 假站務人員

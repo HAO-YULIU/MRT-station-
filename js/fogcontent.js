@@ -5,7 +5,7 @@
   const D = FogEvents.def;
   const ST = st => st;   // 站名
   const S = () => Game.state;
-  const me = () => (S().char === 'aiyun' ? '愛紜' : '軒宇');
+  const me = () => playerName(S());
   const lastFog = () => { const log = S().fogLog || {}; const e = Object.entries(log).flatMap(([st, l]) => l.results.map(r => ({ st, ...r }))).sort((a, b) => (a.night < b.night ? 1 : -1)); return e[0] || null; };
 
   /* ══════════ 第二大類：迷霧 NPC 特殊遭遇（20） ══════════ */
