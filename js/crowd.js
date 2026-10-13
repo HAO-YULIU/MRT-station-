@@ -52,7 +52,7 @@ const Crowd = (() => {
       let x, z, y = 0;
       if (area === 'hall') { x = C.x0 + 1 + Math.random() * (C.x1 - C.x0 - 2); z = C.z0 + 1 + Math.random() * (L.gateZ - C.z0 - 2); }
       else if (area === 'unpaid') { x = U.x0 + 1 + Math.random() * (U.x1 - U.x0 - 2); z = U.z0 + 1 + Math.random() * (U.z1 - U.z0 - 3); }
-      else { const P = L.platforms[area]; y = P.y; x = P.x - 31 + Math.random() * 62; z = P.z + (Math.random() * 2 - 1) * 2.3; }
+      else { const P = L.platforms[area]; y = P.y; x = P.x - 31 + Math.random() * 62; z = P.z + (Math.random() * 2 - 1) * (2.3 + Station3D.PW); }
       if (ok(x, z, y)) return { x, y, z };
     }
     return null;
@@ -79,7 +79,7 @@ const Crowd = (() => {
     } else {
       const P = L.platforms[p.area];
       if (r < .15) { const s = stairs(P); p.route.push(s.bottom, s.top); p.next = 'hall'; }
-      else if (r < .75) { const side = Math.random() < .5 ? -1 : 1, d = Station3D.DOORS || [0]; const dx = d[(Math.random() * d.length) | 0]; p.door = P.x + dx; p.route.push({ x: P.x + dx + (Math.random() < .5 ? -.6 : .6) + (Math.random() - .5) * .3, y: P.y, z: P.z + side * (1.7 + Math.random() * .5) }); p.next = p.area; p.waitAfter = 6 + Math.random() * 20; }   // 在車門前候車
+      else if (r < .75) { const side = Math.random() < .5 ? -1 : 1, d = Station3D.DOORS || [0]; const dx = d[(Math.random() * d.length) | 0]; p.door = P.x + dx; p.route.push({ x: P.x + dx + (Math.random() < .5 ? -.6 : .6) + (Math.random() - .5) * .3, y: P.y, z: P.z + side * (1.7 + Station3D.PW + Math.random() * .5) }); p.next = p.area; p.waitAfter = 6 + Math.random() * 20; }   // 在車門前候車
       else { const q = randIn(p.area); if (q) p.route.push(q); p.next = p.area; }
     }
     if (!p.waitAfter) p.waitAfter = Math.random() < .3 ? 1 + Math.random() * 6 : 0;
@@ -185,16 +185,16 @@ const Crowd = (() => {
   // 列車開門：在這一側候車的人上車；車上下來幾個人走向樓梯
   function doors(k, side) {
     if (!L || World.riding) return;
-    const P = L.platforms[k], zDoor = P.z + side * 2.1, D = Station3D.DOORS || [0];
+    const P = L.platforms[k], zDoor = P.z + side * (2.1 + Station3D.PW), D = Station3D.DOORS || [0];
     for (const p of people) {
       if (p.area !== k || p.hidden || Math.abs(p.y - P.y) > .3 || Math.abs(p.z - zDoor) > .7 || Math.random() < .2) continue;
-      const x = p.door != null ? p.door : p.x; p.route = [{ x, y: P.y, z: P.z + side * 2.0 }, { x, y: P.y, z: P.z + side * 2.8 }]; p.wait = Math.random() * 1.5; p.board = true; p.next = null;
+      const x = p.door != null ? p.door : p.x; p.route = [{ x, y: P.y, z: P.z + side * (2.0 + Station3D.PW) }, { x, y: P.y, z: P.z + side * (2.8 + Station3D.PW) }]; p.wait = Math.random() * 1.5; p.board = true; p.next = null;
     }
     let n = 3 + ((Math.random() * 6) | 0);
     for (const p of people) {
       if (!n || !p.hidden || p.hiddenK !== k) continue; n--;
       const dx = D[(Math.random() * D.length) | 0] * (Math.random() < .5 ? 1 : -1);
-      Object.assign(p, { hidden: false, x: P.x + dx, y: P.y, z: P.z + side * 2.4, wait: .5 + Math.random() * 2, route: [] });
+      Object.assign(p, { hidden: false, x: P.x + dx, y: P.y, z: P.z + side * (2.4 + Station3D.PW), wait: .5 + Math.random() * 2, route: [] });
       const s = stairs(P); p.route.push({ x: p.x, y: P.y, z: P.z + side * 1.2 }, s.bottom, s.top); p.next = 'hall';
     }
   }

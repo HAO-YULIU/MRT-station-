@@ -325,7 +325,7 @@ const NPCManager = (() => {
     const L = layout;
     for (let i = 0; i < 30; i++) {
       let x, y, z;
-      if (area.kind === 'platform') { const P = area.P; x = P.x + (rnd() - .5) * 60; z = P.z + (rnd() - .5) * 4.6; y = P.y; }
+      if (area.kind === 'platform') { const P = area.P; x = P.x + (rnd() - .5) * 60; z = P.z + (rnd() - .5) * (4.6 + 2 * Station3D.PW); y = P.y; }
       else if (area.kind === 'unpaid') { const U = L.unpaid; x = U.x0 + 2 + rnd() * (U.x1 - U.x0 - 4); z = U.z0 + 1.5 + rnd() * (U.z1 - U.z0 - 4); y = 0; }
       else { const C = L.concourse; x = C.x0 + 2 + rnd() * (C.x1 - C.x0 - 4); z = C.z0 + 2 + rnd() * (L.gateZ - C.z0 - 4); y = 0; }
       const h = World.groundAt(x, z, y);
@@ -445,7 +445,7 @@ const NPCManager = (() => {
       if (n.named || n.behavior) continue;
       if (n.area && n.area.kind === 'platform' && rnd() < .7) {
         const P = n.area.P, side = rnd() < .5 ? 1 : -1, d = Station3D.DOORS[(rnd() * Station3D.DOORS.length) | 0];
-        n.behavior = 'platformWait'; n.target = { x: P.x + d + (rnd() < .5 ? -1.05 : 1.05), y: P.y, z: P.z + side * (1.9 + rnd() * .4) }; n.lookZ = side;
+        n.behavior = 'platformWait'; n.target = { x: P.x + d + (rnd() < .5 ? -1.05 : 1.05), y: P.y, z: P.z + side * (1.9 + Station3D.PW + rnd() * .4) }; n.lookZ = side;
       } else if (n.area && n.area.kind === 'concourse') {
         if (rush && rnd() < .6) { n.behavior = 'commute'; n.speed *= 1.25; }
         else if (rnd() < .3) n.behavior = 'shopping';
@@ -1286,12 +1286,12 @@ const Challenges = (() => {
 
 /* ── 車站裡的秘密：紙條、塗鴉、被遺忘的東西（有些只在特定時段出現） ── */
 const SECRETS = [
-  { id: 'n_fog', icon: '📄', name: '紙條', text: '「如果你看到這張紙條，代表霧還沒散。——S」', xp: 10 },
+  { id: 'n_fog', icon: '📄', name: '紙條', text: '「如果你看到這張紙條，代表它還沒散。——S」', xp: 10 },
   { id: 'n_729', icon: '📄', name: '紙條', text: '「第七節車廂的門，在 00:29 打開。」', xp: 10 },
   { id: 'n_wait', icon: '📄', name: '紙條', text: '「我在月台上等了一千班車。下一班一定是你。」', xp: 10 },
   { id: 'n_tired', icon: '📄', name: '紙條', text: '「今天的你，也辛苦了。」字跡很工整，好像是寫給陌生人的。', xp: 10 },
   { id: 's_station', icon: '✏️', name: '牆角塗鴉', text: '用鉛筆寫著：「這裡曾經有一站」，旁邊畫了一個不存在的站碼。', xp: 10 },
-  { id: 's_arrow', icon: '✏️', name: '牆角塗鴉', text: '一個小小的箭頭，旁邊寫著「霧 →」，指向月台盡頭。', xp: 10 },
+  { id: 's_arrow', icon: '✏️', name: '牆角塗鴉', text: '一個小小的箭頭，指向月台盡頭。旁邊本來寫了一個字，被人擦掉了。', xp: 10 },
   { id: 's_love', icon: '✏️', name: '刻痕', text: '柱子上刻著「S♡J 1975」，被重新油漆過好幾次，還是看得到。', xp: 15 },
   { id: 'i_coin10', icon: '🪙', name: '十元硬幣', text: '地上有一枚十元硬幣。', money: 10 },
   { id: 'i_coin50', icon: '🪙', name: '五十元硬幣', text: '椅子底下有一枚五十元硬幣。', money: 50 },

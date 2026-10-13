@@ -500,9 +500,9 @@ function buildPanel() {
     </div>`;
   // 手機直向：資訊框預設收起（只留站名），點一下展開／收起，免得擋住角色
   const pn = $('#panel');
-  let col = null; try { col = localStorage.getItem('panelCollapsed'); } catch (e) { /* 無法存取 */ }
+  let col = null; try { col = localStorage.getItem('panelCollapsed2'); } catch (e) { /* 無法存取 */ }
   pn.classList.toggle('collapsed', col == null ? window.matchMedia('(orientation: portrait) and (pointer: coarse)').matches : col === '1');
-  pn.onclick = e => { if (e.target.closest('[data-nav]')) { Sound.click(); return Nav.open(); } if (e.target.closest('button, a')) return; if (e.target.closest('#pQuest')) { Sound.click(); return openQuests(); } pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
+  pn.onclick = e => { if (e.target.closest('[data-nav]')) { Sound.click(); return Nav.open(); } if (e.target.closest('button, a')) return; if (e.target.closest('#pQuest')) { Sound.click(); return openQuests(); } pn.classList.toggle('collapsed'); try { localStorage.setItem('panelCollapsed2', pn.classList.contains('collapsed') ? '1' : '0'); } catch (er) { /* 無法存取 */ } };
 }
 const panelCache = {};
 function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = html; $('#' + id).innerHTML = html; } }
@@ -673,12 +673,12 @@ function doorInteractions() {
     list.push({
       id: 'board' + info.n, label: '上車',
       when: p => p.zone.kind === 'platform' && p.zone.P === tr.P && Math.sign(p.z - tr.P.z) === tr.side && Math.abs(p.z - tr.P.z) > 1 && Math.abs(World.nearestDoor(tr, p.x) - p.x) < 1,
-      run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 2.4 }, { x: d, z: tr.P.z + tr.side * (Station3D.TRACK - .2) }]); },
+      run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * (2.4 + Station3D.PW) }, { x: d, z: tr.P.z + tr.side * (Station3D.TRACK - .2) }]); },
     });
     list.push({
       id: 'alight' + info.n, label: '下車',
       when: p => p.zone.kind === 'train' && p.zone.train === tr && Math.abs(World.nearestDoor(tr, p.x) - p.x) < 1,
-      run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * 3.6 }, { x: d, z: tr.P.z + tr.side * 1.6 }]); },
+      run: () => { const d = World.nearestDoor(tr, World.player.x); Sound.click(); World.walkPath([{ x: d, z: tr.P.z + tr.side * (3.6 + Station3D.PW) }, { x: d, z: tr.P.z + tr.side * (1.6 + Station3D.PW) }]); },
     });
   }
   list.push(Gondola.interaction, FogCity.interaction, Teleporter.interaction, exitInteraction(), puzzleInteraction, npcInteraction, performerInteraction, spotInteraction, pickupInteraction, collectInteraction, Festival.interaction, ArtInstall.interaction, Onsen.interaction, secretInteraction, seatInteraction, benchInteraction, adInteraction, dropInteraction);
@@ -771,7 +771,9 @@ async function doRide(tr, ride) {
   World.setInteractions([npcInteraction, seatInteraction, dropInteraction]);   // 行駛中：可以和乘客聊天、坐下、撿東西
   setTimeout(() => Passengers.maybeDrop(tr), 3000);
   const lateHour = TaipeiTime.now().hour >= 23 || TaipeiTime.now().hour === 0;
-  const anomaly = Math.random() < (Game.state.flags.mistArchive && lateHour ? .6 : .2);   // 偶爾在隧道裡看到不該存在的月台（解開霧的檔案室後，深夜更常出現）
+  // 偶爾在隧道裡看到不該存在的月台：保持神秘，平常很少見（白天幾乎看不到），任務需要時才比較常出現；解開霧的檔案室後，深夜更常出現
+  const hh = TaipeiTime.now().hour, needAnomaly = !!Quests.wants('anomaly', () => true);
+  const anomaly = Math.random() < (Game.state.flags.mistArchive && lateHour ? .6 : needAnomaly ? .3 : hh >= 21 || hh === 0 ? .06 : hh >= 17 ? .03 : .01);
   if (anomaly && Game.state.flags.mistArchive && lateHour) setTimeout(() => toast('<b>🌫️ 霧中列車</b><span>車廂的燈暗了一下。對面的座位上，好像坐著一個提燈的女孩。</span>', 'level'), 6000);
   if (TaipeiTime.now().hour === 0) Quests.secret('sec_lasttrain');
   Sound.ambience(null);
