@@ -147,7 +147,7 @@ const World = (() => {
       if (Math.abs(x - tx) < S.CAR_X[2] + 9.6 && Math.abs(z - tz) < .72) consider(ty);
       if (Math.abs(z - tz) < 1.38 && S.DOORS.some(d => Math.abs(x - (tx + d)) < .58)) consider(ty);
       if (!riding && stopped && tr.doorAmt > .85) {
-        const zA = P.z + tr.side * 2.1, zB = tz - tr.side * 1.2;
+        const zA = P.z + tr.side * (2.1 + S.PW), zB = tz - tr.side * 1.2;
         if (z > Math.min(zA, zB) && z < Math.max(zA, zB) && S.DOORS.some(d => Math.abs(x - (tx + d)) < .5)) consider(ty);
       }
     }

@@ -876,3 +876,25 @@ body.title-fog #title .fog i { opacity: .75; }
   .name-tip { white-space: nowrap; }
   .step-foot .btn { min-height: 40px; min-width: 0; padding-inline: 18px; white-space: nowrap; }
 }
+
+/* 手機直向：資訊框收起時變成一顆小膠囊，放在上方欄位中間的空格（站名已經在左上角，不重複），不擋畫面
+   點一下展開成完整資訊框（在上方欄位下面） */
+@media (orientation: portrait) and (pointer: coarse) {
+  #game .panel.collapsed { top: calc(env(safe-area-inset-top) + 10px); left: calc(50% + 18px); transform: translateX(-50%); width: auto; max-width: 34vw; z-index: 6; }
+  #panel.collapsed .mini { padding: 5px 8px; border-radius: 16px; background: rgba(12,16,20,.7); }
+  #panel.collapsed .mini-title { flex-wrap: nowrap; gap: 4px; }
+  #panel.collapsed .mini-title:has(.nav-btn) > .chip, #panel.collapsed .mini-title:has(.nav-btn) > b { display: none; }
+  #panel.collapsed .mini-title .floor-chip { margin-left: 0; }
+  #panel.collapsed .mini-sub { margin-left: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  #panel.collapsed .nav-btn { width: 28px; height: 28px; font-size: 15px; }
+  #panel.collapsed .mini-quest, #panel.collapsed .mini-guide, #panel.collapsed .mini-btns, #panel.collapsed .fog-hud { display: none; }
+  /* 月台上：只留「你這側」下一班車的倒數 */
+  #panel.collapsed .mini-rows { display: grid; margin-top: 4px; }
+  #panel.collapsed .mini-row:not(.me) { display: none; }
+  #panel.collapsed .mini-row { padding: 1px 6px; font-size: 11px; gap: 6px; }
+  #panel.collapsed .mini-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #panel.collapsed .mini:has(.mini-row.me) .mini-sub { display: none; }   /* 月台上：只留樓層和你這側的倒數 */
+  #panel.collapsed .mini-sub .chip { display: none; }
+  #panel.collapsed .mini-row i { display: none; }
+  #panel.collapsed .mini-row b { font-size: 13px; }
+}
