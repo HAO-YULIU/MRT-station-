@@ -29,7 +29,11 @@ function loadState() {
   } catch (e) { /* 無存檔 */ }
   return newState();
 }
-function saveState() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.state)); } catch (e) { /* 無法存檔時仍可遊玩 */ } }
+function saveState() {
+  Game.state.savedAt = Date.now();   // 跟雲端比較誰比較新
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.state)); } catch (e) { /* 無法存檔時仍可遊玩 */ }
+  if (typeof Cloud !== 'undefined') Cloud.queue();   // 已登入：幾秒後上傳到雲端
+}
 Game.state = loadState();
 PlayerName.gift(Game.state);   // 舊存檔送一張改名卡
 Daily.refresh();
@@ -55,6 +59,7 @@ function animate(dur, fn, e = ease.inOut) {
   });
 }
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const calmFx = () => reduceMotion() || (typeof Settings !== 'undefined' && Settings.get('calm'));   // 設定頁「減少晃動」：特效也少一點
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
@@ -455,7 +460,7 @@ function enterGame(stationId) {
   setTimeout(() => PlayerName.notice(), 1800);   // 等進站的提示跑完再說
   const ch = $('#controlsHint'); if (ch) { ch.classList.remove('faded'); clearTimeout(enterGame.hintT); enterGame.hintT = setTimeout(() => ch.classList.add('faded'), 20000); }   // 操作說明看 20 秒就淡掉，不擋畫面
   if (Game.state.gondolaAt && Gondola.unlocked()) Gondola.enter(Game.state.gondolaAt);   // 上次停在貓空纜車站
-  else opening();
+  else if (!(typeof Tutorial !== 'undefined' && Tutorial.gate())) opening();   // 新玩家先走新手教學（可跳過），結束後才開始序章
 }
 // 開場：先收到委託（序章），再由秀蔅說明；一定要選板南線或文湖線（迷霧時段先跳過，天亮後再補）
 function opening() {
@@ -1233,11 +1238,11 @@ function openMap() {
         <p>${here ? '你現在在這裡' : been ? '去過了，可以傳送' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>
         ${been && !here ? `<button class="btn primary small" id="tpBtn">${tpFreeLeft() > 0 ? `免費傳送到這裡（今天還剩 ${tpFreeLeft()} 次）` : `傳送到這裡（車資 NT$ ${Economy.fare(s.current, id)}）`}</button>` : ''}
         ${been && !here && tpFreeLeft() <= 0 ? '<p class="warn-text" style="color:var(--fog)">今天的 3 次免費傳送用完了，之後依捷運票價扣款</p>' : ''}
-        ${been && !here && Game.ride ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}${been && !here && FogCity.locked() ? '<p class="warn-text">迷霧之城：06:00 以前離不開這一站</p>' : ''}`;
+        ${been && !here && onTrainNow() ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}${been && !here && FogCity.locked() ? '<p class="warn-text">迷霧之城：06:00 以前離不開這一站</p>' : ''}`;
       card.hidden = false;
       Sound.click();
       const tp = $('#tpBtn');
-      if (tp) { tp.disabled = !!Game.ride || Challenges.escorting() || FogCity.locked(); tp.onclick = () => teleport(id); }
+      if (tp) { tp.disabled = onTrainNow() || Challenges.escorting() || FogCity.locked(); tp.onclick = () => teleport(id); }
     },
   });
 }
@@ -1247,12 +1252,20 @@ function closeMap() { $('#mapModal').hidden = true; Map3D.close(); }
 // 每天（台灣日期）免費 3 次，超過的依兩站之間的台北捷運票價扣款
 const TP_FREE = 3;
 function tpFreeLeft() { const s = Game.state, d = TaipeiTime.date(); if (!s.tpDay || s.tpDay.day !== d) return TP_FREE; return Math.max(0, TP_FREE - s.tpDay.n); }
+const onTrainNow = () => !!Game.ride && (Game.ride.moving || World.zone().kind === 'train');
+// 已經下車、站在月台上（列車還沒開走）：先結算這趟車，就可以傳送
+function rideBlocks() {
+  if (!Game.ride) return false;
+  if (Game.ride.moving || World.zone().kind === 'train') return true;
+  const r = Game.ride; Game.ride = null; if (ctl) onAlight(ctl.stationId); void r; return false;
+}
 async function teleport(id) {
   const s = Game.state;
-  if (Game.ride || !s.visited[id] || id === s.current) return;
+  if (rideBlocks() || !s.visited[id] || id === s.current) return;
   if (FogCity.locked()) { toast('<b>🌫 迷霧之城</b><span>霧把這一站封住了。06:00 以前，哪裡都去不了。</span>', 'warn'); return; }
   if (Challenges.escorting()) { toast('<b>帶著人不能傳送</b><span>先陪他把路走完吧</span>', 'warn'); return; }
-  const free = tpFreeLeft() > 0, cost = free ? 0 : Economy.fare(s.current, id);
+  const tutHop = typeof Tutorial !== 'undefined' && Tutorial.freeTeleport();   // 新手教學的傳送不算次數
+  const free = tutHop || tpFreeLeft() > 0, cost = free ? 0 : Economy.fare(s.current, id);
   if (!free && s.money < cost) { toast(`<b>餘額不足</b><span>今天的免費傳送用完了，這趟要 NT$ ${cost}（餘額 NT$ ${s.money}）</span>`, 'warn'); return; }
   closeMap();
   newSession(); clearInterval(Game.ctlTimer);
@@ -1265,11 +1278,12 @@ async function teleport(id) {
   // 今天的免費次數用完後，傳送視同搭了一趟車：依兩站距離扣車資
   const from = s.current, day = TaipeiTime.date();
   if (!s.tpDay || s.tpDay.day !== day) s.tpDay = { day, n: 0 };
-  s.tpDay.n++;
+  if (!tutHop) s.tpDay.n++;
   s.money -= cost; s.rides = (s.rides || 0) + 1;
   s.current = id; s.trip = null; saveState(); updateHud();
   startStation(id);
-  if (free) toast(`<b>免費傳送</b><span>${esc(from)} → ${esc(id)}　今天還剩 ${tpFreeLeft()} 次免費</span>`);
+  if (tutHop) toast(`<b>傳送回 ${esc(id)}</b><span>新手教學：這次不算今天的免費次數</span>`);
+  else if (free) toast(`<b>免費傳送</b><span>${esc(from)} → ${esc(id)}　今天還剩 ${tpFreeLeft()} 次免費</span>`);
   else toast(`<b>扣款 NT$ ${cost}</b><span>傳送 ${esc(from)} → ${esc(id)}（今天的免費次數用完了，依捷運票價）　餘額 NT$ ${s.money}</span>`);
   if (cost >= 65) Quests.secret('sec_maxfare');
   fx.classList.add('out');
@@ -1326,6 +1340,7 @@ function init() {
   }, 1000);
   $('#titleClock').textContent = `台灣時間 ${TaipeiTime.date()} ${TaipeiTime.clockSec()}`;
 
+  $('#titleSettings').onclick = () => Settings.open();
   $('#btnMap').onclick = openMap;
   $('#btnBag').onclick = openBag;
   $('#btnPhone').onclick = () => Phone.open();
@@ -1335,8 +1350,7 @@ function init() {
   $('#transferBtn').onclick = transferMenu;
   $('#viewBtn').onclick = () => { const n = World.cycleView(); toast(`<b>視角：${n}</b><span>拖曳畫面轉動、雙指或滾輪縮放；按 V 也可以切換</span>`); };
   $('#runBtn').onclick = () => { const on = $('#runBtn').getAttribute('aria-pressed') !== 'true'; World.setRun(on); $('#runBtn').setAttribute('aria-pressed', on); };
-  const QNAME = { auto: '自動', high: '高', low: '省電' };
-  const qLabel = () => { $('#btnQuality').innerHTML = `<i aria-hidden="true">⚙️</i>畫質 ${QNAME[World.quality] || '自動'}`; };
+  const qLabel = () => { $('#btnQuality').innerHTML = '<i aria-hidden="true">⚙️</i>設定'; };
   qLabel();
   $('#btnUnstuck').onclick = () => {
     if (Game.ride && Game.ride.moving) return toast('<b>列車行駛中</b><span>到站之後再試</span>');
@@ -1344,7 +1358,7 @@ function init() {
     if (World.sitting) World.sit(null);
     World.unstuck(); Sound.click(); if (ctl) tickStation();
   };
-  $('#btnQuality').onclick = () => { const order = ['auto', 'high', 'low'], q = order[(order.indexOf(World.quality) + 1) % 3]; World.setQuality(q); qLabel(); toast(`<b>畫質：${QNAME[q]}</b><span>${{ auto: '依手機效能自動調整解析度', high: '最清楚，比較耗電', low: '解析度較低、最高 30 fps、人潮少一點，比較省電不發燙' }[q]}${q === 'low' ? '（人潮在下一站生效）' : ''}</span>`); };
+  $('#btnQuality').onclick = () => Settings.open();
   $('#btnSound').onclick = () => { const on = Sound.toggle(); $('#btnSound').setAttribute('aria-pressed', on); $('#btnSound').innerHTML = `<i aria-hidden="true">${on ? '🔊' : '🔇'}</i>音效 ${on ? '開' : '關'}`; };
   // 選單：手機、紀錄、音效、回到標題
   const menu = $('#hudMenu'), menuBtn = $('#btnMenu');

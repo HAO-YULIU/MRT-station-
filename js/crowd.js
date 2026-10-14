@@ -92,6 +92,7 @@ const Crowd = (() => {
     n *= .75 + .25 * L.platforms.length;
     if (window.matchMedia && matchMedia('(pointer: coarse)').matches) n *= .8;   // 手機稍微少一點
     if (World.quality === 'low') n *= .55;   // 省電模式：人再少一點
+    else if (World.strained) n *= .65;       // 自動畫質：裝置太吃力時也少一點
     return Math.min(MAX, Math.round(n));
   }
 
