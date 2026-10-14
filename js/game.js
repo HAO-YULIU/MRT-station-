@@ -850,7 +850,7 @@ const dropInteraction = {
 };
 // 查看告示牌、塗鴉、路線圖
 const SPOT_NAME = {
-  notice: '告示牌', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
+  notice: '告示牌', welcome: '新手指南', graffiti: '塗鴉', map: '路線圖', elevator: '電梯', ticket: '售票機', toilet: '廁所', shop: '商店',
   guide: '路線指南', cafe: '咖啡店', stage: '街頭藝人表演區', stamp: '紀念章', oldmap: '舊路網圖', tiles: '磁磚壁畫', breakfast: '早餐攤', fountain: '飲水機', aed: 'AED', art: '公共藝術', nursing: '哺集乳室', office: '站務室', vending: '自動販賣機', areamap: '車站周邊地圖',
   feature: '特色大廳', limited: '限定小舖', mallshop: '商店', malldir: '樓層指南', onsen: '湯之庭大浴池', timetable: '首末班車時刻表', phone: '公共電話', locker: '置物櫃', atm: 'ATM', women: '夜間婦女候車區',
 };
@@ -884,6 +884,12 @@ const spotInteraction = {
 };
 // 車站設施
 const FACILITY = {
+  welcome: () => Dialog.info('新手指南・歡迎來到台北捷運', `<b>怎麼搭車</b>：刷卡進閘門 → 搭電扶梯到月台 → 走到月台哪一側，就搭往那個方向的車。車門開著時走進去就上車。<br>
+    <b>轉乘</b>：搭電扶梯回大廳，跟著指標走到另一條線的月台。<br>
+    <b>每日委託</b>：大廳的林姐每天都有三件小委託，做完有獎勵。<br>
+    <b>傳送</b>：到過的車站可以從地圖傳送，每天免費 ${TP_FREE} 次，之後依捷運票價扣款。<br>
+    <b>迷路了</b>：點資訊框上的 🧭，會告訴你樓層、月台方向和轉乘。<br>
+    <b>這一站</b>：樓上是旅客廣場（商店、樓層指南），非付費區有便利商店和限定小舖。`),
   limited: (sp, st) => { Sound.click(); Limited.menu(st); },
   mallshop: sp => { Sound.click(); BigStations.shopMenu(sp); },
   malldir: () => { Sound.click(); BigStations.dirInfo(); },
@@ -1225,7 +1231,8 @@ function openMap() {
       card.innerHTML = `<div class="here">${lines.map(l => lineChip(l.line, l.code)).join('')}<b>${esc(id)}</b></div>
         <small>${esc(STATIONS[id].en)}</small>
         <p>${here ? '你現在在這裡' : been ? '去過了，可以傳送' : '還沒去過，藏在霧裡'}${lines.length > 1 ? '　轉乘站' : ''}${lines.some(l => MRT.terminals(l.line).has(id)) ? '　終點站' : ''}</p>
-        ${been && !here ? `<button class="btn primary small" id="tpBtn">傳送到這裡（車資 NT$ ${Economy.fare(s.current, id)}）</button>` : ''}
+        ${been && !here ? `<button class="btn primary small" id="tpBtn">${tpFreeLeft() > 0 ? `免費傳送到這裡（今天還剩 ${tpFreeLeft()} 次）` : `傳送到這裡（車資 NT$ ${Economy.fare(s.current, id)}）`}</button>` : ''}
+        ${been && !here && tpFreeLeft() <= 0 ? '<p class="warn-text" style="color:var(--fog)">今天的 3 次免費傳送用完了，之後依捷運票價扣款</p>' : ''}
         ${been && !here && Game.ride ? '<p class="warn-text">搭車中不能傳送，請先下車</p>' : ''}${been && !here && FogCity.locked() ? '<p class="warn-text">迷霧之城：06:00 以前離不開這一站</p>' : ''}`;
       card.hidden = false;
       Sound.click();
@@ -1237,11 +1244,16 @@ function openMap() {
 function closeMap() { $('#mapModal').hidden = true; Map3D.close(); }
 
 // 傳送：只能去已經到過的車站，出現在該站大廳
+// 每天（台灣日期）免費 3 次，超過的依兩站之間的台北捷運票價扣款
+const TP_FREE = 3;
+function tpFreeLeft() { const s = Game.state, d = TaipeiTime.date(); if (!s.tpDay || s.tpDay.day !== d) return TP_FREE; return Math.max(0, TP_FREE - s.tpDay.n); }
 async function teleport(id) {
   const s = Game.state;
   if (Game.ride || !s.visited[id] || id === s.current) return;
   if (FogCity.locked()) { toast('<b>🌫 迷霧之城</b><span>霧把這一站封住了。06:00 以前，哪裡都去不了。</span>', 'warn'); return; }
   if (Challenges.escorting()) { toast('<b>帶著人不能傳送</b><span>先陪他把路走完吧</span>', 'warn'); return; }
+  const free = tpFreeLeft() > 0, cost = free ? 0 : Economy.fare(s.current, id);
+  if (!free && s.money < cost) { toast(`<b>餘額不足</b><span>今天的免費傳送用完了，這趟要 NT$ ${cost}（餘額 NT$ ${s.money}）</span>`, 'warn'); return; }
   closeMap();
   newSession(); clearInterval(Game.ctlTimer);
   const fx = $('#tpFx'); fx.hidden = false; fx.classList.remove('out');
@@ -1250,13 +1262,16 @@ async function teleport(id) {
   World.loadStation(id);
   World.spawnInConcourse();
   settleTrip(true);
-  // 傳送也算搭了一趟車：依兩站距離扣車資
-  const from = s.current, fare = Economy.fare(from, id);
-  s.money -= fare; s.rides = (s.rides || 0) + 1;
+  // 今天的免費次數用完後，傳送視同搭了一趟車：依兩站距離扣車資
+  const from = s.current, day = TaipeiTime.date();
+  if (!s.tpDay || s.tpDay.day !== day) s.tpDay = { day, n: 0 };
+  s.tpDay.n++;
+  s.money -= cost; s.rides = (s.rides || 0) + 1;
   s.current = id; s.trip = null; saveState(); updateHud();
   startStation(id);
-  toast(`<b>扣款 NT$ ${fare}</b><span>傳送 ${esc(from)} → ${esc(id)}（視同搭車）　餘額 NT$ ${s.money}</span>`, s.money < 0 ? 'warn' : '');
-  if (fare >= 65) Quests.secret('sec_maxfare');
+  if (free) toast(`<b>免費傳送</b><span>${esc(from)} → ${esc(id)}　今天還剩 ${tpFreeLeft()} 次免費</span>`);
+  else toast(`<b>扣款 NT$ ${cost}</b><span>傳送 ${esc(from)} → ${esc(id)}（今天的免費次數用完了，依捷運票價）　餘額 NT$ ${s.money}</span>`);
+  if (cost >= 65) Quests.secret('sec_maxfare');
   fx.classList.add('out');
   await sleep(600);
   fx.hidden = true;

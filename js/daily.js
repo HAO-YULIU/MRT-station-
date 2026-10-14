@@ -103,7 +103,7 @@ const Furniture = (() => {
 if (NPCS.lin && NPCS.lin.name === '林先生') NPCS.linsir = NPCS.lin;
 Object.assign(NPCS, {
   lin: {
-    name: '林姐', role: '城市委託所', station: '台北車站', spot: 'concourse', hours: [[7, 23]], speed: 0,
+    name: '林姐', role: '城市委託所', station: '南港展覽館', spot: 'concourse', hours: [[7, 23]], speed: 0,
     look: { girl: true, skin: '#e8bca4', hair: 'bob', hairColor: '#3a2418', top: '#3a4a5a', pattern: 'shirt', accent: '#d8a830', bottom: '#2a2e36', glasses: true, bag: 'tote', bagColor: '#8a6a4a' },
     gives: ['daily_0', 'daily_1', 'daily_2', 'weekly'], likes: ['coffee', 'pineapplecake'],
     lines: ['委託所今天也很忙。', '每天都有小事要人幫忙，報酬不多，但很穩定。', '每週會有一件比較麻煩的案子，報酬好很多。', '我在這裡二十年了，台北的大小事都會經過這張桌子。'],
@@ -149,9 +149,9 @@ const Daily = (() => {
   const CASES = [
     { title: '末班車的遺失物', desc: '有人在末班車上掉了一個公事包，裡面有重要的文件。', steps: (a, b, w) => [[`到${a}問問看有沒有人看到`, { kind: 'reach', station: a }], [`查看${a}的公告欄`, { kind: 'inspect', spot: 'notice', station: a }], [`找${w.name}（${w.station}）確認`, { kind: 'talk', npc: w.id }], [`搭到${b}，公事包可能被送去那裡`, { kind: 'reach', station: b }]] },
     { title: '售票機的怪聲', desc: '好幾站的售票機半夜會發出怪聲，站務找不出原因。', steps: (a, b, w) => [[`檢查${a}的售票機`, { kind: 'inspect', spot: 'ticket', station: a }], [`檢查${b}的售票機`, { kind: 'inspect', spot: 'ticket', station: b }], [`問${w.name}（${w.station}）有沒有聽過`, { kind: 'talk', npc: w.id }]] },
-    { title: '消失的時刻表', desc: '有人一直把車站的時刻表換成一張很舊的版本。', steps: (a, b, w) => [[`核對${a}的時刻表`, { kind: 'inspect', spot: 'timetable', station: a }], [`核對${b}的時刻表`, { kind: 'inspect', spot: 'timetable', station: b }], [`把舊時刻表拿給${w.name}（${w.station}）看`, { kind: 'talk', npc: w.id }], ['回台北車站向林姐回報', { kind: 'talk', npc: 'lin' }]] },
+    { title: '消失的時刻表', desc: '有人一直把車站的時刻表換成一張很舊的版本。', steps: (a, b, w) => [[`核對${a}的時刻表`, { kind: 'inspect', spot: 'timetable', station: a }], [`核對${b}的時刻表`, { kind: 'inspect', spot: 'timetable', station: b }], [`把舊時刻表拿給${w.name}（${w.station}）看`, { kind: 'talk', npc: w.id }], ['回南港展覽館向林姐回報', { kind: 'talk', npc: 'lin' }]] },
     { title: '貼錯的地圖', desc: '周邊地圖上多了一個不存在的出口。', steps: (a, b, w) => [[`查看${a}的周邊地圖`, { kind: 'inspect', spot: 'areamap', station: a }], [`到${b}找那個出口`, { kind: 'reach', station: b }], [`問${w.name}（${w.station}）`, { kind: 'talk', npc: w.id }]] },
-    { title: '誰在搭最遠的車', desc: '有一張悠遊卡每天從一端坐到另一端，卡的主人卻從來沒有出站。', steps: (a, b, w) => [[`搭到${a}`, { kind: 'reach', station: a }], [`再搭到${b}`, { kind: 'reach', station: b }], [`把紀錄拿給${w.name}（${w.station}）看`, { kind: 'talk', npc: w.id }], ['回台北車站向林姐回報', { kind: 'talk', npc: 'lin' }]] },
+    { title: '誰在搭最遠的車', desc: '有一張悠遊卡每天從一端坐到另一端，卡的主人卻從來沒有出站。', steps: (a, b, w) => [[`搭到${a}`, { kind: 'reach', station: a }], [`再搭到${b}`, { kind: 'reach', station: b }], [`把紀錄拿給${w.name}（${w.station}）看`, { kind: 'talk', npc: w.id }], ['回南港展覽館向林姐回報', { kind: 'talk', npc: 'lin' }]] },
   ];
   const RARE = ['tracker', 'magnifier', 'recorder', 'detector', 'firstaid', 'hint'];
   function makeWeekly(wk) {
@@ -174,7 +174,7 @@ const Daily = (() => {
       if (s.daily.day) for (const id of ['daily_0', 'daily_1', 'daily_2']) { delete q.active[id]; delete q.done[id]; if (q.outcome) delete q.outcome[id]; if (q.grade) delete q.grade[id]; }
       const had = !!s.daily.day;
       s.daily = { day, n: 0, claimed: false, streak: s.daily.streak || 0, last: s.daily.last || '' };
-      if (typeof Phone !== 'undefined') Phone.msg('lin', had ? '今天的委託貼出來了，有空來台北車站大廳找我。' : '你好，我是城市委託所的林姐，在台北車站大廳。每天都有小委託，每週有一件大案子，有空來找我。', !had);
+      if (typeof Phone !== 'undefined') Phone.msg('lin', had ? '今天的委託貼出來了，有空來南港展覽館大廳找我。' : '你好，我是城市委託所的林姐，在南港展覽館大廳。每天都有小委託，每週有一件大案子，有空來找我。', !had);
     }
     if (s.weekly.week !== wk) {
       if (s.weekly.week) { delete q.active.weekly; delete q.done.weekly; if (q.grade) delete q.grade.weekly; }
@@ -187,6 +187,8 @@ const Daily = (() => {
       s.daily.defs = [0, 1, 2].map(i => { const d = makeDaily(r, i, s.visited || {}, kinds); d.reward = { money: Math.round((140 + i * 40) * m), xp: 60 + i * 20, ixp: 15 }; return d; });
     }
     if (!s.weekly.def) s.weekly.def = makeWeekly(wk);
+    // 委託所搬到南港展覽館：舊存檔裡已經產生的每週案件，回報地點的文字一起改
+    for (const st of (s.weekly.def && s.weekly.def.steps) || []) if (st.text) st.text = st.text.replace('回台北車站向林姐回報', '回南港展覽館向林姐回報');
     s.daily.defs.forEach((d, i) => { QUESTS['daily_' + i] = d; });
     QUESTS.weekly = s.weekly.def;
     saveState();
@@ -194,7 +196,7 @@ const Daily = (() => {
   function onDone(id) {
     if (/^daily_/.test(id)) {
       const s = S(); s.daily.n++; saveState();
-      if (s.daily.n >= 3) setTimeout(() => toast('<b>今日委託全部完成</b><span>去台北車站找林姐領全勤獎勵</span>', 'level'), 1500);
+      if (s.daily.n >= 3) setTimeout(() => toast('<b>今日委託全部完成</b><span>去南港展覽館找林姐領全勤獎勵</span>', 'level'), 1500);
     }
   }
   // 林姐的選單
