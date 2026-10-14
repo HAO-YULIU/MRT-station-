@@ -12,7 +12,10 @@
  *   arrive.mp3 列車進站、depart.mp3 列車離站。載入失敗時仍使用合成音。
  */
 const Sound = (() => {
-  let ctx = null, master = null, pa = null, paDry = null, enabled = true;
+  // 音量分四組（設定頁可以分開調）：busMain 總音量 ← master（音效）、busAmb（環境音、行駛聲、錄音）、busVoice（廣播、進站音樂）
+  let ctx = null, master = null, pa = null, paDry = null, enabled = true, busMain = null, busAmb = null, busVoice = null;
+  const vol = { main: 1, sfx: 1, amb: 1, voice: 1 };
+  try { Object.assign(vol, (JSON.parse(localStorage.getItem('mrtSettings') || '{}').vol) || {}); } catch (e) { /* 無法存取 */ }
   let noiseBuf = null;
 
   function ensure() {
@@ -22,9 +25,10 @@ const Sound = (() => {
       ctx = new AC();
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -18; comp.ratio.value = 4;
-      master = ctx.createGain();
-      master.gain.value = enabled ? 0.7 : 0;
-      master.connect(comp); comp.connect(ctx.destination);
+      busMain = ctx.createGain(); busMain.gain.value = enabled ? .7 * vol.main : 0; busMain.connect(comp); comp.connect(ctx.destination);
+      master = ctx.createGain(); master.gain.value = vol.sfx; master.connect(busMain);
+      busAmb = ctx.createGain(); busAmb.gain.value = vol.amb; busAmb.connect(busMain);
+      busVoice = ctx.createGain(); busVoice.gain.value = vol.voice; busVoice.connect(busMain);
       // 月台喇叭：濾掉高低頻＋殘響
       pa = ctx.createGain();
       const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 380;
@@ -32,8 +36,8 @@ const Sound = (() => {
       const verb = ctx.createConvolver(); verb.buffer = impulse(2.4, 2.6);
       const wet = ctx.createGain(); wet.gain.value = .45;
       paDry = ctx.createGain(); paDry.gain.value = .8;
-      pa.connect(hp); hp.connect(lp); lp.connect(paDry); paDry.connect(master);
-      lp.connect(verb); verb.connect(wet); wet.connect(master);
+      pa.connect(hp); hp.connect(lp); lp.connect(paDry); paDry.connect(busVoice);
+      lp.connect(verb); verb.connect(wet); wet.connect(busVoice);
       noiseBuf = makeNoise(3, 'pink');
     }
     if (ctx.state === 'suspended') ctx.resume();
@@ -120,7 +124,7 @@ const Sound = (() => {
     ensure();
     if (fileOk[line] === false) return synthChime(line);
     const a = new Audio(`assets/sounds/arrive-${line}.mp3`);
-    a.volume = .8;
+    a.volume = Math.min(1, .8 * vol.main * vol.voice);
     let done = false;
     const fallback = () => { if (done) return; done = true; fileOk[line] = false; synthChime(line); };
     a.addEventListener('error', fallback, { once: true });
@@ -161,7 +165,7 @@ const Sound = (() => {
   function playSample(name, vol, opts = {}) {
     const c = ensure(); if (!c) return null;
     const h = { g: c.createGain(), src: null, stopped: false };
-    h.g.gain.value = 0; h.g.connect(master);
+    h.g.gain.value = 0; h.g.connect(opts.bus || busAmb);   // 錄音多半是環境音、列車聲
     sample(name).then(buf => {
       if (!buf || h.stopped) return;
       const s = c.createBufferSource(); s.buffer = buf; s.loop = !!opts.loop;
@@ -247,12 +251,12 @@ const Sound = (() => {
     const roar = c.createBufferSource(), lp = c.createBiquadFilter(), rg = c.createGain();
     roar.buffer = brownBuf; roar.loop = true;
     lp.type = 'lowpass'; lp.frequency.value = 250; rg.gain.value = 0;
-    roar.connect(lp); lp.connect(rg); rg.connect(master); roar.start();
+    roar.connect(lp); lp.connect(rg); rg.connect(busAmb); roar.start();
     // 變頻馬達：兩個鋸齒波經帶通，聽起來像「嗚—」
     const m1 = c.createOscillator(), m2 = c.createOscillator(), bp = c.createBiquadFilter(), mg = c.createGain();
     m1.type = 'sawtooth'; m2.type = 'sawtooth'; m2.detune.value = 8;
     bp.type = 'bandpass'; bp.Q.value = 6; bp.frequency.value = 600; mg.gain.value = 0;
-    m1.connect(bp); m2.connect(bp); bp.connect(mg); mg.connect(master); m1.start(); m2.start();
+    m1.connect(bp); m2.connect(bp); bp.connect(mg); mg.connect(busAmb); m1.start(); m2.start();
     run = { roar, lp, rg, m1, m2, bp, mg, v: 0, clackT: 0, rec: playSample('train-run', .15, { loop: true, offset: Math.random(), fadeIn: .4 }) };
   }
   function setSpeed(v) {
@@ -269,8 +273,8 @@ const Sound = (() => {
     run.mg.gain.setTargetAtTime(traction, t, .2);
     // 軌道接縫「喀噹」
     if (v > .15 && t > run.clackT) {
-      noiseBurst(0, .09, 140, 1.2, .22 * v, master, .004);
-      noiseBurst(.11, .09, 120, 1.2, .2 * v, master, .004);
+      noiseBurst(0, .09, 140, 1.2, .22 * v, busAmb, .004);
+      noiseBurst(.11, .09, 120, 1.2, .2 * v, busAmb, .004);
       run.clackT = t + 1.6 / v;
     }
     run.v = v;
@@ -290,7 +294,7 @@ const Sound = (() => {
     if (amb && amb.kind === kind) return;
     if (amb) { const a = amb; a.g.gain.setTargetAtTime(0, now(), .5); if (a.rec) a.rec.stop(.6); setTimeout(() => a.nodes.forEach(n => { try { n.stop(); } catch (e) { /* */ } }), 2500); amb = null; }
     if (!kind) return;
-    const g = c.createGain(); g.gain.value = 0; g.connect(master);
+    const g = c.createGain(); g.gain.value = 0; g.connect(busAmb);
     const nodes = [];
     // 空調低鳴／風
     const n1 = noiseSrc(), f1 = c.createBiquadFilter();
@@ -326,11 +330,11 @@ const Sound = (() => {
     speechSynthesis.cancel();
     setTimeout(() => {
       const a = new SpeechSynthesisUtterance(zh);
-      a.lang = 'zh-TW'; a.rate = .92; a.voice = pickVoice('zh-TW') || null;
+      a.lang = 'zh-TW'; a.rate = .92; a.volume = Math.min(1, vol.main * vol.voice); a.voice = pickVoice('zh-TW') || null;
       speechSynthesis.speak(a);
       if (en) {
         const b = new SpeechSynthesisUtterance(en);
-        b.lang = 'en-US'; b.rate = .92; b.voice = pickVoice('en-US') || null;
+        b.lang = 'en-US'; b.rate = .92; b.volume = Math.min(1, vol.main * vol.voice); b.voice = pickVoice('en-US') || null;
         speechSynthesis.speak(b);
       }
     }, opts.chime ? 1100 : 0);
@@ -370,15 +374,22 @@ const Sound = (() => {
     },
     // 單音（地板鋼琴之類的互動藝術）
     note(freq, vol = .18) { if (enabled && ensure()) bell(freq, 0, vol, master, 1.4); },
-    died() { if (enabled && ensure()) playSample('died', .9, { fadeIn: .01 }); },
+    died() { if (enabled && ensure()) playSample('died', .9, { fadeIn: .01, bus: master }); },
     footstep, setBed,
     get debug() { return { bed: bed && bed.name, crickets: !!night }; },
     doorClose, doorOpen, arrivalChime, trainArrive, trainDepart, onboardChime, itemGet, click, gate, teleport,
     startRumble, setSpeed, stopRumble, ambience, announce,
     get enabled() { return enabled; },
+    get volumes() { return { ...vol }; },
+    // 設定頁：0–1
+    setVolumes(v) {
+      Object.assign(vol, v);
+      if (busMain) busMain.gain.value = enabled ? .7 * vol.main : 0;
+      if (master) master.gain.value = vol.sfx; if (busAmb) busAmb.gain.value = vol.amb; if (busVoice) busVoice.gain.value = vol.voice;
+    },
     toggle() {
       enabled = !enabled;
-      if (master) master.gain.value = enabled ? .7 : 0;
+      if (busMain) busMain.gain.value = enabled ? .7 * vol.main : 0;
       if (!enabled && window.speechSynthesis) speechSynthesis.cancel();
       return enabled;
     },

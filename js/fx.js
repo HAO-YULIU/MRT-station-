@@ -17,7 +17,7 @@ const FX = (() => {
   let ready = false, scene = null, layer = null, actionBtn = null, canvasEl = null;
   let warned = false;
   const safe = fn => function () { try { return fn.apply(this, arguments); } catch (e) { if (!warned) { warned = true; console.warn('[FX]', e); } } };
-  const reduced = () => (typeof reduceMotion === 'function' ? reduceMotion() : false);
+  const reduced = () => (typeof calmFx === 'function' ? calmFx() : typeof reduceMotion === 'function' ? reduceMotion() : false);
   const rnd = () => Math.random();
   const escH = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const S = () => Station3D;

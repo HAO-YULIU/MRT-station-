@@ -16,7 +16,7 @@ const World = (() => {
   // 視角：標準、遠景、近景、第一人稱、俯視
   const VIEWS = [{ name: '標準', dist: 4.4, pitch: .32 }, { name: '遠景', dist: 7.5, pitch: .45 }, { name: '近景', dist: 2.2, pitch: .2 }, { name: '第一人稱', fp: true, pitch: .3 }, { name: '俯視', dist: 9, pitch: .85 }];
   let interactions = [];
-  let last = 0, shake = 0, lastGateSide = 0;
+  let last = 0, shake = 0, lastGateSide = 0, calm = false;
   let onZoneChange = null, lastZoneKey = '';
   let gateCheck = null, blocked = null, speedMul = 1;
   // 車站裡的固定設施（柱子、椅子、櫃台……）
@@ -235,9 +235,11 @@ const World = (() => {
   /* ── 畫質：自動（依幀率調整解析度）／高／省電（解析度低、30 fps、人少一點） ── */
   let quality = 'auto'; try { quality = localStorage.getItem('quality') || 'auto'; } catch (e) { /* 無法存取 */ }
   const DPR = window.devicePixelRatio || 1;
-  const capFor = q => (q === 'high' ? Math.min(2, DPR) : q === 'low' ? Math.max(.6, Math.min(1, DPR) * .75) : Math.min(coarse ? 1.5 : 2, DPR));
+  // 低階手機（記憶體 ≤ 4GB 或 4 核以下）：自動模式一開始就用低一點的解析度
+  const lowEnd = coarse && ((navigator.deviceMemory && navigator.deviceMemory <= 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4));
+  const capFor = q => (q === 'high' ? Math.min(2, DPR) : q === 'low' ? Math.max(.6, Math.min(1, DPR) * .75) : Math.min(coarse ? (lowEnd ? 1.1 : 1.5) : 2, DPR));
   let pr = capFor(quality), lastRender = 0, lastBtn = 0;
-  const perf = { t0: 0, n: 0, fps: 60, changed: 0 };
+  const perf = { t0: 0, n: 0, fps: 60, changed: 0, slow: 0, strained: false };
   function setPR(v) { pr = v; if (renderer) { renderer.setPixelRatio(v); resize(); } }
   function adapt(now) {
     perf.n++;
@@ -246,6 +248,8 @@ const World = (() => {
     perf.fps = perf.n * 1000 / el; perf.t0 = now; perf.n = 0;
     if (quality !== 'auto') return;
     const cap = capFor('auto'), min = .75;   // 解析度太低時細線會閃，最低 .75
+    // 解析度已經降到最低還是很卡（連續約 6 秒低於 30 fps）：之後的車站人潮少一點
+    if (pr <= min + .01 && perf.fps < 30) { if (++perf.slow >= 3 && !perf.strained) { perf.strained = true; if (typeof toast === 'function') toast('<b>自動畫質</b><span>這台裝置有點吃力，已經自動減少車站裡的人潮</span>'); } } else perf.slow = 0;
     if (perf.fps < 40 && pr > min + .01) { setPR(Math.max(min, pr - .15)); perf.changed = now; }
     else if (perf.fps > 57 && pr < cap - .01 && now - perf.changed > 8000) { setPR(Math.min(cap, pr + .1)); perf.changed = now; }
   }
@@ -504,8 +508,8 @@ const World = (() => {
         py = Math.min(top, Math.max(floor + .7, py));
       } else py = Math.min(player.y + 3, py);
     }
-    const k = Math.min(1, dt * 7);
-    cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * k; cam.pos.z += (pz - cam.pos.z) * k;
+    const k = Math.min(1, dt * 7), ky = calm ? Math.min(1, dt * 3) : k;   // 減少晃動：鏡頭高度跟得慢一點（上下樓梯、電扶梯不會一直跳）
+    cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * ky; cam.pos.z += (pz - cam.pos.z) * k;
     camera.position.copy(cam.pos);
     // 搭車時鏡頭不再上下晃（手機上看會暈）
     const fp = VIEWS[cam.mode].fp && !player.sitting;
@@ -533,7 +537,7 @@ const World = (() => {
   // 自動轉鏡頭：一般情況都不轉（會暈），只剩必要的時候——剛走進廁所、站務室這種小房間，
   // 不轉的話鏡頭會被牆擋住、什麼都看不到。玩家自己剛拖過鏡頭就不動。
   function autoCamera(z, dt) {
-    if (player.auto) return;
+    if (player.auto || calm) return;   // 減少晃動：連進房間的轉向也不做
     const free = performance.now() - cam.lastDrag > 1500;
     let yaw = null;
     if (z.room) {
@@ -668,10 +672,13 @@ const World = (() => {
     onRecenter(fn) { recenterHooks.push(fn); },
     get running() { return runToggle || joyRun || !!keys.run; },
     get quality() { return quality; },
+    get strained() { return perf.strained; },
+    get fps() { return Math.round(perf.fps); },
     unstuck() { return unstuck(false); },
     get camYaw() { return cam.yaw; },
     get fps() { return Math.round(perf.fps); },
     get pixelRatio() { return pr; },
+    setCalm(v) { calm = !!v; },
     setQuality(q) { quality = q; try { localStorage.setItem('quality', q); } catch (e) { /* 無法存取 */ } setPR(capFor(q)); perf.changed = performance.now(); },
     groundAt: (x, z, y) => groundAt(x, z, y),
     // 拍照：把目前的畫面縮小成一張圖
