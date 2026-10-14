@@ -169,7 +169,7 @@ const Phone = (() => {
     if (a === 'quest') {
       const d = Daily.status(), act = Object.entries(s.quests.active);
       const tag = { main: '主線', side: '支線', event: '活動', secret: '秘密', timed: '限時', daily: '每日', weekly: '每週' };
-      return `<div class="ph-card"><b>今日委託 ${Math.min(3, d.n)} / 3</b><small>${d.claimed ? '全勤獎勵已領取' : d.n >= 3 ? '可以去找林姐領全勤獎勵' : '台北車站大廳的林姐'}　連續 ${d.streak} 天</small>
+      return `<div class="ph-card"><b>今日委託 ${Math.min(3, d.n)} / 3</b><small>${d.claimed ? '全勤獎勵已領取' : d.n >= 3 ? '可以去找林姐領全勤獎勵' : '南港展覽館大廳的林姐'}　連續 ${d.streak} 天</small>
         <small>每週案件：${d.weeklyDone ? '本週已完成' : Quests.isActive('weekly') ? '進行中' : '還沒接'}</small></div>
         ${act.length ? act.map(([id, st]) => { const q = QUESTS[id], step = q && q.steps[st.step]; return q ? `<div class="ph-card"><b><em class="ph-tag">${tag[q.type] || ''}</em>${esc(q.title)}</b><small>${step ? esc(step.text) : ''}</small>${Furniture.has('f_board') && step ? `<small>📌 ${esc(whereOf(step.goal, st))}</small>` : ''}</div>` : ''; }).join('') : empty('沒有進行中的任務。')}
         <p class="ph-note">已完成 ${Object.keys(s.quests.done).length} 個任務</p>`;

@@ -391,6 +391,7 @@ const Station3D = (() => {
   const SHOPS = {
     台北車站: { name: '捷運便利商店・地下街', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'soymilk', 'bread', 'bubbletea', 'pineapplecake', 'keychain', 'postcard', 'easycard'] },
     西門: { name: '西門町服飾＆小吃', sign: '服飾', color: '#e07a3a', items: ['bubbletea', 'coffee', 'chicken', 'sausage', 'camera'] },
+    南港展覽館: { name: '起點便利商店', sign: '便利商店', color: '#2a9d8f', items: ['onigiri', 'coffee', 'soymilk', 'bread', 'bubbletea', 'pineapplecake', 'keychain', 'postcard', 'easycard'] },
     南港: { name: '南港伴手禮', sign: '伴手禮', color: '#8a5a3a', items: ['pineapplecake', 'sunnycake', 'nougat', 'keychain', 'postcard', 'easycard'] },
     中山: { name: '中山花店＆選物', sign: '花店', color: '#d06a8a', items: ['flower', 'postcard'] },
     市政府: { name: '信義百貨', sign: '百貨', color: '#5a4030', items: ['coffee', 'onigiri', 'nougat'] },
@@ -459,6 +460,7 @@ const Station3D = (() => {
     const unpaid = { x0: -uw, x1: uw, z0: gateZ + 1.2, z1: gateZ + 14 };
     const gates = [-6, -3.6, -1.2, 1.2, 3.6, 6];
     const spots = [{ kind: 'notice', x: concourse.x0 + 8, y: 0, z: concourse.z0 + .9 }];
+    if (stationId === '南港展覽館') spots.push({ kind: 'welcome', x: 9.5, y: 0, z: concourse.z0 + 1.3 });   // 出發站：新手指南看板
     spots.push({ kind: 'elevator', x: concourse.x0 + 4, y: 0, z: concourse.z0 + 1.2, level: 'hall' });
     for (const P of platforms) spots.push({ kind: 'elevator', x: P.x - 24, y: P.y, z: P.z + 1.4, level: P.k });
     spots.push({ kind: 'ticket', x: unpaid.x0 + 4.4, y: 0, z: unpaid.z1 - 1.6 });
@@ -956,6 +958,19 @@ const Station3D = (() => {
       sign(plainSign(zh, en, '#f2c200', '#1c2126'), 2.2, .55, x, 3.1, U.z1 - .2, g);
     }
     sign(plainSign('付費區 → 月台', 'To platforms', '#23272b', '#fff'), 3, .75, 0, 3.3, L.gateZ + 1.6, g, Math.PI);
+    // 出發站的新手指南看板（大廳後牆）
+    { const wl = L.spots.find(sp => sp.kind === 'welcome');
+      if (wl) {
+        const wt = canvasTex(640, 320, x => {
+          x.fillStyle = '#f7f9fb'; x.fillRect(0, 0, 640, 320); x.fillStyle = '#0070bd'; x.fillRect(0, 0, 640, 64);
+          x.fillStyle = '#fff'; x.font = '700 34px "Noto Sans TC", sans-serif'; x.fillText('歡迎來到台北捷運', 22, 44); x.font = '20px "Barlow Semi Condensed", sans-serif'; x.fillText('Welcome · Start here', 440, 42);
+          const tips = [['🚇', '刷卡進閘門，搭電扶梯到月台'], ['↔️', '走到月台哪一側，就搭往那個方向的車'], ['📋', '每日委託：大廳的林姐'], ['🗺️', '到過的站可以傳送（每天免費 3 次）'], ['🧭', '迷路了就點資訊框上的 🧭']];
+          tips.forEach(([ic, t], i) => { x.font = '28px sans-serif'; x.fillText(ic, 24, 108 + i * 46); x.fillStyle = '#23272b'; x.font = '24px "Noto Sans TC", sans-serif'; x.fillText(t, 74, 106 + i * 46); x.fillStyle = '#fff'; });
+        });
+        box(3.3, 1.75, .08, M('#1f3a6b'), wl.x, 1.95, C.z0 + .05, g);
+        const wp = plane(3.1, 1.55, M('#ffffff', { map: wt, e: '#ffffff', ei: .15, po: 1 }), g); wp.position.set(wl.x, 1.95, C.z0 + .1);
+      }
+    }
     // 告示牌
     const nb = L.spots.find(sp => sp.kind === 'notice');
     box(2.2, 1.4, .08, M('#3a4148'), nb.x, 1.5, C.z0 + .05, g);
