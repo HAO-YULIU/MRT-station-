@@ -14,6 +14,12 @@ const Cloud = (() => {
     try {
       const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
       sb = mod.createClient(URL, KEY); readyRes(sb);
+      // 從大廳帶過來的一次性登入碼（#sd=…）：從主畫面 App 打開時，登入狀態不一定跟 Safari 共用，用它登入；用完立刻從網址拿掉
+      const sdm = location.hash.match(/(?:^#|&)sd=([^&]+)/);
+      if (sdm) {
+        history.replaceState(null, '', location.pathname + location.search);
+        try { await sb.auth.verifyOtp({ token_hash: decodeURIComponent(sdm[1]), type: 'magiclink' }); } catch (e) { /* 碼過期就照原本的登入狀態 */ }
+      }
       const { data } = await sb.auth.getSession();
       user = data && data.session ? data.session.user : null;
       if (!user) { state = 'guest'; return refresh(); }
