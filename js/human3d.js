@@ -957,16 +957,16 @@ const Human3D = (() => {
       }
       for (const A of rig.arms) {
         const p = A.s > 0 ? -sw : sw, k = A.cane ? .3 : 1;   // 拿拐杖／拖把的手擺動小
-        A.sh.rotation.x = p * (rig.armSwing + runA * .45) * amt * k - sit * .3 - (A.cane ? .12 * (1 - sit) : 0);
+        A.sh.rotation.x = p * (rig.armSwing + runA * .45) * amt * k - sit * .42 - (A.cane ? .12 * (1 - sit) : 0);
         A.sh.rotation.z = A.s * (runA * .12 * amt + .06 * (1 - amt));
         // 手往前擺時手肘多彎一點
         A.el.rotation.x = -.15 - (.22 + runA * .95) * amt - Math.max(0, -p) * .35 * amt * (1 - runA * .5) * k - sit * .5 + (A.cane ? .1 : 0);
       }
       const breath = Math.sin(t * 1.8) * .006, idle = (1 - amt) * (1 - sit);
-      rig.hips.position.y = rig.P.hipY + Math.abs(Math.cos(phase)) * (.035 + runA * .045) * amt - (.015 + runA * .02) * amt - sit * (rig.P.hipY - .48);
+      rig.hips.position.y = rig.P.hipY + Math.abs(Math.cos(phase)) * (.035 + runA * .045) * amt - (.015 + runA * .02) * amt - sit * (rig.P.hipY - .56);   // 坐下：屁股坐在椅面上（椅面高約 .5）
       rig.hips.rotation.z = Math.sin(t * .7) * .025 * idle + lean * .4;   // 站著換重心；轉彎往內傾
       rig.spine.rotation.y = sw * (.08 + runA * .06) * amt;
-      rig.spine.rotation.x = (.05 + runA * .16) * amt;
+      rig.spine.rotation.x = (.05 + runA * .16) * amt - sit * .1;   // 坐著往後靠一點
       rig.spine.rotation.z = lean * .6 - Math.sin(t * .7) * .02 * idle;
       rig.spine.scale.set(1 + breath, 1, 1 + breath);
       rig.headJ.rotation.y = -sw * .05 * amt + Math.sin(t * .37) * .12 * idle;   // 站著時偶爾左右看

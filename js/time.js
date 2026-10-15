@@ -65,22 +65,30 @@ const TaipeiTime = (() => {
     return 'night';
   }
 
-  /* 班距：每個方向固定 3 分鐘一班。各方向錯開不同秒數，
-   * 依台灣時間計算下一班列車還有幾秒進站（超過末班車回傳 null） */
+  /* 班距：13:00–18:00、20:00–22:00 每 1 分鐘一班，其他時間 3 分鐘一班。各方向錯開不同秒數，
+   * 依台灣時間計算下一班列車還有幾秒進站（超過末班車回傳 null）。
+   * 3 分鐘的班次剛好是 1 分鐘班次的一部分，所以尖峰開始、結束時不會跳號。 */
   const HEADWAY = 180;
+  const PEAKS = [[13, 18], [20, 22]];
+  const headwayAtSec = sec => { const h = (((sec + 8 * 3600) % 86400) + 86400) % 86400 / 3600; return PEAKS.some(([a, b]) => h >= a && h < b) ? 60 : 180; };
+  const headwayAt = () => headwayAtSec(Math.floor((Date.now() + offsetMs) / 1000));
   function hash(str) { let h = 7; for (const ch of str) h = (h * 31 + ch.codePointAt(0)) % 100003; return h; }
-  function nextTrainIn(stationId, line, terminal) {
+  function nextTrainIn(stationId, line, terminal, shift = 0) {
     const t = now();
     if (state(t) !== 'open') return null;
     const sec = Math.floor((Date.now() + offsetMs) / 1000);
-    const off = hash(stationId + line + terminal) % HEADWAY;
-    const eta = ((off - sec) % HEADWAY + HEADWAY) % HEADWAY;
+    const off = (hash(stationId + line + terminal) + shift) % HEADWAY;
+    let eta = null;
+    for (let k = 0, first = ((off - sec) % 60 + 60) % 60; k < 4; k++) {
+      const T = sec + first + k * 60;
+      if (headwayAtSec(T) === 60 || ((T - off) % HEADWAY + HEADWAY) % HEADWAY === 0) { eta = first + k * 60; break; }
+    }
     const toLast = minutesToLastTrain(t) * 60 - t.second;
-    return eta > toLast ? null : eta;
+    return eta == null || eta > toLast ? null : eta;
   }
 
   return {
-    now, state, nextTrainIn, HEADWAY, sky, minutesToFirstTrain, minutesToLastTrain,
+    now, state, nextTrainIn, HEADWAY, headwayAt, sky, minutesToFirstTrain, minutesToLastTrain,
     clock: (t = now()) => `${pad(t.hour)}:${pad(t.minute)}`,
     clockSec: (t = now()) => `${pad(t.hour)}:${pad(t.minute)}:${pad(t.second)}`,
     date: (t = now()) => `${t.year}/${pad(t.month)}/${pad(t.day)}（${t.weekday}）`,

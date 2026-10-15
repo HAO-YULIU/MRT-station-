@@ -1425,10 +1425,12 @@ const Station3D = (() => {
       // 時鐘
       const pct = M('#ffffff', { map: clockTex() });
       const signXs = P.ramps.map(r => r.xa - P.x - r.b * 2.6);   // 電扶梯口吊牌的位置，時鐘要避開
-      for (let x of [-10, 10]) { while (signXs.some(sx => Math.abs(sx - x) < 1.8)) x += Math.sign(x) * 1.5; box(.04, .35, .04, darkM, x, top - .17, 0, pg); for (const s of [-1, 1]) { const c = plane(.6, .6, pct, pg); c.position.set(x, top - .65, s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
+      // 電扶梯井上方沒有天花板：吊在天花板的東西（時鐘、監視器、喇叭）都要避開，不然會懸在半空中
+      const overWell = (x, z) => Math.abs(z) < 2.3 && P.ramps.some(r => { const a = Math.min(r.xa, r.xb) - P.x, b = Math.max(r.xa, r.xb) - P.x; return x > a - 1.9 && x < b + 1.9; });
+      for (let x of [-10, 10]) { while (overWell(x, 0) || signXs.some(sx => Math.abs(sx - x) < 1.8)) x -= Math.sign(x) * 1.5; box(.04, .35, .04, darkM, x, top - .17, 0, pg); for (const s of [-1, 1]) { const c = plane(.6, .6, pct, pg); c.position.set(x, top - .65, s * .03); c.rotation.y = s > 0 ? 0 : Math.PI; } }
       // 監視器、喇叭
-      for (const x of [-30, -16, 2, 16, 30]) { cam(P.x + x, P.y + top, P.z + 1.4); cam(P.x + x + 2, P.y + top, P.z - 1.4); }
-      for (const x of [-20, 0, 20]) speaker(P.x + x + 4, P.y + top, P.z);
+      for (const x of [-30, -16, 2, 16, 30]) { if (!overWell(x, 1.4)) cam(P.x + x, P.y + top, P.z + 1.4); if (!overWell(x + 2, -1.4)) cam(P.x + x + 2, P.y + top, P.z - 1.4); }
+      for (const x of [-20, 0, 20]) { const sx = overWell(x + 4, 0) ? x + 4 - Math.sign(x) * 13 : x + 4; if (!overWell(sx, 0)) speaker(P.x + sx, P.y + top, P.z); }
       // 夜間婦女候車區（+1 側地面＋吊牌）
       const wz = plane(2.2, .6, decal(M('#d870a0', { t: true, o: .55 }), 2), pg); wz.rotation.x = -Math.PI / 2; wz.position.set(-10.25, .014, 2.15 + PW);
       sign(plainSign('夜間婦女候車區', 'Women\'s waiting zone (night)', '#d870a0', '#fff'), 2, .45, -10.25, 2.4, 2.35 + PW, pg);
@@ -1498,6 +1500,16 @@ const Station3D = (() => {
       for (const ex of [e0, e1]) pos.push(ex, low, -W, ex, low, W, ex, high, W, ex, low, -W, ex, high, W, ex, high, -W);
       const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
       pg.add(new T.Mesh(geo, wm));
+    }
+    // 大廳地板上的電扶梯開口：兩側和盡頭圍一圈玻璃欄杆（地下車站）
+    if (P.y < 0) {
+      const glassM = M('#cfe3ec', { t: true, o: .28 }), topM = M('#9aa1a8', { m: .7, r: .3 }), Z = 2.02, dir = Math.sign(x1 - x0);
+      const s0 = x0 - dir * .12, s1 = x1 - dir * .05, len = Math.abs(s1 - s0), mid = (s0 + s1) / 2;
+      for (const sz of [-Z, Z]) {
+        box(len, .95, .03, glassM, mid, y1 + .55, sz, pg); box(len, .06, .08, topM, mid, y1 + 1.06, sz, pg); box(len, .08, .1, topM, mid, y1 + .04, sz, pg);
+        for (let i = 0, n = Math.max(2, Math.round(len / 1.6)); i <= n; i++) box(.05, 1.06, .05, topM, s0 + (s1 - s0) * i / n, y1 + .53, sz, pg);
+      }
+      box(.03, .95, 2 * Z, glassM, s0, y1 + .55, 0, pg); box(.08, .06, 2 * Z + .06, topM, s0, y1 + 1.06, 0, pg); box(.1, .08, 2 * Z, topM, s0, y1 + .04, 0, pg);
     }
     // 電扶梯方向指示（綠色箭頭＝可進入）
     const dirSign = (lz, toHall) => {
@@ -1916,10 +1928,10 @@ const Station3D = (() => {
     }
   }
   function trAd(car, m, slot, cx, w, side) {
-    const h = .3, y = 2.08, zi = side * (INZ - .012), u0 = (slot % 2) / 2, v1 = 1 - (slot >> 1) / 4, v0 = v1 - .25;
+    const h = .3, y = 2.08, zi = side * (INZ - .03),   /* 離外框遠一點：手機深度精度低，太近會一直閃 */ u0 = (slot % 2) / 2, v1 = 1 - (slot >> 1) / 4, v0 = v1 - .25;
     const xl = side > 0 ? cx + w / 2 : cx - w / 2, xr = side > 0 ? cx - w / 2 : cx + w / 2;
     trQuad(m.ad, [[xl, y - h / 2, zi], [xr, y - h / 2, zi], [xr, y + h / 2, zi], [xl, y + h / 2, zi]], [0, 0, -side], [[u0, v0], [u0 + .5, v0], [u0 + .5, v1], [u0, v1]], car);
-    box(w + .05, h + .05, .012, m.frame, cx, y, side * (INZ - .005), car);
+    box(w + .05, h + .05, .02, m.frame, cx, y, side * (INZ - .01), car);
   }
   // 車廂之間：端牆（貫通道開口）、車頂端蓋
   function trCarEnd(car, ex, m) {
