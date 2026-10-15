@@ -7,19 +7,20 @@
 const Cloud = (() => {
   const URL = 'https://umlnwzpmjxktfzjvcbts.supabase.co', KEY = 'sb_publishable_8J3VI8dijlCccHQbXPfCQQ_v_O0Au3w', GAME = 'mist';
   const HUB = 'https://hao-yuliu.github.io/escape-room/';
+  let readyRes = null; const ready = new Promise(r => { readyRes = r; });   // Supabase 用戶端準備好（沒登入也可以用來回報問題）
   let sb = null, user = null, name = '', state = 'off', lastSync = 0, timer = null, busy = false, remote = null;
   // state：off（還沒連上）／guest（沒登入）／on（已登入）／error
   async function init() {
     try {
       const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-      sb = mod.createClient(URL, KEY);
+      sb = mod.createClient(URL, KEY); readyRes(sb);
       const { data } = await sb.auth.getSession();
       user = data && data.session ? data.session.user : null;
       if (!user) { state = 'guest'; return refresh(); }
       state = 'on';
       try { const { data: p } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle(); name = (p && p.username) || ''; } catch (e) { /* 沒有角色資料也沒關係 */ }
       await pull();
-    } catch (e) { state = 'error'; }
+    } catch (e) { state = 'error'; readyRes(sb); }
     refresh();
   }
   const local = () => (typeof Game !== 'undefined' && Game.state) || null;
@@ -84,6 +85,12 @@ const Cloud = (() => {
     document.body.appendChild(m);
     m.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) { m.remove(); buttons[+b.dataset.i][1](); } });
   }
+  // 回報問題：沒登入也能送（user_id 留空）
+  async function report(row) {
+    const c = await Promise.race([ready, new Promise(r => setTimeout(() => r(null), 8000))]);
+    if (!c) return false;
+    try { const { error } = await c.from('bug_reports').insert({ game: GAME, user_id: user ? user.id : null, ...row }); return !error; } catch (e) { return false; }
+  }
   setTimeout(init, 300);
-  return { queue, push, statusHtml, action, refresh, get state() { return state; }, get user() { return user; } };
+  return { report, queue, push, statusHtml, action, refresh, get state() { return state; }, get user() { return user; } };
 })();

@@ -5,11 +5,12 @@
  */
 const Crowd = (() => {
   const T = THREE;
-  const PARTS = ['torso', 'head', 'hair', 'back', 'legL', 'legR', 'armL', 'armR', 'bag', 'hat', 'brim', 'phead'];   // hat／brim／phead：萬聖節變裝
+  const PARTS = ['torso', 'head', 'hair', 'back', 'legL', 'legR', 'armL', 'armR', 'bag', 'hat', 'brim', 'phead', 'neck', 'hips', 'handL', 'handR', 'shoeL', 'shoeR', 'eyes', 'shadow'];   // hat／brim／phead：萬聖節變裝
   const SKIN = ['#f2d0bc', '#e8bca4', '#d9a98e', '#c99278', '#f5dccf', '#b7856a'];
   const HAIR = ['#151515', '#2a1d18', '#3a2a1a', '#4a2a1a', '#6a4a30', '#8a7458', '#cfcfcf'];
   const TOPS = ['#f4f4f2', '#2a2a2a', '#3a4250', '#d8c3a5', '#4a5a7a', '#a33a3a', '#3d6b5a', '#e07a3a', '#3aa0c0', '#f2c200', '#7a5a7a', '#85888d', '#1f2d55', '#c8a888', '#e9edf2'];
   const BOTS = ['#2a3a5a', '#1a1a1a', '#6a5a4a', '#2a2e36', '#3a3a40', '#8fa7c4', '#b49c74'];
+  const SHOES = ['#1a1a1a', '#f2f2f0', '#5a4030', '#2a2e36', '#8a2a2a', '#d8d4cc'];
   const BAGS = ['#18181a', '#2c3e50', '#d8c9a8', '#8a6a4a', '#e07a8a', '#3a6a9a'];
   let meshes = null, people = [], L = null, root = null;
   const MAX = 130;
@@ -18,24 +19,44 @@ const Crowd = (() => {
 
   function build() {
     const mat = () => new T.MeshStandardMaterial({ color: '#ffffff', roughness: .85 });
+    // 兩隻眼睛（合成一個幾何）：沒有眼睛的臉看起來很空
+    function twoEyes() {
+      const a = new T.SphereGeometry(.016, 8, 6), pos = [];
+      for (const sx of [-1, 1]) { const g = a.clone().scale(1, 1.25, .6).translate(sx * .042, 1.612, .105); pos.push(g); }
+      const out = new T.BufferGeometry(), arr = [], nrm = [], idx = [];
+      let off = 0;
+      for (const g of pos) { const gi = g.index.array; arr.push(...g.attributes.position.array); nrm.push(...g.attributes.normal.array); for (const i of gi) idx.push(i + off); off += g.attributes.position.count; }
+      out.setAttribute('position', new T.Float32BufferAttribute(arr, 3)); out.setAttribute('normal', new T.Float32BufferAttribute(nrm, 3)); out.setIndex(idx);
+      return out;
+    }
+    // 圓潤的身體（膠囊、球體），不再是方塊人：身體、脖子、腰、手腳、手掌、鞋子分開上色
+    const cap = (r, len, rs = 6, ss = 12) => new T.CapsuleGeometry(r, len, rs, ss);
     const geo = {
-      torso: new T.CylinderGeometry(.16, .19, .62, 10).translate(0, 1.12, 0),
-      head: new T.SphereGeometry(.115, 12, 10).translate(0, 1.6, 0),
-      hair: new T.SphereGeometry(.125, 12, 8, 0, Math.PI * 2, 0, Math.PI * .55).translate(0, 1.62, -.01),
-      back: new T.BoxGeometry(.22, .34, .08).translate(0, 1.44, -.1),
-      legL: new T.BoxGeometry(.12, .82, .14).translate(0, -.41, 0),
-      legR: new T.BoxGeometry(.12, .82, .14).translate(0, -.41, 0),
-      armL: new T.BoxGeometry(.08, .6, .09).translate(0, -.3, 0),
-      armR: new T.BoxGeometry(.08, .6, .09).translate(0, -.3, 0),
-      bag: new T.BoxGeometry(.26, .32, .12).translate(0, 1.15, -.2),
+      torso: cap(.155, .36, 6, 14).scale(1, 1, .66).translate(0, 1.15, 0),
+      neck: new T.CylinderGeometry(.048, .055, .1, 10).translate(0, 1.5, 0),
+      head: new T.SphereGeometry(.115, 16, 12).scale(.93, 1.06, 1).translate(0, 1.6, 0),
+      hair: new T.SphereGeometry(.125, 16, 10, 0, Math.PI * 2, 0, Math.PI * .6).scale(.96, 1.05, 1.03).translate(0, 1.62, -.012),
+      back: cap(.1, .18, 4, 10).scale(1.05, 1, .45).translate(0, 1.44, -.1),
+      hips: new T.CylinderGeometry(.15, .16, .16, 14).scale(1, 1, .7).translate(0, .86, 0),
+      legL: cap(.065, .66, 4, 10).scale(1, 1, .95).translate(0, -.4, 0),
+      legR: cap(.065, .66, 4, 10).scale(1, 1, .95).translate(0, -.4, 0),
+      shoeL: new T.SphereGeometry(.07, 10, 8).scale(1, .55, 1.7).translate(0, -.8, .035),
+      shoeR: new T.SphereGeometry(.07, 10, 8).scale(1, .55, 1.7).translate(0, -.8, .035),
+      armL: cap(.042, .48, 4, 8).translate(0, -.29, 0),
+      armR: cap(.042, .48, 4, 8).translate(0, -.29, 0),
+      handL: new T.SphereGeometry(.045, 10, 8).scale(.9, 1.1, .8).translate(0, -.6, 0),
+      handR: new T.SphereGeometry(.045, 10, 8).scale(.9, 1.1, .8).translate(0, -.6, 0),
+      bag: cap(.11, .12, 4, 10).scale(1.05, 1, .5).translate(0, 1.15, -.2),
       hat: new T.ConeGeometry(.13, .34, 12).translate(0, 1.9, -.01),
       brim: new T.CylinderGeometry(.24, .24, .015, 16).translate(0, 1.73, 0),
       phead: new T.SphereGeometry(.19, 14, 10).scale(1.08, .92, 1.02).translate(0, 1.62, 0),
+      eyes: twoEyes(),
+      shadow: new T.CircleGeometry(.32, 18).rotateX(-Math.PI / 2).translate(0, .012, 0),   // 腳下的圓形陰影，站得比較穩
     };
     root = new T.Group();
     meshes = {};
     for (const k of PARTS) {
-      const m = new T.InstancedMesh(geo[k], mat(), MAX);
+      const m = new T.InstancedMesh(geo[k], k === 'shadow' ? new T.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: .22, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }) : mat(), MAX);
       m.instanceMatrix.setUsage(T.DynamicDrawUsage);
       m.frustumCulled = false; m.count = 0;
       m.setColorAt(0, col.set('#ffffff'));
@@ -117,10 +138,12 @@ const Crowd = (() => {
       const k = people.length - 1;
       meshes.torso.setColorAt(k, col.set(TOPS[(Math.random() * TOPS.length) | 0]));
       meshes.armL.setColorAt(k, col); meshes.armR.setColorAt(k, col);
-      meshes.head.setColorAt(k, col.set(SKIN[(Math.random() * SKIN.length) | 0]));
+      meshes.head.setColorAt(k, col.set(SKIN[(Math.random() * SKIN.length) | 0])); meshes.neck.setColorAt(k, col); meshes.handL.setColorAt(k, col); meshes.handR.setColorAt(k, col);
       const hc = old ? '#cfcfcf' : HAIR[(Math.random() * (HAIR.length - 1)) | 0];
       meshes.hair.setColorAt(k, col.set(hc)); meshes.back.setColorAt(k, col);
-      meshes.legL.setColorAt(k, col.set(BOTS[(Math.random() * BOTS.length) | 0])); meshes.legR.setColorAt(k, col);
+      meshes.legL.setColorAt(k, col.set(BOTS[(Math.random() * BOTS.length) | 0])); meshes.legR.setColorAt(k, col); meshes.hips.setColorAt(k, col);
+      meshes.shoeL.setColorAt(k, col.set(SHOES[(Math.random() * SHOES.length) | 0])); meshes.shoeR.setColorAt(k, col);
+      meshes.eyes.setColorAt(k, col.set('#1c1712')); meshes.shadow.setColorAt(k, col.set('#000000'));
       meshes.bag.setColorAt(k, col.set(BAGS[(Math.random() * BAGS.length) | 0]));
       meshes.hat.setColorAt(k, col.set('#2a1a3a')); meshes.brim.setColorAt(k, col); meshes.phead.setColorAt(k, col.set('#e8741c'));
     }
@@ -167,9 +190,12 @@ const Crowd = (() => {
       meshes.hair.setMatrixAt(k, p.cost === 'pumpkin' ? ZERO : Bc);
       meshes.hat.setMatrixAt(k, p.cost === 'witch' ? Bc : ZERO); meshes.brim.setMatrixAt(k, p.cost === 'witch' ? Bc : ZERO); meshes.phead.setMatrixAt(k, p.cost === 'pumpkin' ? Bc : ZERO);
       meshes.back.setMatrixAt(k, p.girl ? Bc : ZERO);
+      meshes.neck.setMatrixAt(k, Bc); meshes.hips.setMatrixAt(k, Bc);
+      meshes.head.getMatrixAt(k, tmp); meshes.eyes.setMatrixAt(k, p.cost === 'pumpkin' ? ZERO : tmp);   // 眼睛跟著頭（低頭看手機也一起）
+      meshes.shadow.setMatrixAt(k, part.copy(base));
       meshes.bag.setMatrixAt(k, p.bag ? Bc : ZERO);
-      for (const [m, sx, a] of [[meshes.legL, -.085, sw], [meshes.legR, .085, -sw]]) m.setMatrixAt(k, part.copy(Bc).multiply(tmp.makeTranslation(sx, .82, 0)).multiply(rot.makeRotationX(a)));
-      for (const [m, sx, a] of [[meshes.armL, -.22, -sw * .8], [meshes.armR, .22, sw * .8]]) m.setMatrixAt(k, part.copy(Bc).multiply(tmp.makeTranslation(sx, 1.4, 0)).multiply(rot.makeRotationX(a + (p.phoneLook && !p.speedNow && sx > 0 ? -1.1 : 0))));
+      for (const [m, f, sx, a] of [[meshes.legL, meshes.shoeL, -.085, sw], [meshes.legR, meshes.shoeR, .085, -sw]]) { part.copy(Bc).multiply(tmp.makeTranslation(sx, .82, 0)).multiply(rot.makeRotationX(a)); m.setMatrixAt(k, part); f.setMatrixAt(k, part); }
+      for (const [m, hnd, sx, a] of [[meshes.armL, meshes.handL, -.21, -sw * .8], [meshes.armR, meshes.handR, .21, sw * .8]]) { part.copy(Bc).multiply(tmp.makeTranslation(sx, 1.42, 0)).multiply(rot.makeRotationX(a + (p.phoneLook && !p.speedNow && sx > 0 ? -1.1 : 0))).multiply(tmp.makeRotationZ(sx < 0 ? .06 : -.06)); m.setMatrixAt(k, part); hnd.setMatrixAt(k, part); }
     });
     for (const k of PARTS) meshes[k].instanceMatrix.needsUpdate = true;
   }
@@ -201,5 +227,5 @@ const Crowd = (() => {
   }
   // 玩家不能穿過路人
   function blocks(x, z, y) { for (const p of people) if (!p.hidden && Math.abs(p.y - y) < .6 && (p.x - x) ** 2 + (p.z - z) ** 2 < .2) return true; return false; }
-  return { spawn, clear, tick, blocks, doors, get count() { return people.filter(p => !p.hidden).length; } };
+  return { spawn, clear, tick, blocks, doors, get _people() { return people; }, get count() { return people.filter(p => !p.hidden).length; } };
 })();

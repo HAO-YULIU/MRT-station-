@@ -1341,6 +1341,8 @@ function init() {
   $('#titleClock').textContent = `台灣時間 ${TaipeiTime.date()} ${TaipeiTime.clockSec()}`;
 
   $('#titleSettings').onclick = () => Settings.open();
+  $('#btnReport').onclick = () => Report.open();
+  $('#btnShare').onclick = () => Share.shot();
   $('#btnMap').onclick = openMap;
   $('#btnBag').onclick = openBag;
   $('#btnPhone').onclick = () => Phone.open();
