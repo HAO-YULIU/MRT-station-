@@ -3,7 +3,7 @@
  * 這個檔案最先載入，才收得到一開始發生的錯誤
  */
 const Report = (() => {
-  const VERSION = '2026.10.15b';
+  const VERSION = '2026.10.15c';   // 跟 version.json 一起改：玩家手機上是舊版時會提示更新
   const errs = [];
   const push = m => { errs.push({ t: new Date().toISOString().slice(11, 19), m: String(m).slice(0, 300) }); if (errs.length > 10) errs.shift(); };
   addEventListener('error', e => push(`${e.message} @ ${(e.filename || '').split('/').pop()}:${e.lineno}`));
@@ -49,5 +49,5 @@ const Report = (() => {
     if (ok) { st.textContent = ''; m.querySelector('#repMsg').value = ''; m.hidden = true; if (typeof toast === 'function') toast('<b>🐞 已送出，謝謝你</b><span>我們會盡快看看發生了什麼事</span>'); }
     else { btn.disabled = false; st.textContent = '現在送不出去（可能沒有網路），等一下再試一次。'; }
   }
-  return { open, info, get errors() { return errs.slice(); } };
+  return { open, info, VERSION, get errors() { return errs.slice(); } };
 })();

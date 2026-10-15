@@ -6,6 +6,8 @@ const Settings = (() => {
   const DEF = { vol: { main: 1, sfx: 1, amb: 1, voice: 1 }, font: 'normal', calm: false };
   let cur = JSON.parse(JSON.stringify(DEF));
   try { const s = JSON.parse(localStorage.getItem(KEY) || '{}'); cur = { ...cur, ...s, vol: { ...cur.vol, ...(s.vol || {}) } }; } catch (e) { /* 無法存取 */ }
+  // 手機預設打開「減少晃動」（觸控螢幕上鏡頭跳動最容易暈）；之前存過的設定也幫忙打開一次，之後玩家可以自己關掉
+  if (cur.calmV !== 2) { if (matchMedia('(pointer: coarse)').matches) cur.calm = true; cur.calmV = 2; try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch (e) { /* 無法存取 */ } }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch (e) { /* 無法存取 */ } };
   const get = k => cur[k];
   function apply() {

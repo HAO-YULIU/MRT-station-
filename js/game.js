@@ -512,7 +512,7 @@ function buildPanel() {
 const panelCache = {};
 function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = html; $('#' + id).innerHTML = html; } }
 
-/* ── 車站控制：各月台兩側依 3 分鐘班距自動進車 ── */
+/* ── 車站控制：各月台兩側依班距自動進車（尖峰 1 分鐘、其他 3 分鐘） ── */
 let ctl = null;
 let lastDaily = 0;
 function startStation(stationId, carry) {
@@ -573,8 +573,7 @@ function sideDirs(P, side) {
   // 終點站兩側開往同一方向：兩側錯開半個班距
   const dup = P.sides[1] === P.sides[-1] || (P.sides[1][0] && P.sides[-1][0] && P.sides[1][0].terminal === P.sides[-1][0].terminal);
   return dirs.map(d => {
-    let eta = TaipeiTime.nextTrainIn(ctl.stationId, d.line, d.terminal);
-    if (eta != null && dup && side < 0) eta = (eta + 90) % TaipeiTime.HEADWAY;
+    const eta = TaipeiTime.nextTrainIn(ctl.stationId, d.line, d.terminal, dup && side < 0 ? 90 : 0);   // 90 秒：3 分鐘班距的一半，也是 1 分鐘班距的一半（再多一圈）
     return { ...d, eta };
   }).sort((a, b) => (a.eta ?? 1e9) - (b.eta ?? 1e9));
 }
@@ -600,7 +599,7 @@ function tickStation() {
         const t = MRT.label(d.terminal, d.line);
         setTimeout(() => alive(id) && Sound.announce(`往${t.zh}的列車即將進站，請勿超越月台警戒線。`, `The train to ${t.en} is now arriving.`), 4200);
       }
-      if (d.eta <= 7 || (ctl.chimed.has(key) && d.eta > 170)) {
+      if (d.eta <= 7 || (ctl.chimed.has(key) && d.eta > TaipeiTime.headwayAt() - 10)) {
         ctl.busy.add(key);
         trainCycle(P.k, side, d, id);
       }

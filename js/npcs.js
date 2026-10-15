@@ -1384,7 +1384,7 @@ const Passengers = (() => {
         let x = tx + cx + (rnd() - .5) * 16;
         if (S.DOORS.some(d => Math.abs(x - (tx + d)) < .9)) x += 1.4;
         const sideZ = rnd() < .5 ? -1 : 1;
-        const z = sitting ? tz + sideZ * 1.12 : tz + (rnd() - .5) * .9;
+        const z = sitting ? tz + sideZ * 1.24 : tz + (rnd() - .5) * .9;
         const C = CROWD_TYPES[type === 'storyteller' ? 'elder' : type];
         const look = { skin: ['#e9c0a8', '#dcae95', '#cf9f86', '#f2cdb9'][(rnd() * 4) | 0], hairColor: '#1a1a1a', height: .94 + rnd() * .1, ...C.gen(rnd) };
         look.hair = look.girl ? ['long', 'bob', 'bun'][(rnd() * 3) | 0] : ['short', 'mush'][(rnd() * 2) | 0];
@@ -1438,7 +1438,7 @@ const Passengers = (() => {
     const t = World.trainOf(pp.x, pp.z, pp.y); if (!t) return null;
     const tx = t.P.x + t.x, tz = t.P.z + t.side * S.TRACK;
     if (S.DOORS.some(d => Math.abs(pp.x - (tx + d)) < 1)) return null;
-    const sideZ = pp.z >= tz ? 1 : -1, z = tz + sideZ * 1.12;
+    const sideZ = pp.z >= tz ? 1 : -1, z = tz + sideZ * 1.24;   // 坐進椅子裡（靠著椅背），不是坐在椅子邊緣
     if (list.some(p => p.sitting && Math.abs(p.z - z) < .3 && Math.abs(p.x - pp.x) < .6)) return null;
     return { x: pp.x, z, face: sideZ > 0 ? Math.PI : 0 };
   }

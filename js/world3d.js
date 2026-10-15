@@ -16,7 +16,7 @@ const World = (() => {
   // 視角：標準、遠景、近景、第一人稱、俯視
   const VIEWS = [{ name: '標準', dist: 4.4, pitch: .32 }, { name: '遠景', dist: 7.5, pitch: .45 }, { name: '近景', dist: 2.2, pitch: .2 }, { name: '第一人稱', fp: true, pitch: .3 }, { name: '俯視', dist: 9, pitch: .85 }];
   let interactions = [];
-  let last = 0, shake = 0, lastGateSide = 0, calm = false;
+  let last = 0, shake = 0, lastGateSide = 0, calm = false, camTY = null;
   let onZoneChange = null, lastZoneKey = '';
   let gateCheck = null, blocked = null, speedMul = 1;
   // 車站裡的固定設施（柱子、椅子、櫃台……）
@@ -126,8 +126,8 @@ const World = (() => {
       if (inR(null, C.x0 + .3, C.x1 - .3, C.z0 + .3, layout.gateZ - .05)) {
         const hole = layout.platforms.some(P => P.ramps.some(r => {
           const a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
-          const hx0 = r.b > 0 ? a : a + .3, hx1 = r.b > 0 ? b - .3 : b;
-          return x > hx0 && x < hx1 && Math.abs(z - r.z) < 1.9;
+          const hx0 = r.b > 0 ? a : a + .3, hx1 = r.b > 0 ? b - .3 : b, rail = P.y < 0 ? .3 : 0;   // 地下車站的開口有玻璃欄杆：不能貼著欄杆站進去
+          return x > hx0 - (r.b > 0 ? rail : 0) && x < hx1 + (r.b < 0 ? rail : 0) && Math.abs(z - r.z) < 1.9 + rail;
         }));
         if (!hole) consider(0);
       }
@@ -477,7 +477,10 @@ const World = (() => {
     let sitLook = false, lookAt = null, hideMe = false;
     const dist = inTrain ? Math.min(cam.dist, 2.6) : z.room ? Math.min(cam.dist, 2.2) : cam.dist;
     const pitch = inTrain ? Math.min(cam.pitch, .12) : cam.pitch;
-    const tx = player.x, ty = player.y + 1.5, tz = player.z;
+    // 鏡頭看的高度：平滑跟著角色（上下樓梯、電扶梯時畫面不會一格一格跳）；傳送、換場時直接對上
+    const tyRaw = player.y + 1.5;
+    camTY = camTY == null || Math.abs(tyRaw - camTY) > 2.5 ? tyRaw : camTY + (tyRaw - camTY) * Math.min(1, dt * (calm ? 2.5 : 4));
+    const tx = player.x, ty = camTY, tz = player.z;
     let px = tx + Math.sin(cam.yaw) * Math.cos(pitch) * dist;
     let py = ty + Math.sin(pitch) * dist;
     let pz = tz + Math.cos(cam.yaw) * Math.cos(pitch) * dist;
@@ -505,8 +508,15 @@ const World = (() => {
         px = tx + (px - tx) * k; pz = tz + dzc * k; py = ty + (py - ty) * k;
       }
       pz = Math.min(z.P.z + lim, Math.max(z.P.z - lim, pz));
+      // 月台兩端：鏡頭不穿過端牆跑到外面（外面什麼都沒有）
+      const limX = S.LEN / 2 - .35, dxc = px - tx;
+      if (Math.abs(px - z.P.x) > limX && Math.abs(dxc) > 1e-3) {
+        const k = Math.max(0, Math.min(1, (Math.sign(dxc) * limX + z.P.x - tx) / dxc));
+        px = tx + dxc * k; pz = tz + (pz - tz) * k; py = ty + (py - ty) * k;
+      }
+      px = Math.min(z.P.x + limX, Math.max(z.P.x - limX, px));
       // 被拉得太近：沿著月台方向退後，從斜上方看，不會貼在角色身上
-      if (Math.hypot(px - tx, pz - tz) < 2.2) { const sx = Math.sin(cam.yaw) >= 0 ? 1 : -1; px = tx + sx * Math.sqrt(Math.max(0, 2.2 ** 2 - (pz - tz) ** 2)); py = Math.max(py, player.y + 2.1); }
+      { const d = Math.hypot(px - tx, pz - tz); if (d < 2.2) py = Math.max(py, ty + (2.2 - d) * .9); }   // 被牆擋得太近：慢慢抬高、從上面往下看（不再左右跳）
       py = Math.min(player.y + (z.P.under ? S.PH - .45 : S.PHE - .5), py);
       if (z.P.under) for (const r of z.P.ramps) {   // 在電扶梯底下：鏡頭壓低，不穿過電扶梯
         if (Math.abs(player.z - r.z) < 1.95 && player.x > Math.min(r.xa, r.xb) && player.x < Math.max(r.xa, r.xb)) {
@@ -547,7 +557,7 @@ const World = (() => {
         py = Math.min(top, Math.max(floor + .7, py));
       } else py = Math.min(player.y + 3, py);
     }
-    const k = Math.min(1, dt * 7), ky = calm ? Math.min(1, dt * 3) : k;   // 減少晃動：鏡頭高度跟得慢一點（上下樓梯、電扶梯不會一直跳）
+    const k = Math.min(1, dt * (calm ? 3.5 : 5)), ky = Math.min(1, dt * (calm ? 2.5 : 3.5));   // 跟得稍慢一點：被牆擋住時鏡頭滑過去，不會瞬間跳位   // 減少晃動：鏡頭高度跟得慢一點（上下樓梯、電扶梯不會一直跳）
     cam.pos.x += (px - cam.pos.x) * k; cam.pos.y += (py - cam.pos.y) * ky; cam.pos.z += (pz - cam.pos.z) * k;
     camera.position.copy(cam.pos);
     // 搭車時鏡頭不再上下晃（手機上看會暈）

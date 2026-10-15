@@ -8,6 +8,23 @@ const Share = (() => {
   addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
   addEventListener('appinstalled', () => { installEvt = null; if (typeof toast === 'function') toast('<b>已加到主畫面</b><span>之後可以從桌面直接打開迷霧</span>'); });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+  // 新版檢查：打開時、從背景切回來時（手機桌面上的 App 常常不會重新載入），版本不同就提示更新；還在標題畫面就直接更新
+  let lastCheck = 0, told = false;
+  async function checkVersion() {
+    if (Date.now() - lastCheck < 60000 || typeof Report === 'undefined') return; lastCheck = Date.now();
+    try {
+      const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return;
+      const { v } = await r.json(); if (!v || v === Report.VERSION) return;
+      const onTitle = document.getElementById('title') && document.getElementById('title').classList.contains('active');
+      if (onTitle) { location.reload(); return; }
+      if (told) return; told = true;
+      const btn = document.createElement('button'); btn.className = 'update-bar'; btn.innerHTML = '🔄 有新版本，點這裡更新<small>（進度會保留）</small>';
+      btn.onclick = () => { try { if (typeof saveState === 'function') saveState(); } catch (e) { /* ignore */ } location.reload(); };
+      document.body.appendChild(btn);
+    } catch (e) { /* 沒網路 */ }
+  }
+  addEventListener('load', () => setTimeout(checkVersion, 1500));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
   const standalone = () => matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true;
   const ios = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 
