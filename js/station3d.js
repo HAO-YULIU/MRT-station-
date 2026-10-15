@@ -813,7 +813,7 @@ const Station3D = (() => {
       for (const x of [-31, 31, -21, 23.5]) { box(1.8, .08, .45, M('#8a9097', { m: .5 }), x, .45, 0, pg); box(1.8, .4, .06, M('#8a9097', { m: .5 }), x, .68, -.2, pg); for (const lx of [-.8, .8]) box(.06, .45, .4, M('#5d6368', { m: .5 }), x + lx, .225, 0, pg); solid(P.x + x, P.z, 1.8, .5, P.y); for (const sx of [-.45, .45]) L.seats.push({ x: P.x + x + sx, y: P.y, z: P.z + .02, face: 0, stand: { x: P.x + x + sx, z: P.z + .75 } }); }
       // 站名吊牌
       const stn = stationSignTex(L.stationId, P.line);
-      for (const x of [-15, 15]) sign(stn, 2.4, .6, x, 2.95, 0, pg);
+      for (const x of [-26.2, 26.2]) sign(stn, 2.15, .54, x, 2.95, 0, pg);   // 吊在月台兩端：避開電扶梯、樓梯穿過天花板的地方和電梯
       // 電扶梯與樓梯
       for (const r of P.ramps) buildRamp(pg, P, r, L);
     }
