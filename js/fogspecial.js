@@ -46,7 +46,7 @@ const FogSpecial = (() => {
     ryosui: { zh: '兩水', en: 'Ryōsui', mood: 'ghost' },
     seihei: { zh: '清平', en: 'Seihei', mood: 'fog' },
   };
-  function ghostTrain(K) {
+  function ghostTrain(K, d = {}) {
     const ev = K.ev;
     K.hint('廣播說，每十分鐘會有一班列車進站。可是沒有說要去哪裡。');
     K.clue('迷霧列車：每 10 分鐘一班，進站前一分鐘會廣播。');
@@ -55,9 +55,9 @@ const FogSpecial = (() => {
       if (busy || K.dead || K.r.escaped) return;
       const t = TaipeiTime.now(), slot = Math.floor((t.hour * 60 + t.minute) / 10);
       if (t.minute % 10 === 9 && t.second < 2 && ev.ann !== slot) { ev.ann = slot; announce(K); }
-      if (t.minute % 10 === 0 && slot !== lastSlot && t.second < 3) { lastSlot = slot; busy = true; arrive(K).then(() => { busy = false; }); }
+      if (t.minute % 10 === 0 && slot !== lastSlot && t.second < 3) { lastSlot = slot; busy = true; arrive(K, d.dest).then(() => { busy = false; }); }
     });
-    K.forceTrain = () => { if (!busy) { busy = true; announce(K); setTimeout(() => arrive(K).then(() => { busy = false; }), 4000); } };
+    K.forceTrain = () => { if (!busy) { busy = true; announce(K); setTimeout(() => arrive(K, d.dest).then(() => { busy = false; }), 4000); } };
   }
   function announce(K) {
     K.sound('radio');
@@ -65,7 +65,7 @@ const FogSpecial = (() => {
     K.toast(`<b>📢 「${LINES[P.line].zh}月台，列車即將進站」</b><span>廣播沒有說目的地。月台的看板只顯示「往 ――」。</span>`, 'warn');
   }
   function platformFor(K) { const z = World.zone(); return z.P || K.L.platforms[0]; }
-  async function arrive(K) {
+  async function arrive(K, fixedDest) {
     const L = K.L, P = platformFor(K), k = L.platforms.indexOf(P), side = 1;
     const tr = World.spawnTrain(k, side, P.line, 1, null); tr.fog = true;
     K.tintTrain(tr, '#222', '#ff4030');
@@ -73,7 +73,7 @@ const FogSpecial = (() => {
     await World.trainArrive(tr, 7000);
     if (!FogCity.started) return;
     Sound.doorOpen(); await World.setDoors(tr, true);
-    const dest = Object.keys(GHOSTS)[(Math.random() * 5) | 0];
+    const dest = GHOSTS[fixedDest] ? fixedDest : Object.keys(GHOSTS)[(Math.random() * 5) | 0];   // 每一站的迷霧列車，只開往自己的那一座鬼站
     K.toast('<b>🚃 迷霧列車到了</b><span>車門開著，車廂裡的燈是紅色的。45 秒後關門。</span>', 'level');
     const end = performance.now() + 45000;
     while (performance.now() < end) {
@@ -125,7 +125,8 @@ const FogSpecial = (() => {
     };
     K.toast(`<b>🚉 ${g.zh}</b><span>這個站不在任何一張路線圖上。</span>`, 'warn');
     const far = () => { for (let i = 0; i < 20; i++) { const p = FogEvents.at(K, K.rnd() < .5 ? 'c' : 'p'); if (K.dist(p, World.player) > 14) return p; } return FogEvents.at(K, 'pend'); };
-    const finishGhost = (text) => K.done('good', { title: `逃離${g.zh}`, text, escape: true, delay: 2500, gold: 1 });
+    if (ev.dmg0 == null) { ev.dmg0 = K.r.dmg; saveState(); }
+    const finishGhost = (text) => K.done(K.r.dmg - ev.dmg0 === 0 ? 'perfect' : K.r.dmg - ev.dmg0 < 45 ? 'good' : 'bad', { title: `逃離${g.zh}`, text, escape: true, delay: 2500, gold: 1 });
     const pieces = (n, label, name, kind, texts, onAll, o = {}) => {
       ev.got = ev.got || 0;
       K.spread(n, { rnd: K.rnd, minD: 10 }).forEach((pt, i) => {
@@ -173,7 +174,7 @@ const FogSpecial = (() => {
       });
     }
   }
-  for (let i = 1; i <= 5; i++) FogEvents.def('train', 'ft' + i, { base: 'ghosttrain' });
+  Object.keys(GHOSTS).forEach((dest, i) => FogEvents.def('train', 'ft' + (i + 1), { base: 'ghosttrain', dest }));
   FogEvents.def('special', 'ghost_station', { base: 'ghoststation' });
 
   /* ════════ 南港展覽館《第零展區》 ════════ */
@@ -459,6 +460,51 @@ const FogSpecial = (() => {
     }
   }
   FogEvents.def('special', 'sp_crossing', { base: 'crossing' });
+
+  /* ════════ 機場線（開通以後才有的車站）：秀蔅留下的光 ════════ */
+  FogEvents.def('special', 'a_light', K => ({ base: 'collect', set: 'a_light', setName: '留在路網上的光', icon: '✨', gold: 1, hint: '月台和大廳裡，有幾點很小的光在飄。',
+    items: [
+      { name: '第一點光', kind: 'shard', text: '光裡有一個聲音：「這條路線，是我走的時候留下來的。」是秀蔅。' },
+      { name: '第二點光', kind: 'shard', text: '「2087 年的機場，已經沒有人記得以前的末班車了。可是這條線記得。」' },
+      { name: '第三點光', kind: 'shard', hidden: true, text: '「謝謝你一直走到這裡。我在另一頭，看得到你的燈。」' },
+    ],
+    complete: '三點光聚在一起，變成一盞很小的提燈，懸在半空中，亮了一下，往西邊飄走了——往機場的方向，往 2087 年的方向。' }));
+
+  /* ════════ 霧夜短篇：名字、開場、結局 ════════ */
+  const ghostEnd = (zh, perfect) => ({ perfect, good: `你在${zh}受了傷，但你回來了。手裡的車票上，站名已經褪成一片空白。`, bad: `你幾乎是爬著回來的。之後好幾個晚上，你都會夢見${zh}的月台，夢裡你一直在等一班回程車。` });
+  const ghostTale = (dest, name, intro, arrive, perfect) => K => ({ name, note: '迷霧列車：每 10 分鐘一班，進站前一分鐘會廣播。走進車廂，等車門關上。',
+    intro: K.r && K.r.ghostAt ? arrive : intro, end: ghostEnd(GHOSTS[dest].zh, perfect),
+    fail: `你沒能離開${GHOSTS[dest].zh}。06:00 首班車的燈亮起來時，你在原本的車站醒來，口袋裡有一張濕掉的車票。` });
+  FogEvents.tale({
+    ft1: ghostTale('kisaragi', '太鼓聲的如月站', '廣播說，每十分鐘會有一班列車進站，可是沒有說要去哪裡。車廂裡的燈是紅色的。<br>有人說，在霧夜搭上這一站的列車，會到一個叫「如月」的地方——那裡聽得到太鼓聲，還有一個很親切、說要開車送你回家的男人。',
+      '列車停在一座沒有人的車站，站名牌寫著「如月」。遠處傳來太鼓聲。<br>找到回程車票的碎片。不管誰說要載你，都不要上他的車。', '你在原本的車站醒來。太鼓聲還在耳朵裡響了很久——你沒有上任何人的車，所以你回得來。'),
+    ft2: ghostTale('myoden', '倒過來的妙典站', '廣播說，每十分鐘會有一班列車進站，可是沒有說要去哪裡。<br>聽說搭上這一站的迷霧列車，會到一座所有字都倒過來的車站。那裡的東西只在你動的時候才會動。',
+      '列車停在「妙典」。站名、指標、時刻表，每一個字都是倒的。<br>收集四頁經文。走一步，停一下——月台上的東西，只有你在動的時候才會動。', '四頁經文上寫著：莫回首、莫應聲、莫停步、莫忘歸。你四件都做到了。'),
+    ft3: ghostTale('kiba', '點蠟燭的木場站', '廣播說，每十分鐘會有一班列車進站，可是沒有說要去哪裡。<br>聽說這一站的迷霧列車，終點是一座完全沒有燈的車站。只有帶著燈的人，才看得到那裡等車的人。',
+      '列車停在「木場」，四周一片漆黑，你聞到木頭的味道。<br>用霧燈找到四根蠟燭，把它們點亮。黑暗裡有手。', '木場站的人對你點頭的樣子，你一直記得——他們等的車，也許就是你搭的那一班。'),
+    ft4: ghostTale('ryosui', '兩水站的引路人', '廣播說，每十分鐘會有一班列車進站，可是沒有說要去哪裡。<br>聽說這一站的迷霧列車會開到「兩水」：那裡有兩個長得一模一樣的引路人，只有一個會帶你回來。',
+      '列車停在「兩水」，四周都是水聲。大廳裡站著兩個穿藍衣服的女人，一模一樣。<br>只有一個是真的引路人。看清楚她們身上的水。', '你在原本的車站醒來，鞋子是濕的。最後回頭的那一眼，你看見另一個她站在水裡，對你揮手。你沒有揮回去。'),
+    ft5: ghostTale('seihei', '太安靜的清平站', '廣播說，每十分鐘會有一班列車進站，可是沒有說要去哪裡。<br>聽說這一站的迷霧列車會開到「清平」：一座非常、非常安靜的車站。安靜得太久，就會有東西出來。',
+      '列車停在「清平」。什麼都沒有，連霧都很薄。牆上的時鐘在倒數。<br>時鐘歸零的時候，所有的門會同時打開。撐到下一次鐘響。', '鐘聲響起，所有的東西都回到門後。清平站安靜下來了，這一次，是真的安靜。'),
+    sp_expo: { name: '第零展區', intro: '南港展覽館的大廳中央，多了一道拱門：「第零展區」。導覽員說，這裡展出的不是城市的歷史，是某一位旅客的。<br>展品要配成對，說明牌才會出現。要開展，你得先帶來足夠多「特別的東西」。',
+      end: { perfect: '最後一件展品，是你自己。那個縮小的你站在月台上，說明牌寫著：「這位旅客，走過了這座城市。」', good: '你放錯過幾件展品，但展覽還是開了。導覽員說：「人生本來就不是照順序展出的。」' } },
+    sp_memory: { name: '每個人記得的你', intro: '台北車站的大廳裡，很多人在等你。他們每一個都說認識你，可是每個人描述的你都不一樣。<br>有些記憶是真的，有些是假的，有些發生在霧裡。判斷每一段記憶——說錯太多次，你就會變成他們記得的那個人。',
+      end: { perfect: '所有人同時安靜下來，看著你：「原來你是這樣的人。」那本紅色的書，記下了真正的你。', good: '有幾段記憶你答錯了。書還是出現了，只是有幾頁的字有點模糊。' },
+      fail: '說錯了太多次，每個人的記憶都蓋過了你自己的。天亮以前，你都不太確定自己是誰。' },
+    sp_twin: { name: '兩個你', intro: '有人跟你穿著一模一樣的衣服，說著跟你一模一樣的話——他說他才是真的。<br>他知道你過去的一切，但他不知道<b>今晚</b>的事。在牆上寫一個字、看一眼月台的時鐘、撿一枚硬幣：只有今晚的你才知道答案。',
+      end: { perfect: '「原來，我只是你昨天的樣子。」另一個你碎成一面小鏡子。你一次都沒答錯——今晚的你，是真的你。', good: '你答錯過幾次，另一個你差一點就站穩了。鏡子裡的你，偶爾會比你晚一點眨眼。' },
+      fail: '另一個你把你推進了鏡子裡。天亮的時候，有一個人用你的名字刷卡出站——你只能在鏡子裡看著。（還好，霧散的時候，鏡子會裂開。）' },
+    sp_crossing: { name: '穿越', intro: '淡水的月台上，停著一班從沒見過的列車，車頭寫著「往 穿越」。列車長說，這班車一旦開出去，車上的乘客就會醒過來——他們已經不是人了。<br>任務只有一個：逃離這班列車。',
+      end: { perfect: '「三十年來，你是第一個。」列車長摘下帽子，向你鞠躬。你只試了很少的次數，就從「穿越」上活著下來了。', good: '你死過很多次，又從淡水重新上車很多次。最後一次，你拉下了煞車。' } },
+  });
+  const ghostStationTale = K => { const k = FogCity.eventKey(K.station); const t = (k && FogEvents.taleOf(k, K)) || { name: '迷霧列車' }; return { ...t, key: k || 'ghost_station' }; };
+  ghostStationTale.alias = true;
+  FogEvents.tale({ ghost_station: ghostStationTale });
+  const airTale = K => ({ key: `a_light:${K.station}`, name: `留在${K.station}的光`, alias: true,
+    intro: `秀蔅回到 2087 年以後，傳送裝置的光留在路網上，變成了一條新的路線。<br>霧夜的${K.station}，月台和大廳裡飄著幾點很小的光。有一點光，只有霧燈照得到。`,
+    end: '三點光聚成一盞小小的提燈，往西邊飄走了。你好像聽見秀蔅說：「下一站見。」' });
+  airTale.alias = true;
+  FogEvents.tale({ a_light: airTale });
 
   // 引擎登記到 FogEvents
   Object.assign(FogEvents, { ghosttrain: ghostTrain, ghoststation: ghostStation, expo, tpememory: memory, twin, crossing });

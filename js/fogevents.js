@@ -24,6 +24,12 @@ const FogEvents = (() => {
     return K.pointIn({ kind: 'concourse' }, K.rnd);
   }
   const once = (K, k) => { if (K.ev[k]) return false; K.ev[k] = 1; saveState(); return true; };
+  // 有東西只有霧燈照得到、玩家卻沒有霧燈：站裡放一盞舊霧燈（不然會卡關）
+  function ensureLamp(K, list) {
+    if (S().inv.mistlamp > 0 || K.lampGiven || !(list || []).some(x => x && x.hidden)) return;
+    K.lampGiven = true;
+    const lp = K.prop('lamp', at(K, 'c'), { label: '撿起：一盞舊霧燈', use: () => { S().inv.mistlamp = 1; K.r.lamp = Math.max(K.r.lamp, 80); saveState(); K.removeProp(lp); K.setLamp(true); K.toast('<b>🏮 撿到一盞霧燈</b><span>畫面上方可以開關；電量有限。有些東西只有它照得到。</span>'); FogCity.hud(); } });
+  }
 
   /* ════════ 引擎：人物與選擇（NPC 特殊遭遇、救援與選擇） ════════ */
   function story(K, d) {
@@ -37,6 +43,7 @@ const FogEvents = (() => {
       return nn;
     });
     const found = () => Object.keys(ev.found).length;
+    ensureLamp(K, (d.clues || []).filter((c, i) => !ev.found[i]));
     (d.clues || []).forEach((c, i) => {
       if (ev.found[i]) return;
       const p = K.prop(c.kind || 'note', at(K, c.at || 'c'), { label: c.label || '調查', hidden: c.hidden, tag: 'clue', use: () => {
@@ -92,6 +99,7 @@ const FogEvents = (() => {
   function puzzle(K, d) {
     const ev = K.ev; ev.found = ev.found || {}; ev.wrong = ev.wrong || 0;
     const found = () => Object.keys(ev.found).length;
+    ensureLamp(K, (d.clues || []).filter((c, i) => !ev.found[i]));
     (d.clues || []).forEach((c, i) => {
       if (ev.found[i]) return;
       const p = K.prop(c.kind || 'note', at(K, c.at || 'c'), { label: c.label || '調查', hidden: c.hidden, tag: 'clue', use: () => {
@@ -164,6 +172,7 @@ const FogEvents = (() => {
     const g = d.goal || { type: 'collect', n: 4 };
     if (g.type === 'collect') {
       const pts = K.spread(g.n, { rnd: K.rnd, minD: 9 });
+      if (g.hidden && !d.dark) ensureLamp(K, [g]);
       pts.forEach((pt, i) => {
         if (ev['g' + i]) return;
         const p = K.prop(g.kind || 'shard', pt, { label: g.label || '撿起', hidden: g.hidden, tag: 'goal', use: () => {
@@ -240,6 +249,7 @@ const FogEvents = (() => {
     const col = (S().fogCol = S().fogCol || {}), set = (col[d.set] = col[d.set] || {});
     const ev = K.ev;
     const pts = K.spread(d.items.length, { rnd: K.rnd, minD: 7 });
+    ensureLamp(K, d.items.filter((it, i) => !ev['k' + i]));
     d.items.forEach((it, i) => {
       if (ev['k' + i]) return;
       const p = K.prop(it.kind || d.kind || 'note', pts[i], { label: it.label || d.label || '撿起', hidden: it.hidden, tag: 'collect', use: () => {
@@ -263,7 +273,15 @@ const FogEvents = (() => {
   /* ════════ 引擎：隱藏任務（條件達成前什麼都看不出來） ════════ */
   function hidden(K, d) {
     const ev = K.ev;
-    K.hint('……');
+    K.hint(d.hint || '……');
+    // 需要霧燈／霧中車票才觸發得了的：站裡一定放一份，免得卡關
+    const t0 = d.trigger;
+    if (['lampcorner', 'blankticket'].includes(t0.type) && !(S().inv.mistlamp > 0)) {
+      const lp = K.prop('lamp', at(K, 'c'), { label: '撿起：一盞舊霧燈', use: () => { S().inv.mistlamp = 1; K.r.lamp = Math.max(K.r.lamp, 80); saveState(); K.removeProp(lp); K.setLamp(true); K.toast('<b>🏮 撿到一盞霧燈</b><span>畫面上方可以開關；電量有限。有些東西只有它照得到。</span>'); FogCity.hud(); } });
+    }
+    if (t0.type === 'item' && !((S().inv[t0.item] || 0) > 0) && !ev.gaveItem) {
+      const tp = K.prop('ticket', at(K, 'u'), { label: '撿起：一張半透明的車票', use: () => { ev.gaveItem = 1; S().inv[t0.item] = (S().inv[t0.item] || 0) + 1; saveState(); K.removeProp(tp); K.toast(`<b>🎟️ ${ITEMS[t0.item] ? ITEMS[t0.item].name : '車票'}</b><span>票面上的站名欄是空的。拿著它，也許該去月台看看。</span>`); } });
+    }
     const trigger = () => {
       if (ev.triggered) return; ev.triggered = 1; K.pend('perfect', { title: d.title, gold: d.gold || 0, col: [['hidden', d.title]] }); saveState(); K.sound('sting');
       const steps = d.story.slice(); let i = 0;
@@ -396,7 +414,7 @@ const FogEvents = (() => {
     const run = i => { K.ev = ev['s' + i] = ev['s' + i] || {}; const st = d.steps[i]; ({ story, puzzle, survive, collect, memory })[st.base](K, st); };
     K.done = (res, o) => {
       if (ev.stage < d.steps.length - 1) {
-        ev.stage++; saveState(); K.toast(`<b>🌫 還沒結束</b><span>${d.steps[ev.stage].intro || '另一件事開始了。'}</span>`, 'warn');
+        ev.stage++; K.r.pend = null; saveState(); K.toast(`<b>🌫 還沒結束</b><span>${d.steps[ev.stage].intro || '另一件事開始了。'}</span>`, 'warn');
         for (const p of [...K.props]) if (p.tag) K.removeProp(p);
         setTimeout(() => run(ev.stage), 1500);
       } else { K.done = realDone; K.ev = ev; realDone(res, o); }
@@ -406,13 +424,24 @@ const FogEvents = (() => {
 
   const ENG = { story, puzzle, survive, collect, hidden, trainev, trade, memory, chain };
   function def(cat, key, d) { REG[key] = { cat, d }; }
+
+  /* ════════ 霧夜短篇：每個事件的名字、開場、結局 ════════
+   * tale({ 代號: { name, intro, note?, end: 文字 或 { perfect, good, bad }, fail? } })
+   * 也可以是函式 K => ({...})（依車站、存檔變化）。alias: true 的不編號（例如鬼站是迷霧列車故事的第二幕）。 */
+  const TALES = {}, ORDER = [];
+  function tale(map) { for (const [k, v] of Object.entries(map)) { if (!TALES[k] && !(v && v.alias)) ORDER.push(k); TALES[k] = v; } }
+  function taleOf(key, K) { const t = TALES[key]; try { return typeof t === 'function' ? t(K || {}) : t || null; } catch (e) { return null; } }
+  const taleNo = key => { const i = ORDER.indexOf(String(key).split(':')[0]); return i < 0 ? 0 : i + 1; };
   function start(key, K) {
     const e = REG[key];
     if (!e) return;
     const d = typeof e.d === 'function' ? e.d(K) : e.d;
-    K.eventCat = e.cat; K.eventKey = key;
+    K.eventCat = e.cat; K.eventKey = key; K.def = d;
+    const t = taleOf(key, K);
+    K.taleKey = (t && t.key) || key;
+    K.tale = t || { name: d.title || d.setName || '霧裡的一件事', intro: d.hint || '' };
     (ENG[d.base] || FogEvents[d.base])(K, d);
   }
   const keysOf = cat => Object.keys(REG).filter(k => REG[k].cat === cat);
-  return { def, start, keysOf, REG, at, story, puzzle, survive, collect, hidden, trainev, trade, memory, chain, selfPerson, shuffle };
+  return { def, start, keysOf, REG, at, ensureLamp, story, puzzle, survive, collect, hidden, trainev, trade, memory, chain, selfPerson, shuffle, tale, taleOf, taleNo, TALES, ORDER };
 })();
