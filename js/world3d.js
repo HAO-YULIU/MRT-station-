@@ -77,7 +77,46 @@ const World = (() => {
     }
     return false;
   }
+  // 樓梯、電扶梯上可以站的寬度（人有身體：扶手是 ±.62／±.52，身體半寬約 .24，不然會半個人卡進扶手）
+  const LANE_W = [.38, .3];
+  // 電扶梯兩端水平段的扶手（伸出 1.1 公尺＋圓弧收尾）：走在月台、大廳上也不能穿過去
+  const RAIL_Z = [-1.77, -.73, -.62, .62, .73, 1.77];
+  function railBlock(x, z, y) {
+    const test = (r, rz) => {
+      for (const [xe, ye, dir] of [[r.xa, r.ya, Math.sign(r.xa - r.xb)], [r.xb, r.yb, Math.sign(r.xb - r.xa)]]) {
+        if (Math.abs(y - ye) > .3) continue;
+        const d = (x - xe) * dir;
+        if (d < -.05 || d > 1.62) continue;
+        if (RAIL_Z.some(q => Math.abs(z - (rz + q)) < .17)) return true;
+      }
+      return false;
+    };
+    for (const P of layout.platforms) for (const r of P.ramps) if (test(r, P.z)) return true;
+    for (const r of layout.xramps || []) if (test(r, r.z)) return true;
+    return false;
+  }
   function groundAt(x, z, y) {
+    const h = groundAt0(x, z, y);
+    return h != null && layout && !riding && railBlock(x, z, h) ? null : h;
+  }
+  // 走到樓梯、電扶梯口卻沒對準時，輕輕往最近的一道靠（不用很準也踏得上去）
+  function laneAssist(nx, nz) {
+    if (!layout || riding) return null;
+    const cands = [];
+    for (const P of layout.platforms) for (const r of P.ramps) cands.push([r, P.z]);
+    for (const r of layout.xramps || []) cands.push([r, r.z]);
+    for (const [r, rz] of cands) {
+      const a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
+      if (nx < a - 1.7 || nx > b + 1.7 || Math.abs(nz - rz) > 1.9) continue;
+      let lc = rz, best = 9;
+      for (const lz of S.LANES) { const d = Math.abs(nz - (rz + lz)); if (d < best) { best = d; lc = rz + lz; } }
+      if (best < .02 || best > .75) continue;
+      const z2 = nz + Math.sign(lc - nz) * Math.min(best, .07);
+      for (const x2 of [nx, player.x]) { const h = groundAt(x2, z2, player.y); if (h != null) return { x: x2, z: z2, h }; }
+    }
+    return null;
+  }
+  function groundAt0(x, z, y) {
     let best = null, bestD = .55;
     const consider = h => { const d = Math.abs(h - y); if (d < bestD) { bestD = d; best = h; } };
     const inR = (r, x0, x1, z0, z1) => x > x0 && x < x1 && z > z0 && z < z1;
@@ -112,7 +151,7 @@ const World = (() => {
       for (const r of layout.xramps || []) {
         if (x < Math.min(r.xa, r.xb) - .05 || x > Math.max(r.xa, r.xb) + .05) continue;
         for (const lz of S.LANES) {
-          if (Math.abs(z - (r.z + lz)) > (lz === 0 ? .62 : .44)) continue;
+          if (Math.abs(z - (r.z + lz)) > (lz === 0 ? LANE_W[0] : LANE_W[1])) continue;
           consider(r.ya + (r.yb - r.ya) * Math.min(1, Math.max(0, (x - r.xa) / (r.xb - r.xa))));
         }
       }
@@ -131,7 +170,7 @@ const World = (() => {
           const a = Math.min(r.xa, r.xb), b = Math.max(r.xa, r.xb);
           if (x < a - .05 || x > b + .05) continue;
           for (const lz of S.LANES) {
-            if (Math.abs(z - (P.z + lz)) > (lz === 0 ? .62 : .44)) continue;
+            if (Math.abs(z - (P.z + lz)) > (lz === 0 ? LANE_W[0] : LANE_W[1])) continue;
             const t = (x - r.xa) / (r.xb - r.xa);
             consider(r.ya + (r.yb - r.ya) * Math.min(1, Math.max(0, t)));
           }
@@ -183,7 +222,7 @@ const World = (() => {
     const tr = trainOf(player.x, player.z, player.y);
     if (tr) return { kind: 'train', train: tr, P: tr.P };
     if (!layout) return { kind: 'none' };
-    for (const P of layout.platforms) if (Math.abs(player.y - P.y) < .3 && Math.abs(player.z - P.z) < 3.3 && Math.abs(player.x - P.x) < S.LEN / 2) return { kind: 'platform', P };
+    for (const P of layout.platforms) if (Math.abs(player.y - P.y) < .3 && Math.abs(player.z - P.z) < S.PLAT_HALF + .3 && Math.abs(player.x - P.x) < S.LEN / 2) return { kind: 'platform', P };
     for (const lv of layout.levels || []) if (Math.abs(player.y - lv.y) < .3 && player.x > lv.x0 && player.x < lv.x1 && player.z > lv.z0 && player.z < lv.z1) return { kind: lv.kind || 'mall', level: lv };
     if (Math.abs(player.y) < .3) {
       const kind = player.z > layout.gateZ + .6 ? 'unpaid' : 'concourse';
@@ -531,8 +570,9 @@ const World = (() => {
   function tryMove(nx, nz) {
     let h = groundAt(nx, nz, player.y);
     if (h != null) { player.x = nx; player.z = nz; player.y = h; return; }
-    h = groundAt(nx, player.z, player.y); if (h != null) { player.x = nx; player.y = h; return; }
-    h = groundAt(player.x, nz, player.y); if (h != null) { player.z = nz; player.y = h; }
+    if (nx !== player.x) { h = groundAt(nx, player.z, player.y); if (h != null) { player.x = nx; player.y = h; return; } }
+    if (nz !== player.z) { h = groundAt(player.x, nz, player.y); if (h != null) { player.z = nz; player.y = h; return; } }
+    const a = laneAssist(nx, nz); if (a) { player.x = a.x; player.z = a.z; player.y = a.h; }
   }
   // 自動轉鏡頭：一般情況都不轉（會暈），只剩必要的時候——剛走進廁所、站務室這種小房間，
   // 不轉的話鏡頭會被牆擋住、什麼都看不到。玩家自己剛拖過鏡頭就不動。

@@ -453,13 +453,13 @@ const FogCity = (() => {
         if (started !== sid) return res();   // 迷霧結束或換站：停止
         const u = Math.min(1, (now - t0) / 2600); tr.x = -200 + 400 * u; tr.group.position.x = tr.P.x + tr.x;
         const pp = World.player, edge = (pp.z - P.z) * side;
-        if (!hit && Math.abs(pp.y - P.y) < .5 && edge > 2.45 && Math.abs(pp.x - (tr.P.x + tr.x)) < 32) { hit = true; hurt(35, '被通過的列車撞到'); World.pushPlayer(0, -side * .9); }
+        if (!hit && Math.abs(pp.y - P.y) < .5 && edge > Station3D.PLAT_HALF - 1.4 && Math.abs(pp.x - (tr.P.x + tr.x)) < 32) { hit = true; hurt(35, '被通過的列車撞到'); World.pushPlayer(0, -side * .9); }
         u < 1 ? requestAnimationFrame(step) : res();
       };
       requestAnimationFrame(step);
     });
     World.removeTrain(tr);
-    if (!hit && Math.abs(p.z - P.z) > 2.2) toast('<b>好險</b><span>列車擦過你身邊，車窗裡每個人都轉頭看著你。</span>');
+    if (!hit && Math.abs(p.z - P.z) > Station3D.PLAT_HALF - 1.65) toast('<b>好險</b><span>列車擦過你身邊，車窗裡每個人都轉頭看著你。</span>');
   }
   function tintTrain(tr, body, light) {
     tr.group.traverse(o => {

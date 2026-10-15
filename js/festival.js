@@ -212,9 +212,11 @@ const Festival = (() => {
     for (let i = 0; i < 10; i++) bat(C.x0 + 3 + (i * 7.3) % (C.x1 - C.x0 - 6), hallH - .7 - (i % 3) * .3, C.z0 + 3 + (i * 5.1) % Math.max(4, L.gateZ - C.z0 - 6));
     for (const P of L.platforms) {
       for (const ex of [-1, 1]) { lantern(P.x + ex * 29.6, P.y, P.z + .9, 1, ex > 0 ? -Math.PI / 2 : Math.PI / 2); lantern(P.x + ex * 30.4, P.y, P.z - .9, .8, ex > 0 ? -Math.PI / 2 : Math.PI / 2); }
-      lights(P.x - 26, P.x + 26, P.y + 3.1, P.z);
-      for (let i = 0; i < 5; i++) bat(P.x - 24 + i * 12, P.y + 2.7 - (i % 2) * .3, P.z + (i % 2 ? .8 : -.8));
-      web(P.x - 28, P.y + 2.9, P.z + .5, Math.PI / 2);
+      // 燈串、蝙蝠都掛在電扶梯井和月台門之間（不穿過電扶梯、樓梯）
+      const S3 = Station3D, side = 2.4 + S3.PW, endX = S3.LEN / 2 - .2;
+      for (const s of [-1, 1]) lights(P.x - 28, P.x + 28, P.y + 3.3, P.z + s * side);
+      for (let i = 0; i < 6; i++) bat(P.x - 25 + i * 10, P.y + 2.9 - (i % 2) * .3, P.z + (i % 2 ? 1 : -1) * (side + .3));
+      if (P.under) for (const ex of [-1, 1]) web(P.x + ex * endX, P.y + 3.4, P.z + ex * (S3.PSD - .9), ex > 0 ? -Math.PI / 2 : Math.PI / 2);
     }
   }
 

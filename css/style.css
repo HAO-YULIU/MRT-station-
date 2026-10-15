@@ -393,7 +393,7 @@ body.title-fog #title .fog i { opacity: .75; }
 }
 
 /* ── 視窗 ── */
-.modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(6,9,12,.7); backdrop-filter: blur(3px); }
+.modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); background: rgba(6,9,12,.7); backdrop-filter: blur(3px); }
 .modal-card { width: min(560px, 100%); max-height: 100%; overflow: auto; border-radius: 16px; background: var(--slate); padding: 0 0 18px; }
 .modal-card.wide { width: min(1100px, 100%); height: min(860px, 100%); display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .modal-card header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; position: sticky; top: 0; background: var(--slate); z-index: 1; }
@@ -627,7 +627,7 @@ body.title-fog #title .fog i { opacity: .75; }
 .fh-btns button { padding: 3px 8px; border-radius: 10px; border: 1px solid rgba(159,224,200,.4); background: rgba(159,224,200,.08); color: #dfeee8; font-size: 12px; }
 .fh-btns button[aria-pressed="true"] { background: #e8b84a; color: #1c2126; }
 .fog-flash { position: absolute; inset: 0; z-index: 8; pointer-events: none; opacity: 0; transition: opacity .35s; }
-.fog-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(10,20,18,.82), rgba(0,0,0,.94)); }
+.fog-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); background: radial-gradient(ellipse at center, rgba(10,20,18,.82), rgba(0,0,0,.94)); }
 .fog-overlay[hidden] { display: none; }
 .fog-card { width: min(520px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 22px 22px 18px; border-radius: 16px; background: linear-gradient(#141c1c, #0c1212); border: 1px solid rgba(159,224,200,.35); color: #e6efec; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
 .fog-card h2 { margin: 2px 0 10px; font: 900 28px var(--serif); letter-spacing: .08em; color: #f0f6f4; }

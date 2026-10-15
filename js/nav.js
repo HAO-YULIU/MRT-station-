@@ -93,7 +93,7 @@ const Nav = (() => {
   /* ── 描述一個位置在站內哪裡 ── */
   function describe(t) {
     const L = World.layout, f = floors(); if (!L || !f) return '';
-    const P = L.platforms.find(P => Math.abs(t.y - P.y) < .8 && Math.abs(t.z - P.z) < 4.5);
+    const P = L.platforms.find(P => Math.abs(t.y - P.y) < .8 && Math.abs(t.z - P.z) < Station3D.PLAT_HALF + .6);
     if (P) {
       const dx = t.x - P.x, end = Math.abs(dx) > 20 ? (dx < 0 ? '・靠電梯那一端' : '・月台另一端') : Math.abs(dx) < 9 ? '・中段' : '';
       const side = Math.abs(t.z - P.z) > .6 ? `・往${termName(P, sideOf(P, t.z))}那側` : '';
