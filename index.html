@@ -10,11 +10,22 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@700;900&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/fx.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="迷霧">
+  <link rel="preload" href="assets/cover.jpg" as="image">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <!-- 載入進度：每載完一個程式檔就往前一格（程式都用 defer，封面會先顯示出來） -->
+  <script>(function () { var n = 0; document.addEventListener('load', function (e) { if (e.target.tagName !== 'SCRIPT') return; n++; var t = document.querySelectorAll('script[src]').length, b = document.getElementById('loadBar'), x = document.getElementById('loadText'); if (b) b.style.width = Math.round(n / t * 100) + '%'; if (x) x.textContent = '載入中…… ' + Math.round(n / t * 100) + '%'; }, true); })();</script>
 </head>
 <body data-screen="title">
 
   <!-- 標題：主視覺封面＋下一班車看板＋開始按鈕 -->
-  <section class="screen" id="title">
+  <section class="screen active" id="title">
     <div class="ts-bg" aria-hidden="true"></div>
     <div class="title-map" id="titleMap" aria-hidden="true"></div>
     <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -28,7 +39,7 @@
           <div class="ts-led-run"><span id="ledRun">末班車開走以後，月台上還有一班車。</span></div>
         </div>
         <p class="tagline">從南港展覽館出發，搭遍台北捷運。<br>每條路線的終點，都留著一件東西。</p>
-        <div class="title-actions" id="titleActions"></div>
+        <div class="title-actions" id="titleActions"><div class="load-box" aria-live="polite"><div class="load-track"><i id="loadBar"></i></div><small id="loadText">載入中……</small></div></div>
         <p class="title-clock" id="titleClock"></p>
         <p class="title-cloud" id="titleCloud"></p>
         <button type="button" class="btn-text title-set" id="titleSettings">⚙️ 設定</button>
@@ -82,6 +93,8 @@
         <button id="btnRecord" role="menuitem"><i aria-hidden="true">📖</i>紀錄</button>
         <button id="btnSound" role="menuitem" aria-pressed="true"><i aria-hidden="true">🔊</i>音效 開</button>
         <button id="btnUnstuck" role="menuitem"><i aria-hidden="true">🆘</i>脫離卡住</button>
+        <button id="btnShare" role="menuitem"><i aria-hidden="true">📷</i>分享截圖</button>
+        <button id="btnReport" role="menuitem"><i aria-hidden="true">🐞</i>回報問題</button>
         <button id="btnQuality" role="menuitem"><i aria-hidden="true">⚙️</i>設定</button>
         <button id="btnHome" role="menuitem"><i aria-hidden="true">🏠</i>回到標題</button>
       </div>
@@ -182,57 +195,59 @@
     </div>
   </div>
 
-  <script src="js/vendor/three.min.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/characters.js"></script>
-  <script src="js/time.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/economy.js"></script>
-  <script src="js/quests.js"></script>
-  <script src="js/puzzles.js"></script>
-  <script src="js/story.js"></script>
-  <script src="js/outfits.js"></script>
-  <script src="js/human3d.js"></script>
-  <script src="js/trains.js"></script>
-  <script src="js/stationstyle.js"></script>
-  <script src="js/bigstations.js"></script>
-  <script src="js/station3d.js"></script>
-  <script src="js/specialhalls.js"></script>
-  <script src="js/decor.js"></script>
-  <script src="js/metroprops.js"></script>
-  <script src="js/world3d.js"></script>
-  <script src="js/npcs.js"></script>
-  <script src="js/crowd.js"></script>
-  <script src="js/sidequests.js"></script>
-  <script src="js/achievements.js"></script>
-  <script src="js/progress.js"></script>
-  <script src="js/gold.js"></script>
-  <script src="js/daycalm.js"></script>
-  <script src="js/life.js"></script>
-  <script src="js/daily.js"></script>
-  <script src="js/playername.js"></script>
-  <script src="js/phone.js"></script>
-  <script src="js/festival.js"></script>
-  <script src="js/art.js"></script>
-  <script src="js/onsen.js"></script>
-  <script src="js/teleporter.js"></script>
-  <script src="js/kaicheng.js"></script>
-  <script src="js/fog.js"></script>
-  <script src="js/fogevents.js"></script>
-  <script src="js/fogcontent.js"></script>
-  <script src="js/fogcontent2.js"></script>
-  <script src="js/fogspecial.js"></script>
-  <script src="js/map3d.js"></script>
-  <script src="js/limited.js"></script>
-  <script src="js/gondola.js"></script>
-  <script src="js/questfix.js"></script>
-  <script src="js/rewards.js"></script>
-  <script src="js/titles.js"></script>
-  <script src="js/fx.js"></script>
-  <script src="js/nav.js"></script>
-  <script src="js/settings.js"></script>
-  <script src="js/tutorial.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/cloud.js"></script>
+  <script defer src="js/report.js"></script>
+  <script defer src="js/vendor/three.min.js"></script>
+  <script defer src="js/data.js"></script>
+  <script defer src="js/characters.js"></script>
+  <script defer src="js/time.js"></script>
+  <script defer src="js/audio.js"></script>
+  <script defer src="js/economy.js"></script>
+  <script defer src="js/quests.js"></script>
+  <script defer src="js/puzzles.js"></script>
+  <script defer src="js/story.js"></script>
+  <script defer src="js/outfits.js"></script>
+  <script defer src="js/human3d.js"></script>
+  <script defer src="js/trains.js"></script>
+  <script defer src="js/stationstyle.js"></script>
+  <script defer src="js/bigstations.js"></script>
+  <script defer src="js/station3d.js"></script>
+  <script defer src="js/specialhalls.js"></script>
+  <script defer src="js/decor.js"></script>
+  <script defer src="js/metroprops.js"></script>
+  <script defer src="js/world3d.js"></script>
+  <script defer src="js/npcs.js"></script>
+  <script defer src="js/crowd.js"></script>
+  <script defer src="js/sidequests.js"></script>
+  <script defer src="js/achievements.js"></script>
+  <script defer src="js/progress.js"></script>
+  <script defer src="js/gold.js"></script>
+  <script defer src="js/daycalm.js"></script>
+  <script defer src="js/life.js"></script>
+  <script defer src="js/daily.js"></script>
+  <script defer src="js/playername.js"></script>
+  <script defer src="js/phone.js"></script>
+  <script defer src="js/festival.js"></script>
+  <script defer src="js/art.js"></script>
+  <script defer src="js/onsen.js"></script>
+  <script defer src="js/teleporter.js"></script>
+  <script defer src="js/kaicheng.js"></script>
+  <script defer src="js/fog.js"></script>
+  <script defer src="js/fogevents.js"></script>
+  <script defer src="js/fogcontent.js"></script>
+  <script defer src="js/fogcontent2.js"></script>
+  <script defer src="js/fogspecial.js"></script>
+  <script defer src="js/map3d.js"></script>
+  <script defer src="js/limited.js"></script>
+  <script defer src="js/gondola.js"></script>
+  <script defer src="js/questfix.js"></script>
+  <script defer src="js/rewards.js"></script>
+  <script defer src="js/titles.js"></script>
+  <script defer src="js/fx.js"></script>
+  <script defer src="js/nav.js"></script>
+  <script defer src="js/settings.js"></script>
+  <script defer src="js/tutorial.js"></script>
+  <script defer src="js/game.js"></script>
+  <script defer src="js/cloud.js"></script>
+  <script defer src="js/share.js"></script>
 </body>
 </html>

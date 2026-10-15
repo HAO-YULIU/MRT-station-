@@ -41,6 +41,8 @@ const Settings = (() => {
       <section><h4>字體大小</h4>${seg('font', FONTS, cur.font)}<p class="set-note">放大上方欄位、資訊框、對話和視窗裡的字。</p></section>
       <section><h4>減少晃動</h4>${seg('calm', [['0', '關'], ['1', '開']], cur.calm ? '1' : '0')}<p class="set-note">鏡頭上下移動比較平順、不會自動轉向、特效少一點。容易暈的話建議打開。</p></section>
       <section><h4>雲端存檔</h4><div id="setCloud">${cloud}</div></section>
+      <section><h4>加到主畫面</h4><div id="setInstall">${typeof Share !== 'undefined' ? Share.installHtml() : ''}</div></section>
+      <section><h4>回報問題</h4><button type="button" class="btn small ghost" id="setReport">🐞 回報問題</button><p class="set-note">遇到卡住、錯誤或任務解不了，告訴我們（會自動附上所在站和裝置資訊）。</p></section>
       <section><h4>新手教學</h4><button type="button" class="btn small ghost" id="setTut">重新開始新手教學</button><p class="set-note">從南港展覽館大廳重新走一次：搭車、下車、傳送、接委託。</p></section>`;
     b.onclick = e => {
       const btn = e.target.closest('[data-seg] button');
@@ -53,6 +55,8 @@ const Settings = (() => {
         if (typeof updateQualityLabel === 'function') updateQualityLabel();
         return render();
       }
+      if (e.target.closest('[data-install]') && typeof Share !== 'undefined') { Share.install(); return; }
+      if (e.target.closest('#setReport')) { document.getElementById('settingsModal').hidden = true; if (typeof Report !== 'undefined') Report.open(); return; }
       if (e.target.closest('#setTut')) { document.getElementById('settingsModal').hidden = true; if (typeof Tutorial !== 'undefined') Tutorial.restart(); return; }
       const cb = e.target.closest('[data-cloud]'); if (cb && typeof Cloud !== 'undefined') Cloud.action(cb.dataset.cloud);
     };

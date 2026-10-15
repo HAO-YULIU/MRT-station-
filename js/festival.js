@@ -160,7 +160,16 @@ const Festival = (() => {
       g.beginPath(); g.arc(64, 30, 9, 0, 7); g.fill();
     });
   }
+  // 擺南瓜燈前先確認那裡是空的地板（不跟設施、桌子、垃圾桶、互動點重疊），撞到就沿著 x 方向往旁邊挪
+  function freeAt(x, y, z, r) {
+    const L = World.layout; if (!L) return true;
+    if (World.groundAt(x, z, y) == null) return false;
+    if ((L.obstacles || []).some(o => Math.abs((o.y || 0) - y) < .6 && x > o.x0 - r && x < o.x1 + r && z > o.z0 - r && z < o.z1 + r)) return false;
+    return !(L.spots || []).some(sp => Math.abs((sp.y || 0) - y) < .6 && Math.hypot(sp.x - x, sp.z - z) < r + .7);
+  }
   function lantern(x, y, z, s = 1, rot = 0) {
+    const r = .3 * s;
+    if (!freeAt(x, y, z, r)) { const alt = [1, -1, 2, -2, 3, -3, 4, -4].map(d => x + d * .8).find(nx => freeAt(nx, y, z, r)); if (alt == null) return; x = alt; }
     const m = new T.Mesh(new T.SphereGeometry(.28 * s, 18, 12), new T.MeshStandardMaterial({ map: faceTex, emissive: '#ff8a20', emissiveIntensity: .35, roughness: .6 }));
     m.scale.y = .82; m.position.set(x, y + .23 * s, z); m.rotation.y = rot; group.add(m); glow.push(m);
     const st = new T.Mesh(new T.CylinderGeometry(.025 * s, .035 * s, .1 * s, 6), new T.MeshStandardMaterial({ color: '#3a6a2a' })); st.position.set(x, y + .47 * s, z); group.add(st);
@@ -228,7 +237,7 @@ const Festival = (() => {
     const seen = col('hw_ghosts')[stationId], again = seen && seen !== TaipeiTime.date() && Quests.isActive('event_hw_ghost');
     if (gd && night() && (!seen || again)) {
       const P = L.platforms[hsh(stationId) % L.platforms.length], ex = hsh(stationId) % 2 ? 1 : -1;
-      const m = ghostMesh(); const pos = { x: P.x + ex * 22, y: P.y + .25, z: P.z + .6 };
+      const m = ghostMesh(); const pos = { x: P.x + ex * 22, y: P.y + .25, z: P.z + 1.6 };   // 月台加寬後往外一點，不跟座椅重疊
       m.position.set(pos.x, pos.y, pos.z); m.rotation.y = ex > 0 ? -Math.PI / 2 : Math.PI / 2; group.add(m);
       ghost = { ...pos, y: P.y, mesh: m, station: stationId, ...gd };
     }

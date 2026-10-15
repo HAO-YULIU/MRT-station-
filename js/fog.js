@@ -77,7 +77,7 @@ const FogCity = (() => {
     s.fogMap = map; saveState();
     return map;
   }
-  const eventKey = st => assignment()[st];
+  const eventKey = st => assignment()[st] || (STATIONS[st] && MRT.linesAt(st).length && MRT.linesAt(st).every(l => l.line === 'A') ? 'a_light' : undefined);
 
   /* ── 氣氛 ── */
   const MOODS = {
@@ -280,6 +280,7 @@ const FogCity = (() => {
     closeOverlay(); World.setInput(true);
     if (K && K.onRevive) K.onRevive(); else respawnSafe();
     if (K && r.pend && !r.result) K.done(r.pend.result, r.pend);   // 倒下時對話被關掉，結果補上
+    if (deferredCard) { const c = deferredCard; deferredCard = null; setTimeout(() => endCard(...c), 400); }
     for (const c of chasers) { c.sleep = 4; c.x = c.home.x; c.y = c.home.y; c.z = c.home.z; }
     hurtCD = performance.now() + 3000; hud();
   }
@@ -324,8 +325,12 @@ const FogCity = (() => {
     const r = rec(); if (!r || !started || !active()) return '';
     const mins = minuteOfDay(), toFade = Math.max(0, Math.ceil(330 - mins));
     const state = r.escaped ? '你已經離開迷霧了，等首班車就好。' : r.result && r.result !== 'fail' ? '本站的事件解開了！找到發光的出口門就能離開迷霧。' : r.result === 'fail' ? '這一站的事件失敗了。05:30 霧散時，會出現一扇出口門。' : '本站的事件還沒解開。';
+    const t = K && K.tale, no = K ? FogEvents.taleNo(K.taleKey) : 0;
+    const tl = t ? `<p class="q-local-title" style="margin:.3em 0 .2em"><small style="opacity:.7">霧夜短篇${no ? ` No.${String(no).padStart(3, '0')}` : ''}</small><br><b style="font-size:1.08em">《${esc(t.name)}》</b></p>${t.intro ? `<p style="opacity:.85;font-size:.92em;line-height:1.6">${t.intro}</p>` : ''}` : '';
     return `<section class="q-local"><div class="q-head"><span class="q-tag" style="--c:#2f9e8a">本站活動</span><b>🌫 迷霧之城・${esc(r.station)}</b></div>
+      ${tl}
       <p class="q-local-hint">「${esc(hintText || '……')}」</p>
+      <p><button class="btn ghost" type="button" onclick="FogCity.journal()">📖 霧夜短篇集（${talesDone()} / ${FogEvents.ORDER.length}）</button></p>
       <p>${state}${!r.escaped && !(r.result && r.result !== 'fail') ? `<br><small>距離霧散還有 ${Math.floor(toFade / 60)} 小時 ${toFade % 60} 分。</small>` : ''}</p>
       <ul class="q-tips"><li>和霧裡的人說話、調查會發光或怪怪的東西，線索會自動記進筆記。</li><li>每一站都藏著一件事，種類不會告訴你：可能是謎題、要救的人、要躲的東西，或隱藏的條件。</li><li>❤ 生命值歸零會倒下：可以付 NT$ ${FOG_REVIVE_COST} 復活，或等 06:00。</li><li>05:30 霧開始消散，站內會出現一扇出口門；06:00 還在霧裡就判定死亡。</li></ul>
       <h5>📓 霧中筆記（${r.clues.length}）</h5>${r.clues.length ? `<ul class="q-notes">${r.clues.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : '<p class="empty-q">還沒有記下任何東西。</p>'}
@@ -363,7 +368,7 @@ const FogCity = (() => {
   }
   function notes() {
     const r = rec(); if (!r) return;
-    Dialog.show({ name: '霧中筆記', role: `本站：${r.station}` }, r.clues.length ? r.clues.map(c => `・${c}`).join('<br>') : '還沒有記下任何東西。<br><small>調查到的線索、聽到的話，會自動記在這裡。</small>', [{ label: '關閉', run: () => Dialog.close() }]);
+    Dialog.show({ name: '霧中筆記', role: `本站：${r.station}${K && K.tale ? `・《${K.tale.name}》` : ''}` }, r.clues.length ? r.clues.map(c => `・${c}`).join('<br>') : '還沒有記下任何東西。<br><small>調查到的線索、聽到的話，會自動記在這裡。</small>', [{ label: '關閉', run: () => Dialog.close() }]);
   }
 
   /* ── 環境：霧中的人、攤販、穿越月台的列車、小小的異常 ── */
@@ -646,7 +651,8 @@ const FogCity = (() => {
     for (const t of [...timers]) { t.left -= dt; if (t.left <= 0) { timers = timers.filter(x => x !== t); t.fn(); } }
     for (const f of tickers) f(dt, now);
     // 霧燈耗電
-    if (lampOn) { r.lamp = Math.max(0, r.lamp - dt * .55); if (r.lamp <= 0) { setLamp(false); toast('<b>🏮 霧燈熄了</b><span>沒電了。</span>', 'warn'); } }
+    if (lampOn) { r.lamp = Math.max(0, r.lamp - dt * .55); if (r.lamp <= 0) { setLamp(false); toast('<b>🏮 霧燈熄了</b><span>沒電了。關著放一會兒，燈芯會自己回一點光。</span>', 'warn'); } }
+    else if (r.lamp < 30) r.lamp = Math.min(30, r.lamp + dt * .25);   // 關著的霧燈會慢慢回到三成電（不會因為沒電卡關）
     // 慢慢回血：20 秒沒受傷後，每 6 秒 +2
     if (!r.dead && r.hp < FOG_MAX_HP && performance.now() - lastHurt > 20000) { regenT += dt; if (regenT > 6) { regenT = 0; heal(2, true); } }
     // 穿越月台的列車（逃離迷霧後就不會了）
@@ -780,7 +786,7 @@ const FogCity = (() => {
     if (group) { World.scene.remove(group); group = null; }
     for (const tr of [...World.trains]) if (tr.fog) World.removeTrain(tr);
     if (lampOn) World.setPlayerLight(0);
-    props = []; npcs = []; chasers = []; timers = []; tickers = []; marks = []; exitProp = null; lampOn = false; lastPhase = ''; flickers = []; styledGroup = null; hintText = '';
+    props = []; npcs = []; chasers = []; timers = []; tickers = []; marks = []; exitProp = null; lampOn = false; lastPhase = ''; flickers = []; styledGroup = null; hintText = ''; deferredCard = null;
   }
   // startStation 在迷霧時段呼叫：生成本站的迷霧
   function spawn(stationId, sid) {
@@ -805,12 +811,14 @@ const FogCity = (() => {
       if (!r.ghostAt && typeof Kaicheng !== 'undefined') Kaicheng.fogSpawn(stationId);
       if (phase() === 'fade' && !r.result) fadeExit();
     } else spawnAmbient(stationId, rnd);
-    if (!r.seenIntro) { r.seenIntro = true; saveState(); intro(); }
+    const card = !r.escaped && !r.result && K && K.tale && !r.dead ? taleCardOnce : null;
+    if (!r.seenIntro) { r.seenIntro = true; saveState(); intro(card); }
+    else if (card) card();
     if (r.dead) setTimeout(showDeath, 500);
     hud();
     return true;
   }
-  function intro() {
+  function intro(then) {
     Sound.fog('sting');
     overlay(`<div class="fog-card intro"><p class="fog-kicker">00:30 – 06:00</p><h2>迷霧之城</h2>
       <p>末班車開走了。霧從隧道裡湧上來，把整座車站封了起來。</p>
@@ -822,6 +830,108 @@ const FogCity = (() => {
         <li>⏰ 05:30 霧開始消散；06:00 還沒離開迷霧，就判定死亡。</li>
       </ul>
       <div class="fog-btns"><button class="btn primary" id="fogOk">走進霧裡</button></div></div>`);
+    $('#fogOk').onclick = () => { closeOverlay(); if (then) then(); };
+  }
+
+  /* ── 霧夜短篇：開場卡、結局卡、短篇集 ── */
+  const RESULT_NAME = { perfect: '完美結局', good: '結局', bad: '苦澀的結局', fail: '沒有走完的故事' };
+  const CAT_FAIL = '霧把這個故事收了回去，沒有讓你看到最後一頁。也許下一個霧夜，它還會在這裡等你。';
+  let deferredCard = null;
+  function talesBook() {
+    const s = S(), T = (s.fogTales = s.fogTales || {});
+    if (!s.fogTalesMig) {   // 舊存檔：把以前解開過的車站補進短篇集
+      s.fogTalesMig = 1;
+      const map = s.fogMap || {};
+      for (const [st, l] of Object.entries(s.fogLog || {})) {
+        const k = map[st]; if (!k || !l || !l.results) continue;
+        const e = T[k] || (T[k] = { st, ends: {} });
+        for (const x of l.results) if (x.result && x.result !== 'none') e.ends[x.result] = (e.ends[x.result] || 0) + 1;
+      }
+      saveState();
+    }
+    return T;
+  }
+  const finished = e => e && Object.keys(e.ends || {}).some(k => k !== 'fail');
+  const talesDone = () => Object.entries(talesBook()).filter(([k, e]) => !k.includes(':') && finished(e)).length;
+  function taleSeen(result) {
+    if (!K || !K.taleKey) return null;
+    const T = talesBook(), r = rec();
+    const e = T[K.taleKey] || (T[K.taleKey] = { st: r ? r.station : '', ends: {} });
+    e.st = r ? r.station : e.st; e.name = K.tale ? K.tale.name : e.name;
+    if (result) { e.ends[result] = (e.ends[result] || 0) + 1; e.last = result; e.night = r ? r.night : null; }
+    saveState();
+    return e;
+  }
+  function taleCardOnce() {
+    const r = rec(); if (!r || !K || !K.tale) return;
+    const t = K.tale, flag = '_card' + (r.ghostAt ? '_' + r.ghostAt : '');
+    taleSeen(null);
+    if (t.note && !r.clues.includes(t.note)) { r.clues.push(t.note); saveState(); }
+    if (r.ev[flag]) return toast(`<b>🌫 《${esc(t.name)}》</b><span>這一站的故事還沒有結束。</span>`);
+    r.ev[flag] = 1; saveState();
+    const no = FogEvents.taleNo(K.taleKey);
+    Sound.fog('sting');
+    overlay(`<div class="fog-card intro tale"><p class="fog-kicker">霧夜短篇${no ? ` No.${String(no).padStart(3, '0')}` : ''}・${esc(r.station)}</p><h2>《${esc(t.name)}》</h2>
+      <p style="line-height:1.75">${t.intro || ''}</p>
+      ${t.note ? `<p class="fog-sub">📓 ${esc(t.note)}</p>` : ''}
+      <p class="fog-sub">這一篇的提示與筆記，隨時可以在「任務」裡翻看。</p>
+      <div class="fog-btns"><button class="btn primary" id="fogOk">翻開這一篇</button></div></div>`);
+    $('#fogOk').onclick = closeOverlay;
+  }
+  function endingOf(t, result) {
+    if (!t) return '';
+    if (result === 'fail') return t.fail || CAT_FAIL;
+    const e = t.end;
+    if (!e) return '';
+    if (typeof e === 'string') return e;
+    return e[result] || e.good || e.perfect || '';
+  }
+  // 秀蔅的信：短篇集讀到某些篇數時，夾在書裡的書籤
+  const LETTERS = [
+    [1, '「你讀完第一篇了。霧裡的每一站都藏著一個沒說完的故事——我在 2087 年的檔案室裡，只找得到它們的標題。」——秀蔅'],
+    [5, '「五篇了。你有沒有發現，霧裡的人都在等：等車、等人、等一句話。在我的時代，已經沒有人記得末班車以後要等什麼了。」——秀蔅'],
+    [12, '「十二篇。我的提燈在你每讀完一篇的時候，就亮一點。我想，霧其實是這座城市還沒放下的東西。」——秀蔅'],
+    [25, '「二十五篇。傳送裝置的零件散在六條路線上，這些故事也是。你在撿的，也許不只是零件。」——秀蔅'],
+    [50, '「五十篇。我開始懷疑，第七節車廂裡坐的，就是這些故事裡還沒下車的人。」——秀蔅'],
+    [80, '「八十篇。你走過的霧夜，比我在這裡等過的還多了。謝謝你沒有讓他們白等。」——秀蔅'],
+    [118, '「全部讀完了。這座城市所有的霧，都有人好好聽完了。如果有一天你來 2087 年，我會把這本書還給你——它的最後一頁，寫的是你的名字。」——秀蔅'],
+  ];
+  function endCard(result, text, escapeAfter) {
+    const r = rec(); if (!r || !K) return;
+    const t = K.tale || { name: '霧裡的一件事' };
+    const before = talesDone();
+    const e = taleSeen(result);
+    const after = talesDone();
+    const s = S(); s.fogLetters = s.fogLetters || 0;
+    const letter = LETTERS.find(([n]) => before < n && after >= n && n > s.fogLetters);
+    if (letter) { s.fogLetters = letter[0]; saveState(); }
+    const seen = Object.keys(e.ends).filter(k => k !== 'fail').map(k => RESULT_NAME[k]).join('、');
+    const no = FogEvents.taleNo(K.taleKey);
+    overlay(`<div class="fog-card tale end"><p class="fog-kicker">${RESULT_NAME[result] || '結局'}・霧夜短篇${no ? ` No.${String(no).padStart(3, '0')}` : ''}・${esc(r.station)}</p><h2>《${esc(t.name)}》</h2>
+      ${text ? `<p style="opacity:.8"><i>${text}</i></p>` : ''}
+      <p style="line-height:1.75">${endingOf(t, result)}</p>
+      ${letter ? `<p class="fog-sub" style="border-left:3px solid #c8a040;padding-left:.6em;text-align:left">🔖 書裡夾著一張書籤：<br>${letter[1]}</p>` : ''}
+      <p class="fog-sub">${result === 'fail' ? '05:30 霧散的時候，站裡也許還找得到一扇出去的門。' : escapeAfter ? '' : '站裡某個地方，出現了一扇發光的門。'}${seen ? `<br>這一篇你看過的結局：${seen}` : ''}<br>📖 霧夜短篇集 ${after} / ${FogEvents.ORDER.length}</p>
+      <div class="fog-btns"><button class="btn primary" id="fogOk">闔上這一篇</button></div></div>`);
+    $('#fogOk').onclick = () => { closeOverlay(); if (escapeAfter) escape('event'); };
+  }
+  function journal() {
+    const T = talesBook(), map = assignment(), inv = {};
+    for (const [st, k] of Object.entries(map)) inv[k] = st;
+    const rows = FogEvents.ORDER.map((k, i) => {
+      const e = T[k], t = FogEvents.taleOf(k, { station: inv[k] || '', rnd: Math.random, L: World.layout });
+      const no = String(i + 1).padStart(3, '0');
+      if (!e) return `<li style="opacity:.45">No.${no}　？？？？？？<small>（還沒遇見）</small></li>`;
+      const ends = Object.keys(e.ends || {}).filter(x => x !== 'fail').map(x => RESULT_NAME[x]);
+      return `<li>No.${no}　<b>《${esc((t && t.name) || e.name || '？')}》</b><small>　${esc(e.st || inv[k] || '')}・${ends.length ? '已讀完（' + ends.join('、') + '）' : e.ends && e.ends.fail ? '沒有走完' : '讀到一半'}</small></li>`;
+    });
+    const extra = Object.entries(T).filter(([k]) => k.includes(':')).map(([k, e]) => `<li>番外　<b>《${esc(e.name || '？')}》</b><small>　${esc(e.st || '')}・${finished(e) ? '已讀完' : '讀到一半'}</small></li>`);
+    const s = S(), letters = LETTERS.filter(([n]) => (s.fogLetters || 0) >= n);
+    overlay(`<div class="fog-card tale journal" style="max-height:82vh;overflow:auto;text-align:left"><p class="fog-kicker">霧夜短篇集</p><h2>📖 已讀完 ${talesDone()} / ${FogEvents.ORDER.length} 篇</h2>
+      <p class="fog-sub">每一站的霧裡，都藏著一篇只在 00:30 到 06:00 之間翻得開的短篇。不同的選擇，會讀到不同的結局。</p>
+      ${letters.length ? `<h4>🔖 夾在書裡的書籤</h4><ul style="line-height:1.7">${letters.map(([, x]) => `<li>${x}</li>`).join('')}</ul>` : ''}
+      <ul style="list-style:none;padding:0;line-height:1.9;font-size:.92em">${rows.join('')}${extra.join('')}</ul>
+      <div class="fog-btns"><button class="btn primary" id="fogOk">闔上</button></div></div>`);
     $('#fogOk').onclick = closeOverlay;
   }
   // 時段切換到迷霧時（玩家在站內）
@@ -855,10 +965,10 @@ const FogCity = (() => {
         if (o.col) for (const [cat, id] of o.col) { const c = (S().fogCol = S().fogCol || {}); (c[cat] = c[cat] || {})[id] = r.night; }
         saveState();
         Sound.fog(result === 'fail' ? 'sting' : 'good');
-        if (result !== 'fail') toast(`<b>🌫 ${o.title || '霧裡的事情結束了'}</b><span>${o.text || '某個地方出現了一扇發光的門。'}</span>`, 'level');
-        if (o.escape) setTimeout(() => escape('event'), o.delay || 1200);
-        else if (result !== 'fail') exitDoor(o.exitAt || null, 'event');
-        else toast('<b>🌫 失敗了</b><span>霧沒有放過這一站。也許 05:30 霧散的時候，還找得到出去的門。</span>', 'warn');
+        if (!o.escape && result !== 'fail') exitDoor(o.exitAt || null, 'event');
+        const show = () => endCard(result, o.text || '', !!o.escape);
+        if (r.dead) { deferredCard = [result, o.text || '', !!o.escape]; if (o.escape) setTimeout(() => escape('event'), o.delay || 1200); }
+        else setTimeout(show, 350);
         Achievements.check();
       },
       // 事件已經解開、但結果要等對話按鈕才記錄：先存起來，萬一中途重新整理或倒下，重建時補上
@@ -874,7 +984,7 @@ const FogCity = (() => {
 
   function locked() { return active() && !!started && !!rec(); }
   return {
-    active, phase, rec, spawn, tick, interaction, hurt, heal, enter, dawn, catchUp, locked, cashBlocked, shop, eventKey, assignment, setMood, teardown, hud, questHtml, notes, onHudClick, closeOverlay, escape, overlay, setLamp,
+    active, phase, rec, spawn, tick, interaction, hurt, heal, enter, dawn, catchUp, locked, cashBlocked, shop, eventKey, assignment, setMood, teardown, hud, questHtml, notes, onHudClick, closeOverlay, escape, overlay, setLamp, journal, talesBook, talesDone, endingOf,
     get started() { return started; }, get K() { return K; },
     get hint() { const r = rec(); return !started || !r ? '' : r.escaped ? '已經離開迷霧了。等首班車吧。' : r.dead ? '' : hintText; }, CAT_COUNT, FIXED, MOODS, nightKey,
   };
