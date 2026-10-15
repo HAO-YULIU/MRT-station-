@@ -63,20 +63,55 @@ const Cloud = (() => {
     busy = false; refresh();
   }
   function queue() { if (state !== 'on') return; clearTimeout(timer); timer = setTimeout(push, 4000); }
-  addEventListener('pagehide', () => { if (timer) { clearTimeout(timer); push(); } });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && timer) { clearTimeout(timer); push(); } });
+  // 切到背景、關掉 App：先存在這台裝置，再馬上上傳（手機上滑掉 App 時不會再等 4 秒）
+  const flush = () => { const s = local(); if (s && s.char && typeof saveState === 'function') { clearTimeout(timer); try { s.savedAt = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) { /* 無法存取 */ } push(); } };
+  addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+  document.addEventListener('click', e => { const a = e.target.closest('#titleCloud [data-cloud]'); if (a) { e.preventDefault(); action(a.dataset.cloud); } });
 
   function statusHtml() {
     if (state === 'on') return `<p>已連結夜語工作室帳號${name ? `（<b>${esc(name)}</b>）` : ''}，進度會自動同步到雲端。<br><small>${lastSync ? '上次同步：' + new Date(lastSync).toLocaleTimeString('zh-TW', { hour12: false }) : '還沒同步'}</small></p><button type="button" class="btn small ghost" data-cloud="push">立即同步</button>`;
-    if (state === 'guest') return `<p>登入夜語工作室帳號，就能在不同裝置繼續旅程。</p><a class="btn small primary" href="${HUB}#login" target="_blank" rel="noopener">到大廳登入</a> <button type="button" class="btn small ghost" data-cloud="retry">我登入好了</button>`;
+    if (state === 'guest') return `<p>登入夜語工作室帳號，就能在不同裝置繼續旅程。<br><small>iPhone「加到主畫面」的迷霧和 Safari 是分開的，兩邊都要登入同一個帳號才會同步。</small></p><button type="button" class="btn small primary" data-cloud="login">登入</button> <a class="btn small ghost" href="${HUB}#login" target="_blank" rel="noopener">還沒有帳號？到大廳註冊</a>`;
     if (state === 'error') return '<p>雲端暫時連不上，進度先存在這台裝置。</p><button type="button" class="btn small ghost" data-cloud="retry">再試一次</button>';
     return '<p>正在連線……</p>';
   }
-  function action(a) { if (a === 'push') push(true); if (a === 'retry') { state = 'off'; refresh(); init(); } }
+  // 在遊戲裡直接登入（加到主畫面的 App 跟 Safari 的登入狀態是分開的，不能靠大廳登入）
+  function login() {
+    const m = document.createElement('div'); m.className = 'modal'; m.style.zIndex = 40;
+    m.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true"><header><h3>☁️ 登入夜語工作室</h3></header><div class="set-body">
+      <p class="set-note">用大廳的帳號（電子郵件＋密碼）登入，進度會自動同步到雲端。</p>
+      <input class="rep-msg login-in" id="lgEmail" type="email" autocomplete="username" placeholder="電子郵件">
+      <input class="rep-msg login-in" id="lgPass" type="password" autocomplete="current-password" placeholder="密碼">
+      <p class="set-note" id="lgMsg"></p>
+      <div class="cloud-btns"><button type="button" class="btn primary" id="lgGo">登入</button><button type="button" class="btn ghost" id="lgNo">取消</button></div>
+      <p class="set-note"><a href="${HUB}#login" target="_blank" rel="noopener">還沒有帳號？到大廳註冊</a></p></div></div>`;
+    document.body.appendChild(m);
+    m.querySelectorAll('input').forEach(el => el.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') go(); }));
+    const msg = t => { m.querySelector('#lgMsg').textContent = t; };
+    m.querySelector('#lgNo').onclick = () => m.remove();
+    async function go() {
+      const email = m.querySelector('#lgEmail').value.trim(), password = m.querySelector('#lgPass').value;
+      if (!email || !password) return msg('請輸入電子郵件和密碼');
+      const c = await Promise.race([ready, new Promise(r => setTimeout(() => r(null), 8000))]);
+      if (!c) return msg('雲端連不上，請稍後再試');
+      msg('登入中……');
+      try {
+        const { data, error } = await c.auth.signInWithPassword({ email, password });
+        if (error || !data || !data.user) return msg(error && /invalid/i.test(error.message) ? '電子郵件或密碼不對' : '登入失敗：' + ((error && error.message) || ''));
+        user = data.user; state = 'on'; m.remove();
+        try { const { data: p } = await c.from('profiles').select('username').eq('id', user.id).maybeSingle(); name = (p && p.username) || ''; } catch (e) { /* 沒有角色資料也沒關係 */ }
+        toast(`<b>☁️ 已登入</b><span>${name ? esc(name) + '，' : ''}進度會自動同步到雲端</span>`);
+        await pull(); refresh();
+      } catch (e) { msg('登入失敗，請稍後再試'); }
+    }
+    m.querySelector('#lgGo').onclick = go;
+    setTimeout(() => m.querySelector('#lgEmail').focus(), 50);
+  }
+  function action(a) { if (a === 'login') login(); if (a === 'push') push(true); if (a === 'retry') { state = 'off'; refresh(); init(); } }
   // 標題畫面的一行狀態＋設定頁
   function refresh() {
     const t = document.getElementById('titleCloud');
-    if (t) t.innerHTML = state === 'on' ? `☁️ 已連結帳號${name ? '：' + esc(name) : ''}・進度自動同步` : state === 'guest' ? `☁️ <a href="${HUB}#login" target="_blank" rel="noopener">登入夜語工作室帳號</a>，換裝置也能繼續` : '';
+    if (t) t.innerHTML = state === 'on' ? `☁️ 已連結帳號${name ? '：' + esc(name) : ''}・進度自動同步` : state === 'guest' ? `☁️ <a href="#" data-cloud="login">登入夜語工作室帳號</a>，換裝置也能繼續` : '';
     const sc = document.getElementById('setCloud'); if (sc) sc.innerHTML = statusHtml();
   }
   function modal(title, html, buttons) {
