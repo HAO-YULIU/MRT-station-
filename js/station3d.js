@@ -10,7 +10,7 @@ const Station3D = (() => {
   const DOOR_OFF = [-7.2, -2.4, 2.4, 7.2];
   const DOORS = CAR_X.flatMap(c => DOOR_OFF.map(o => c + o));
   const HALF_W = 1.5;          // 車身半寬
-  const PW = 1;                // 月台加寬：兩側各往外 1 公尺（兩個方向的月台離遠一點）
+  const PW = 2;                // 月台加寬：兩側各往外 2 公尺（電扶梯口離月台門遠一點，兩個方向的月台離遠一點）
   const TRACK = 4.6 + PW;      // 軌道中心距月台中心
   const PLAT_HALF = 2.85 + PW; // 月台可走範圍半寬
   const PSD = 3.12 + PW;       // 月台門距月台中心
@@ -897,20 +897,32 @@ const Station3D = (() => {
     box(1.8, 2.6, .4, M('#9aa3aa', { m: .6, r: .3 }), C.x0 + 4, 1.3, C.z0 + .3, g);
     box(1.4, 2.2, .05, M('#c9cfd4', { m: .8, r: .2 }), C.x0 + 4, 1.1, C.z0 + .52, g);
     sign(plainSign('電梯', 'Elevator', '#23272b', '#fff', { bg: '#2a7de1', fg: '#fff', text: '⇅' }), 1.6, .4, C.x0 + 4, 3, C.z0 + .7, g);
-    // 閘門
-    const gateM = M('#b9c0c6', { m: .6, r: .35 });
-    for (let i = 0; i <= L.gates.length; i++) {
-      const x = i === 0 ? L.gates[0] - 1.2 : i === L.gates.length ? L.gates[i - 1] + 1.2 : (L.gates[i - 1] + L.gates[i]) / 2;
-      const w = 1.6, cx = x;   // 機箱寬 1.6 公尺，通道只留 .8 公尺（看得到的空隙就是走得過去的地方）
-      box(w, 1.0, 1.3, gateM, cx, .5, L.gateZ + .6, g);
-      box(w - .1, .04, 1.2, M('#d8dde1', { m: .7, r: .25 }), cx, 1.02, L.gateZ + .6, g);   // 上蓋
-      for (const sx of [-1, 1]) if (!(i === 0 && sx < 0) && !(i === L.gates.length && sx > 0)) {
-        box(.36, .05, .5, M('#2a7de1', { e: '#2a7de1', ei: .6 }), x + sx * .5, 1.05, L.gateZ + .3, g);   // 兩側通道各一個感應區
-        box(.03, .18, .14, M('#31d07a', { e: '#31d07a', ei: .9 }), x + sx * .41, .85, L.gateZ - .04, g);   // 綠燈：可通行
-        box(.03, .18, .14, M('#31d07a', { e: '#31d07a', ei: .9 }), x + sx * .41, .85, L.gateZ + 1.24, g);
+    // 閘門：圓角不鏽鋼機箱、黑色上蓋、兩端的悠遊卡感應區與方向燈、通道側的綠色燈條、紅色半透明擋板
+    {
+      const rr = (w, d, r) => { const sh = new T.Shape(), x = w / 2, y = d / 2; sh.moveTo(-x + r, -y); sh.lineTo(x - r, -y); sh.quadraticCurveTo(x, -y, x, -y + r); sh.lineTo(x, y - r); sh.quadraticCurveTo(x, y, x - r, y); sh.lineTo(-x + r, y); sh.quadraticCurveTo(-x, y, -x, y - r); sh.lineTo(-x, -y + r); sh.quadraticCurveTo(-x, -y, -x + r, -y); return sh; };
+      const slabG = (w, d, r, h) => { const geo = new T.ExtrudeGeometry(rr(w, d, r), { depth: h, bevelEnabled: false, curveSegments: 6 }); geo.rotateX(-Math.PI / 2); return geo; };
+      const W = 1.6, D = 1.3, gz = L.gateZ + .6;
+      const bodyG = slabG(W, D, .2, .86), baseG = slabG(W - .06, D - .06, .17, .1), topG = slabG(W + .02, D + .02, .21, .05);
+      const bodyM = M('#c9cfd5', { m: .75, r: .28 }), baseM = M('#3a3f45', { r: .7 }), topM = M('#1d2227', { r: .35, m: .2 });
+      const readerT = canvasTex(128, 128, x => { x.fillStyle = '#14181c'; x.fillRect(0, 0, 128, 128); x.strokeStyle = '#38c8f0'; x.lineWidth = 9; x.beginPath(); x.arc(64, 56, 34, 0, 6.29); x.stroke(); x.fillStyle = '#38c8f0'; x.beginPath(); x.arc(64, 56, 10, 0, 6.29); x.fill(); x.fillStyle = '#e8f6ff'; x.font = '700 20px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText('感應票卡', 64, 116); });
+      const arrowT = canvasTex(96, 64, x => { x.fillStyle = '#0c0f12'; x.fillRect(0, 0, 96, 64); x.fillStyle = '#31d07a'; x.beginPath(); x.moveTo(48, 8); x.lineTo(72, 34); x.lineTo(58, 34); x.lineTo(58, 56); x.lineTo(38, 56); x.lineTo(38, 34); x.lineTo(24, 34); x.closePath(); x.fill(); });
+      const readerM = M('#ffffff', { map: readerT, e: '#ffffff', ei: .35 }), arrowM = M('#ffffff', { map: arrowT, e: '#ffffff', ei: .8 }), ledM = M('#31d07a', { e: '#31d07a', ei: 1 });
+      for (let i = 0; i <= L.gates.length; i++) {
+        const x = i === 0 ? L.gates[0] - 1.2 : i === L.gates.length ? L.gates[i - 1] + 1.2 : (L.gates[i - 1] + L.gates[i]) / 2;
+        for (const [geo, m, y] of [[baseG, baseM, 0], [bodyG, bodyM, .1], [topG, topM, .96]]) { const o = new T.Mesh(geo, m); o.position.set(x, y, gz); g.add(o); }
+        for (const sx of [-1, 1]) if (!(i === 0 && sx < 0) && !(i === L.gates.length && sx > 0)) {
+          for (const ez of [-1, 1]) {
+            const rd = plane(.3, .3, readerM, g); rd.rotation.x = -Math.PI / 2; rd.position.set(x + sx * .5, 1.015, gz + ez * .4);   // 兩端各一個感應區（進站、出站）
+            const ar = plane(.2, .13, arrowM, g); ar.position.set(x + sx * .55, .82, gz + ez * (D / 2 + .006)); ar.rotation.y = ez > 0 ? 0 : Math.PI;   // 端面的方向燈：可通行
+          }
+          box(.02, .035, D - .4, ledM, x + sx * (W / 2 + .005), .9, gz, g);   // 通道側的燈條
+        }
       }
+      // 擋板：從兩側機箱伸出、圓角的紅色半透明板，中間留一點縫
+      const flap = new T.Shape(); flap.moveTo(0, 0); flap.lineTo(.36, 0); flap.lineTo(.36, .28); flap.quadraticCurveTo(.36, .48, .16, .48); flap.lineTo(0, .48); flap.closePath();
+      const flapG = new T.ShapeGeometry(flap, 8), flapM = M('#ff4a3a', { t: true, o: .55, side: T.DoubleSide, e: '#ff3020', ei: .25 });
+      for (const gx of L.gates) for (const sx of [-1, 1]) { const f = new T.Mesh(flapG, flapM); f.position.set(gx + sx * .4, .5, gz); f.scale.x = -sx; g.add(f); }
     }
-    for (const gx of L.gates) for (const sx of [-1, 1]) box(.38, .45, .03, M('#e04848', { t: true, o: .55 }), gx + sx * .2, .75, L.gateZ + .6, g);   // 閘門擋板
     sign(plainSign('閘門　請刷卡進出', 'Fare gates', '#23272b', '#fff'), 3.2, .8, 0, 3.3, L.gateZ - .2, g);
     // 車站限定小舖：非付費區靠牆的小推車
     { const sp = L.spots.find(x => x.kind === 'limited'), shop = sp && Limited.shopOf(L.stationId);
@@ -1081,7 +1093,7 @@ const Station3D = (() => {
         // 月台端的工作門
         for (const ex of [-1, 1]) {
           const d = plane(1.1, 2.1, M('#7a8590'), pg); d.position.set(ex * (LEN / 2 - .02), 1.05, 1.4); d.rotation.y = ex > 0 ? -Math.PI / 2 : Math.PI / 2;
-          sign(plainSign('非工作人員禁止進入', 'Staff only', '#c4162a', '#fff'), 1.6, .38, ex * (LEN / 2 - .05), 2.45, 1.4, pg, ex > 0 ? -Math.PI / 2 : Math.PI / 2);
+          sign(plainSign('非工作人員禁止進入', 'Staff only', '#c4162a', '#fff'), 1.3, .32, ex * (LEN / 2 - .05), 2.4, 1.4, pg, ex > 0 ? -Math.PI / 2 : Math.PI / 2);
         }
       }
       // 隧道口／軌道旁的號誌燈

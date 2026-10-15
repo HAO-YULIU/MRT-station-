@@ -406,7 +406,7 @@ const Decor = (() => {
       // 月台只留牆上的綠化：地上的花盆、大盆栽都搬到大廳，月台走道保持寬敞
       if (P.under) {
         // 端牆的綠牆（工作門和消防栓之間）
-        for (const ex of [-1, 1]) greenWall(ox + ex * (K.LEN / 2 - .01), oy + 1.65, oz - .18, 1.75, 2.1, ex > 0 ? -Math.PI / 2 : Math.PI / 2);
+        for (const ex of [-1, 1]) greenWall(ox + ex * (K.LEN / 2 - .01), oy + 1.55, oz - .22, 1.2, 1.9, ex > 0 ? -Math.PI / 2 : Math.PI / 2);
       } else {
         // 高架月台：屋簷下的吊籃
         const cols = [pick(flowers), pick(flowers), '#ffffff'];

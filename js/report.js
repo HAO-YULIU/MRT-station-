@@ -3,7 +3,7 @@
  * 這個檔案最先載入，才收得到一開始發生的錯誤
  */
 const Report = (() => {
-  const VERSION = '2026.10.15';
+  const VERSION = '2026.10.15b';
   const errs = [];
   const push = m => { errs.push({ t: new Date().toISOString().slice(11, 19), m: String(m).slice(0, 300) }); if (errs.length > 10) errs.shift(); };
   addEventListener('error', e => push(`${e.message} @ ${(e.filename || '').split('/').pop()}:${e.lineno}`));
