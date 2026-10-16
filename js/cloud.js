@@ -8,6 +8,8 @@ const Cloud = (() => {
   const URL = 'https://umlnwzpmjxktfzjvcbts.supabase.co', KEY = 'sb_publishable_8J3VI8dijlCccHQbXPfCQQ_v_O0Au3w', GAME = 'mist';
   const HUB = 'https://hao-yuliu.github.io/escape-room/';
   let readyRes = null; const ready = new Promise(r => { readyRes = r; });   // Supabase 用戶端準備好（沒登入也可以用來回報問題）
+  let admin = false;   // 管理員（資料庫的 admins 表；權限都在資料庫檢查，這裡只是決定要不要顯示管理員工具）
+  async function checkAdmin() { try { const { data } = await sb.rpc('is_admin'); admin = !!data; } catch (e) { admin = false; } if (admin) document.dispatchEvent(new CustomEvent('mist-admin')); }
   let sb = null, user = null, name = '', state = 'off', lastSync = 0, timer = null, busy = false, remote = null;
   // state：off（還沒連上）／guest（沒登入）／on（已登入）／error
   async function init() {
@@ -23,7 +25,7 @@ const Cloud = (() => {
       const { data } = await sb.auth.getSession();
       user = data && data.session ? data.session.user : null;
       if (!user) { state = 'guest'; return refresh(); }
-      state = 'on';
+      state = 'on'; checkAdmin();
       try { const { data: p } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle(); name = (p && p.username) || ''; } catch (e) { /* 沒有角色資料也沒關係 */ }
       await pull();
     } catch (e) { state = 'error'; readyRes(sb); }
@@ -129,7 +131,7 @@ const Cloud = (() => {
       try {
         const { data, error } = await c.auth.signInWithPassword({ email, password });
         if (error || !data || !data.user) return msg(error && /invalid/i.test(error.message) ? '電子郵件或密碼不對' : '登入失敗：' + ((error && error.message) || ''));
-        user = data.user; state = 'on'; m.remove();
+        user = data.user; state = 'on'; m.remove(); checkAdmin();
         try { const { data: p } = await c.from('profiles').select('username').eq('id', user.id).maybeSingle(); name = (p && p.username) || ''; } catch (e) { /* 沒有角色資料也沒關係 */ }
         toast(`<b>☁️ 已登入</b><span>${name ? esc(name) + '，' : ''}進度會自動同步到雲端</span>`);
         await pull(); refresh();
@@ -158,5 +160,5 @@ const Cloud = (() => {
     try { const { error } = await c.from('bug_reports').insert({ game: GAME, user_id: user ? user.id : null, ...row }); return !error; } catch (e) { return false; }
   }
   setTimeout(init, 300);
-  return { report, queue, push, statusHtml, action, refresh, get state() { return state; }, get user() { return user; } };
+  return { report, queue, push, statusHtml, action, refresh, ready, get state() { return state; }, get user() { return user; }, get isAdmin() { return admin; }, get device() { return DEV; } };
 })();

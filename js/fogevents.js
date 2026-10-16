@@ -435,6 +435,7 @@ const FogEvents = (() => {
   function start(key, K) {
     const e = REG[key];
     if (!e) return;
+    typeof Track !== 'undefined' && Track.ev('fog_start', K && K.station, { tale: String(key).split(':')[0], name: ((taleOf(key, K) || {}).name || '').slice(0, 40) });
     const d = typeof e.d === 'function' ? e.d(K) : e.d;
     K.eventCat = e.cat; K.eventKey = key; K.def = d;
     const t = taleOf(key, K);
