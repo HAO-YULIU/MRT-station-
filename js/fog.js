@@ -960,7 +960,7 @@ const FogCity = (() => {
       done(result, o = {}) {
         if (r.result && r.result !== 'fail') return;
         r.result = result; r.pend = null; saveState();
-        typeof Track !== 'undefined' && Track.ev('fog_end', r.station, { tale: String((K && K.taleKey) || '').split(':')[0], result });
+        typeof Track !== 'undefined' && Track.ev('fog_end', r.station, { tale: String((K && K.taleKey) || '').split(':')[0], name: ((K && K.tale && K.tale.name) || '').slice(0, 40), result });
         if (o.gold) r.bonusGold = (r.bonusGold || 0) + o.gold;
         if (o.items) for (const [id, n] of Object.entries(o.items)) S().inv[id] = (S().inv[id] || 0) + n;
         if (o.col) for (const [cat, id] of o.col) { const c = (S().fogCol = S().fogCol || {}); (c[cat] = c[cat] || {})[id] = r.night; }

@@ -583,7 +583,8 @@ const Quests = (() => {
     const on = q => (q.month ? q.month === t.month && q.days.includes(t.day) : false)
       || (q.dates || []).some(([y, m, d0, d1]) => (!y || y === t.year) && m === t.month && t.day >= d0 && t.day <= d1);
     // 後台可以強制開／關某個節慶活動（game_config.events）；沒設定就照日期
-    const ov = id => (typeof Remote !== 'undefined' ? Remote.eventOverride(id) : null);
+    const ov0 = id => (typeof Remote !== 'undefined' ? Remote.eventOverride(id) : null);
+    const ov = id => ov0(id) ?? (id.startsWith('event_hw_') ? ov0('event_halloween') : null);   // 萬聖節的小活動跟著萬聖節
     return Object.keys(QUESTS).filter(id => QUESTS[id].type === 'event' && (ov(id) ?? on(QUESTS[id])));
   }
   // 限時任務：時間到了還沒完成就失敗（可以再接）

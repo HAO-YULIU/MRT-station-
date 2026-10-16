@@ -169,7 +169,7 @@ Game.reward = (r = {}, label = '') => {
 };
 Game.onQuestChange = (what, id, o, k) => {
   const q = QUESTS[id];
-  if (typeof Track !== 'undefined' && (what === 'accept' || what === 'next' || what === 'done')) Track.ev(what === 'done' ? 'quest_done' : 'quest_start', Game.state.current, { quest: id });
+  if (typeof Track !== 'undefined' && (what === 'accept' || what === 'next' || what === 'done')) Track.ev(what === 'done' ? 'quest_done' : 'quest_start', Game.state.current, { quest: id, title: String((q && q.title) || '').slice(0, 40) });
   if (what === 'next') toast(`<b>收到後續委託</b><span>${q.title}</span>`, 'level');
   if (what === 'done') {
     FX.questDone(q.title);   // FX：任務完成橫幅與彩帶
