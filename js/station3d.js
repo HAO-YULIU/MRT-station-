@@ -794,6 +794,17 @@ const Station3D = (() => {
         for (let x = -LEN / 2 + 2; x < LEN / 2; x += 3) box(2.2, .04, .14, M('#ffffff', { e: '#fff6e0', ei: night ? 1.4 : .6 }), x, PHE - .1, 0, pg);
         for (let x = -30; x <= 30; x += 15) for (const s of [-1, 1]) box(.3, PHE, .3, M('#6c737a', { m: .4 }), x, PHE / 2, s * (7.2 + PW), pg);
         for (let x = -150; x <= 150; x += 30) box(2.6, Math.max(2, P.y - 1), 2.6, M('#77736d'), x, -(P.y - 1) / 2 - 1.2, 0, pg);
+        // 月台兩端：下半部實牆、上半部霧面玻璃到屋頂，鋼框；一扇工作門（月台不會直接開在半空中）
+        const W = 6.2 + 2 * PW, solidM = M('#c9ccc8', { r: .8 }), frost = M('#dfe9ee', { t: true, o: .55, r: .3 }), steelM = M('#6c737a', { m: .5, r: .35 });
+        for (const ex of [-1, 1]) {
+          const x = ex * (LEN / 2 + .15), ry = ex > 0 ? -Math.PI / 2 : Math.PI / 2;
+          box(.3, 1.2, W, solidM, x, .6, 0, pg);
+          box(.08, PHE - 1.2, W, frost, x, 1.2 + (PHE - 1.2) / 2, 0, pg);
+          for (let i = 0; i <= 6; i++) box(.14, PHE, .1, steelM, x - ex * .02, PHE / 2, -W / 2 + W * i / 6, pg);
+          box(.14, .1, W, steelM, x - ex * .02, 1.2, 0, pg); box(.14, .1, W, steelM, x - ex * .02, PHE - .05, 0, pg);
+          const d = plane(1.1, 2.1, M('#7a8590'), pg); d.position.set(ex * (LEN / 2 - .02), 1.05, 1.4); d.rotation.y = ry;
+          sign(plainSign('非工作人員禁止進入', 'Staff only', '#c4162a', '#fff'), 1.3, .32, ex * (LEN / 2 - .05), 2.4, 1.4, pg, ry);
+        }
       }
       // 柱子（中央）＋滅火器、緊急對講機、路網圖
       for (const x of [-28, 0, 28]) {
@@ -2124,7 +2135,7 @@ const Station3D = (() => {
 
   /* ── 站間：隧道或高架（沿 x 從 xa 到 xb，軌道高度 y、軌道中心 zc） ── */
   const SKY_CITY = { day: { night: false }, dusk: { night: false }, dawn: { night: false }, night: { night: true } };
-  function city(x0, x1, seed, parent, y, zc, night) {
+  function city(x0, x1, seed, parent, y, zc, night, avoid = []) {
     let sd = seed;
     const rnd = () => (sd = (sd * 9301 + 49297) % 233280) / 233280;
     const winTex = canvasTex(64, 128, (g, w, h) => {
@@ -2140,11 +2151,13 @@ const Station3D = (() => {
     const m4 = new T.Matrix4(), q = new T.Quaternion();
     let k = 0;
     for (const side of [-1, 1]) for (let i = 0; i < n; i++) {
-      const w = 8 + rnd() * 14, d = 8 + rnd() * 12, h = 10 + rnd() * 45;
-      m4.compose(new T.Vector3(x0 + (i + rnd()) * (x1 - x0) / n, y - 13 + h / 2, zc + side * (18 + rnd() * 50)), q, new T.Vector3(w, h, d));
+      const w = 8 + rnd() * 14, d = 8 + rnd() * 12, h = 10 + rnd() * 45, bx = x0 + (i + rnd()) * (x1 - x0) / n, bz = zc + side * (18 + rnd() * 50);
+      // 不能蓋在車站裡面（大廳、非付費區、地下月台、別條線的軌道）：不然站內會看到一大片灰色的大樓
+      if (avoid.some(a => bx + w / 2 > a.x0 && bx - w / 2 < a.x1 && bz + d / 2 > a.z0 && bz - d / 2 < a.z1)) continue;
+      m4.compose(new T.Vector3(bx, y - 13 + h / 2, bz), q, new T.Vector3(w, h, d));
       inst.setMatrixAt(k++, m4);
     }
-    parent.add(inst);
+    inst.count = k; parent.add(inst);
     const ground = plane(x1 - x0 + 200, 260, M(night ? '#1b2027' : '#7b7f78'), parent);
     ground.rotation.x = -Math.PI / 2; ground.position.set((x0 + x1) / 2, y - 13, zc);
   }
@@ -2208,7 +2221,12 @@ const Station3D = (() => {
   function surroundings(L, night) {
     const g = new T.Group();
     const el = L.platforms.filter(p => !p.under);
-    if (el.length) city(-260, 260, L.stationId.charCodeAt(0) * 7 + 3, g, el[0].y, el[0].z, night);
+    if (!el.length) return g;
+    // 車站本體（大廳、非付費區、房間、上層、出口）＋每座月台的軌道帶：城市的大樓都要避開
+    const C = L.concourse, U = L.unpaid, boxes = [C, U, ...(L.rooms || []), ...(L.levels || [])].filter(b => b && isFinite(b.x0));
+    const M8 = 8, avoid = [{ x0: Math.min(...boxes.map(b => Math.min(b.x0, b.x1))) - M8, x1: Math.max(...boxes.map(b => Math.max(b.x0, b.x1))) + M8, z0: Math.min(...boxes.map(b => b.z0)) - M8, z1: Math.max(...boxes.map(b => b.z1)) + M8 }];
+    for (const P of L.platforms) avoid.push({ x0: -1e4, x1: 1e4, z0: P.z - (P.under ? 10 + PW : 13), z1: P.z + (P.under ? 10 + PW : 13) });
+    city(-260, 260, L.stationId.charCodeAt(0) * 7 + 3, g, el[0].y, el[0].z, night, avoid);
     return g;
   }
 
