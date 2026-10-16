@@ -30,47 +30,72 @@ const Cloud = (() => {
     refresh();
   }
   const local = () => (typeof Game !== 'undefined' && Game.state) || null;
-  // 比較雲端和這台裝置：雲端比較新就問要不要用
-  async function pull() {
+  // 每台裝置（每個瀏覽器、加到主畫面的 App 各算一台）有自己的代號，上傳時一起存；
+  // base = 這台裝置最後一次知道的雲端版本（自己上傳的、或套用下來的）。
+  // 雲端被「別台裝置」改過、跟 base 不一樣 → 不能直接覆蓋，要問玩家用哪一份（以前會互相蓋掉）
+  const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, String(v)); } catch (e) { /* 無法存取 */ } return null; };
+  let DEV = ls('cloudDev'); if (!DEV) { DEV = Math.random().toString(36).slice(2, 10) + Date.now().toString(36); ls('cloudDev', DEV); }
+  const base = () => +ls('cloudApplied') || 0;
+  let asking = false;
+  async function fetchRemote() {
     const { data, error } = await sb.from('game_saves').select('data, updated_at, level, station').eq('user_id', user.id).eq('game', GAME).maybeSingle();
-    if (error) { state = 'error'; return; }
-    remote = data || null;
+    if (error) { state = 'error'; return undefined; }
+    remote = data || null; return remote;
+  }
+  // 雲端是不是被別台裝置改過（跟這台知道的版本不一樣）
+  const changedElsewhere = r => { const d = r && r.data; if (!d) return false; return d._dev !== DEV && (d.savedAt || 0) !== base(); };
+  async function pull() {
+    const r = await fetchRemote(); if (r === undefined) return;
     const s = local();
-    if (!remote) { if (s && s.char) push(); return; }
-    const rAt = (remote.data && remote.data.savedAt) || 0, lAt = (s && s.savedAt) || 0;
+    if (!r) { if (s && s.char) push(); return; }
     if (!s || !s.char) return useRemote(true);                 // 這台裝置還沒開始玩：直接用雲端的
-    let applied = 0; try { applied = +localStorage.getItem('cloudApplied') || 0; } catch (e) { /* 無法存取 */ }
-    if (rAt && rAt === applied) { if (lAt > rAt + 2000) push(); else lastSync = Date.now(); return; }   // 剛剛套用過這一份：不要再問（裝置時鐘不準也不會一直問）
-    if (rAt > lAt + 2000) ask(); else if (lAt > rAt + 2000) push();
-    else lastSync = Date.now();
+    if (changedElsewhere(r)) return ask();
+    const rAt = (r.data && r.data.savedAt) || 0, lAt = s.savedAt || 0;
+    if (lAt > rAt + 2000) push(); else lastSync = Date.now();
   }
   function ask() {
+    if (asking) return; asking = true;
     const r = remote.data || {}, s = local(), when = t => t ? new Date(t).toLocaleString('zh-TW', { hour12: false }) : '—';
     const lv = x => (typeof Economy !== 'undefined' ? Economy.levelInfo(x.xp || 0).lv : '?');
-    modal('☁️ 雲端有比較新的進度', `<p>雲端：<b>${esc(playerName(r))}</b>・Lv ${lv(r)}・${esc(r.current || '')}<br><small>${when(r.savedAt)}</small></p><p>這台裝置：<b>${esc(playerName(s))}</b>・Lv ${lv(s)}・${esc(s.current || '')}<br><small>${when(s.savedAt)}</small></p>`,
-      [['用雲端的進度', () => useRemote(false)], ['保留這台裝置的（上傳覆蓋雲端）', () => push(true)]]);
+    const visited = x => Object.keys(x.visited || {}).length;
+    modal('☁️ 另一台裝置有新的進度', `<p>你在別的地方（另一支手機、瀏覽器或加到主畫面的 App）玩過，雲端的進度跟這台不一樣。要用哪一份？</p><p>雲端：<b>${esc(playerName(r))}</b>・Lv ${lv(r)}・${esc(r.current || '')}・去過 ${visited(r)} 站・NT$ ${r.money ?? '?'}<br><small>${when(r.savedAt)}</small></p><p>這台裝置：<b>${esc(playerName(s))}</b>・Lv ${lv(s)}・${esc(s.current || '')}・去過 ${visited(s)} 站・NT$ ${s.money ?? '?'}<br><small>${when(s.savedAt)}</small></p>`,
+      [['用雲端的進度', () => { asking = false; useRemote(false); }], ['保留這台裝置的（上傳覆蓋雲端）', () => { asking = false; push(true); }]]);
   }
+  let switching = false;   // 正在換成雲端的進度：重新載入前不要再把舊進度存回去
   function useRemote(silent) {
+    switching = true;
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(remote.data)); localStorage.setItem('cloudApplied', String((remote.data && remote.data.savedAt) || 0)); } catch (e) { return; }
     lastSync = Date.now();
-    if (silent && document.body.dataset.screen !== 'title') return;
+    if (silent && document.body.dataset.screen !== 'title') { switching = false; return; }
     location.reload();   // 重新載入，所有系統都從雲端的存檔開始
   }
   async function push(force) {
-    if (state !== 'on' || !sb || busy) return;
+    if (state !== 'on' || !sb || busy || (asking && !force)) return;
     const s = local(); if (!s || !s.char) return;
     busy = true;
     try {
+      if (!force) {   // 上傳前先看雲端有沒有被別台裝置改過
+        const r = await fetchRemote();
+        if (r === undefined) { busy = false; return refresh(); }
+        if (changedElsewhere(r)) { busy = false; if (!document.hidden) ask(); return; }
+      }
       const lv = typeof Economy !== 'undefined' ? Economy.levelInfo(s.xp || 0).lv : null;
-      const { error } = await sb.from('game_saves').upsert({ user_id: user.id, game: GAME, data: s, level: lv, station: s.current, updated_at: new Date().toISOString() });
-      if (!error) { lastSync = Date.now(); remote = { data: s }; if (force) toast('<b>☁️ 已上傳</b><span>雲端進度已經更新成這台裝置的</span>'); }
+      const data = { ...s, _dev: DEV };
+      const { error } = await sb.from('game_saves').upsert({ user_id: user.id, game: GAME, data, level: lv, station: s.current, updated_at: new Date().toISOString() });
+      if (!error) { lastSync = Date.now(); remote = { data }; ls('cloudApplied', s.savedAt || 0); if (force) toast('<b>☁️ 已上傳</b><span>雲端進度已經更新成這台裝置的</span>'); }
       else state = 'error';
     } catch (e) { state = 'error'; }
     busy = false; refresh();
   }
+  // 切回這個 App／分頁：先看雲端有沒有別台裝置的新進度（舊的分頁醒來時不會把新進度蓋掉）
+  let lastCheck = 0;
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden || state !== 'on' || !sb || Date.now() - lastCheck < 3000) return; lastCheck = Date.now();
+    const r = await fetchRemote(); if (r && changedElsewhere(r) && local() && local().char) ask();
+  });
   function queue() { if (state !== 'on') return; clearTimeout(timer); timer = setTimeout(push, 4000); }
   // 切到背景、關掉 App：先存在這台裝置，再馬上上傳（手機上滑掉 App 時不會再等 4 秒）
-  const flush = () => { const s = local(); if (s && s.char && typeof saveState === 'function') { clearTimeout(timer); try { s.savedAt = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) { /* 無法存取 */ } push(); } };
+  const flush = () => { if (switching) return; const s = local(); if (s && s.char && typeof saveState === 'function') { clearTimeout(timer); try { s.savedAt = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) { /* 無法存取 */ } push(); } };
   addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
   document.addEventListener('click', e => { const a = e.target.closest('#titleCloud [data-cloud]'); if (a) { e.preventDefault(); action(a.dataset.cloud); } });
