@@ -38,6 +38,15 @@ const TaipeiTime = (() => {
   const pad = n => String(n).padStart(2, '0');
 
   function now() { return parts(new Date(Date.now() + offsetMs)); }
+  // 管理員工具：把遊戲時間調到某個時刻（可以連日期一起調）；reset 回到真實時間
+  function setClock(h, m, mo, d) {
+    offsetMs = 0;
+    const cur = parts(new Date());
+    offsetMs = ((h * 60 + m) - (cur.hour * 60 + cur.minute)) * 60000 - cur.second * 1000;
+    if (mo && d) { const t = parts(new Date(Date.now() + offsetMs)); offsetMs += Date.UTC(t.year, mo - 1, d) - Date.UTC(t.year, t.month - 1, t.day); }
+  }
+  const resetClock = () => { offsetMs = 0; };
+  const shifted = () => offsetMs !== 0;
 
   function state(t = now()) {
     const m = t.hour * 60 + t.minute;
@@ -88,7 +97,7 @@ const TaipeiTime = (() => {
   }
 
   return {
-    now, state, nextTrainIn, HEADWAY, headwayAt, sky, minutesToFirstTrain, minutesToLastTrain,
+    now, state, nextTrainIn, setClock, resetClock, shifted, HEADWAY, headwayAt, sky, minutesToFirstTrain, minutesToLastTrain,
     clock: (t = now()) => `${pad(t.hour)}:${pad(t.minute)}`,
     clockSec: (t = now()) => `${pad(t.hour)}:${pad(t.minute)}:${pad(t.second)}`,
     date: (t = now()) => `${t.year}/${pad(t.month)}/${pad(t.day)}（${t.weekday}）`,

@@ -151,7 +151,7 @@ Game.reward = (r = {}, label = '') => {
   const s = Game.state, parts = [];
   const before = Economy.levelInfo(s.xp).lv;
   if (r.money) { s.money += r.money; parts.push(`NT$ +${r.money}`); }
-  if (r.xp) { s.xp += r.xp; parts.push(`經驗 +${r.xp}`); }
+  if (r.xp) { const m = typeof Remote !== 'undefined' ? Remote.xpMult : 1, xp = Math.round(r.xp * m); s.xp += xp; parts.push(`經驗 +${xp}${m > 1 ? `（${m} 倍）` : ''}`); }   // 後台的經驗倍數（雙倍經驗時段）
   if (r.ixp) parts.push(`調查經驗 +${Investigate.add(r.ixp, null, true)}`);
   for (const [id, n] of Object.entries(r.items || {})) { s.inv[id] = (s.inv[id] || 0) + n; parts.push(`${ITEMS[id].icon} ${ITEMS[id].name}`); }
   if (r.gold) { s.gold = (s.gold || 0) + r.gold; parts.push(`🪙 黃金 +${r.gold}`); }
@@ -169,6 +169,7 @@ Game.reward = (r = {}, label = '') => {
 };
 Game.onQuestChange = (what, id, o, k) => {
   const q = QUESTS[id];
+  if (typeof Track !== 'undefined' && (what === 'accept' || what === 'next' || what === 'done')) Track.ev(what === 'done' ? 'quest_done' : 'quest_start', Game.state.current, { quest: id });
   if (what === 'next') toast(`<b>收到後續委託</b><span>${q.title}</span>`, 'level');
   if (what === 'done') {
     FX.questDone(q.title);   // FX：任務完成橫幅與彩帶
@@ -447,6 +448,7 @@ function ensureWorld() {
 function enterGame(stationId) {
   if (document.activeElement) document.activeElement.blur();
   showScreen('game');
+  typeof Track !== 'undefined' && Track.ev('session', stationId); document.dispatchEvent(new CustomEvent('mist-enter-game'));
   layoutScene();
   ensureWorld();
   World.setCharacter(Game.state.char, Game.state.wardrobe.wear);
@@ -516,6 +518,7 @@ function setPart(id, html) { if (panelCache[id] !== html) { panelCache[id] = htm
 let ctl = null;
 let lastDaily = 0;
 function startStation(stationId, carry) {
+  typeof Track !== 'undefined' && Track.ev('arrive', stationId);
   Gondola.exitMode();   // 離開貓空纜車
   const id = newSession();
   clearInterval(Game.ctlTimer);
@@ -1290,6 +1293,19 @@ async function teleport(id) {
   fx.hidden = true;
 }
 
+// 管理員工具：直接到某一站（不扣次數、不扣錢、沒去過也可以；也用來在調整時間後重新載入這一站）
+Game.adminGo = id => {
+  if (!STATIONS[id]) return;
+  const s = Game.state;
+  if (Game.ride) Game.ride = null;
+  closeMap(); Dialog.close();
+  newSession(); clearInterval(Game.ctlTimer);
+  World.loadStation(id); World.spawnInConcourse();
+  settleTrip(true);
+  s.current = id; s.visited[id] = true; s.trip = null; saveState(); updateHud();
+  startStation(id);
+};
+
 /* ── 初始化 ── */
 // 手機：擋掉瀏覽器自己的手勢（雙指縮放網頁、雙擊放大、長按選單、下拉重新整理），只留可捲動清單的捲動
 function lockPageGestures() {
@@ -1342,6 +1358,8 @@ function init() {
   $('#titleSettings').onclick = () => Settings.open();
   $('#btnReport').onclick = () => Report.open();
   $('#btnShare').onclick = () => Share.shot();
+  $('#btnAdmin').onclick = () => AdminTools.open();
+  if (typeof Cloud !== 'undefined' && Cloud.isAdmin) AdminTools.showButton();
   $('#btnMap').onclick = openMap;
   $('#btnBag').onclick = openBag;
   $('#btnPhone').onclick = () => Phone.open();

@@ -42,6 +42,7 @@
         <div class="title-actions" id="titleActions"><div class="load-box" aria-live="polite"><div class="load-track"><i id="loadBar"></i></div><small id="loadText">載入中……</small></div></div>
         <p class="title-clock" id="titleClock"></p>
         <p class="title-cloud" id="titleCloud"></p>
+        <div class="title-news" id="titleNews" hidden></div>
         <button type="button" class="btn-text title-set" id="titleSettings">⚙️ 設定</button>
       </div>
     </div>
@@ -95,6 +96,7 @@
         <button id="btnUnstuck" role="menuitem"><i aria-hidden="true">🆘</i>脫離卡住</button>
         <button id="btnShare" role="menuitem"><i aria-hidden="true">📷</i>分享截圖</button>
         <button id="btnReport" role="menuitem"><i aria-hidden="true">🐞</i>回報問題</button>
+        <button id="btnAdmin" role="menuitem" hidden><i aria-hidden="true">🛠</i>管理員</button>
         <button id="btnQuality" role="menuitem"><i aria-hidden="true">⚙️</i>設定</button>
         <button id="btnHome" role="menuitem"><i aria-hidden="true">🏠</i>回到標題</button>
       </div>
@@ -249,5 +251,7 @@
   <script defer src="js/game.js"></script>
   <script defer src="js/cloud.js"></script>
   <script defer src="js/share.js"></script>
+  <script defer src="js/remote.js"></script>
+  <script defer src="js/admintools.js"></script>
 </body>
 </html>
